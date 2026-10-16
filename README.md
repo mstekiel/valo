@@ -13,7 +13,7 @@ uv run pytest                                     # engine + example tests (GPU 
 ```
 
 MeshSculptor hot-reloads the sculpt file whenever you save it in your editor. "Save to library" writes
-`valo/library/<name>.py`, and apps use it as `valo.library.mesh("<name>")`.
+`valo/meshes/library/<name>.py`, and apps use it as `valo.library.mesh("<name>")`.
 
 Mouse: left-drag orbits, wheel zooms. Ctrl+Z / Ctrl+Y undo / redo.
 

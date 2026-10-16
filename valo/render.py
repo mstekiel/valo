@@ -18,7 +18,8 @@ import wgpu
 
 from .geometry import instance_matrices, look_at, pack_mat4, perspective_reversed_z
 from .materials import FRAGMENT_WGSL, Material
-from .meshes import MeshData, sphere
+from .meshes.data import MeshData
+from .meshes.primitives import sphere
 
 DEPTH_FORMAT = "depth32float"
 SCENE_FORMAT = "rgba16float"  # linear HDR scene colour; encoded to sRGB in POST_WGSL

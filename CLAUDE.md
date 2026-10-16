@@ -9,7 +9,7 @@ Apps built on it live in `examples/`. Design and extension points: `ARCHITECTURE
 |---|---|
 | Install | `uv sync` |
 | Run an example app | `uv run python examples/crystal_studio/studio.py` (or `mesh_gallery/gallery.py`) |
-| Sculpt a mesh | `uv run valo-sculpt examples/sculpts/vase.py` (MeshSculptor; saves to `valo/library/`) |
+| Sculpt a mesh | `uv run valo-sculpt examples/sculpts/vase.py` (MeshSculptor; saves to `valo/meshes/library/`) |
 | Test | `uv run pytest` (engine + examples; GPU tests render offscreen and skip without an adapter) |
 | Lint / format | `uv run ruff check --fix .` |
 | Add a dependency | `uv add <pkg>` (ask the user first) |
@@ -19,9 +19,14 @@ Apps built on it live in `examples/`. Design and extension points: `ARCHITECTURE
 | Module | Owns | GPU? |
 |---|---|---|
 | `geometry.py` | matrices, `instance_matrices` (pure numpy) | no |
-| `meshes.py` | `MeshData`, standard meshes, builders (`revolve`, `parametric`, `heightfield`), `transform`, `merge`, `check` (pure numpy) | no |
-| `sculpt.py` | sculpt files: load (params from `mesh()`'s signature), build (transform baked), save (AST rewrite of defaults, `MATERIAL`, `TRANSFORM`) | no |
-| `library/` | saved sculpts, one `<name>.py` each; `names()`, `mesh(name, **params)`, `material(renderer, name)` | no |
+| `meshes/` | package, pure numpy; import everything from `valo.meshes` (its `__init__` re-exports) | no |
+| `meshes/data.py` | `MeshData` (+ `_mesh`, `_grid_indices` helpers) | no |
+| `meshes/ops.py` | `transform`, `merge` | no |
+| `meshes/builders.py` | `revolve`, `parametric`, `heightfield` | no |
+| `meshes/primitives.py` | `sphere`, `icosphere`, `cube`, `plane`, `cylinder`, `cone`, `torus`, `capsule`, `arrow`, `STANDARD` | no |
+| `meshes/check.py` | `check` → `MeshReport` (winding, unit normals, watertight + volume) | no |
+| `meshes/sculpt.py` | sculpt files: load (params from `mesh()`'s signature), build (transform baked), save (AST rewrite of defaults, `MATERIAL`, `TRANSFORM`) | no |
+| `meshes/library/` | saved sculpts, one `<name>.py` each; `names()`, `mesh(name, **params)`, `material(renderer, name)` | no |
 | `tools/sculptor.py` | MeshSculptor app (`valo-sculpt`): `SculptScene`, `SculptorEditor` with hot reload, diagnostics, save | yes |
 | `materials.py` | shading models (WGSL), parameter schema, observable `Material`, colour conversion | buffer only |
 | `render.py` | shared WGSL, pipelines, render targets, `OrbitCamera`, `Instances` (mat4 per instance), `Spheres`, scene pass → post pass | yes |

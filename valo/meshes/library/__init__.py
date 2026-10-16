@@ -1,4 +1,4 @@
-"""valo's mesh library: sculpt files saved by MeshSculptor (``uv run valo-sculpt <file.py>``).
+"""valo's mesh library: sculpt files saved by MeshSculptor (``uv run valo-sculpt <file.py>``; this folder is valo/meshes/library).
 
 Every ``*.py`` file in this folder is an entry, named after the file::
 
@@ -12,8 +12,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ..materials import Material
-from ..meshes import MeshData
+from ...materials import Material
+from ..data import MeshData
 from ..sculpt import Sculpt
 
 LIBRARY_DIR = Path(__file__).parent

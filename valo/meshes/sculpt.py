@@ -27,8 +27,9 @@ from pathlib import Path
 
 import numpy as np
 
-from .geometry import rotate, scale, translate
-from .meshes import MeshData, transform
+from ..geometry import rotate, scale, translate
+from .data import MeshData
+from .ops import transform
 
 IDENTITY = {"translate": [0.0, 0.0, 0.0], "rotate_deg": [0.0, 0.0, 0.0], "scale": [1.0, 1.0, 1.0]}
 _counter = itertools.count()

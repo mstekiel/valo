@@ -4,8 +4,8 @@ material, and save it into valo's mesh library.
     uv run valo-sculpt examples/sculpts/vase.py
 
 Edit the file in your editor: it hot-reloads on save (errors show in the panel, the last good mesh stays).
-"Save to library" writes ``valo/library/<name>.py`` with your values as the new defaults. See ``valo.sculpt``
-for the file contract.
+"Save to library" writes ``valo/meshes/library/<name>.py`` with your values as the new defaults.
+See ``valo.meshes.sculpt`` for the file contract.
 """
 
 from __future__ import annotations
@@ -19,10 +19,11 @@ from pathlib import Path
 import numpy as np
 from imgui_bundle import imgui
 
-from .. import library, meshes
+from .. import meshes
 from ..geometry import instance_matrices
+from ..meshes import library
+from ..meshes.sculpt import IDENTITY, Sculpt
 from ..render import Renderer
-from ..sculpt import IDENTITY, Sculpt
 from ..ui import Editor
 from ..undo import Command
 
@@ -141,7 +142,7 @@ class SculptorEditor(Editor):
         self.report = meshes.check(data)
 
     def save(self, name: str | None = None, overwrite: bool = False) -> Path | None:
-        """Write the sculpt with the current values, material and transform to ``valo/library/<name>.py``."""
+        """Write the sculpt with the current values, material and transform to ``valo/meshes/library/<name>.py``."""
         name = (name or self.save_name).strip()
         if not name.isidentifier() or name.startswith("_"):
             self.status = f"'{name}' is not a valid name (letters, digits, _; not starting with _)"
@@ -151,7 +152,7 @@ class SculptorEditor(Editor):
             self.status = f"{target.name} exists in the library" if self.sculpt else "nothing to save"
             return None
         self.sculpt.save(target, self.values, self.material.to_dict(), self.transform)
-        self.status = f"saved to valo/library/{target.name}"
+        self.status = f"saved to valo/meshes/library/{target.name}"
         return target
 
     # -- actions with undo

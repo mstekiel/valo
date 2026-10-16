@@ -14,13 +14,12 @@ An app builds a scene (anything with ``batches()``) from the Viewer's renderer a
 See ``examples/`` for complete apps.
 """
 
-from . import library, meshes
+from . import meshes
 from .app import Viewer
 from .geometry import instance_matrices
 from .materials import SCHEMA, SHADINGS, Material
-from .meshes import MeshData
+from .meshes import MeshData, Sculpt, library
 from .render import Instances, OrbitCamera, Renderer, Spheres
-from .sculpt import Sculpt
 from .ui import Editor
 from .undo import Command, UndoStack
 

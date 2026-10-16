@@ -22,6 +22,7 @@ valo-sculpt = "valo.tools.sculptor:main"
 line-length = 120
 
 [tool.ruff.lint]
+per-file-ignores = { "valo/meshes/library/*.py" = ["E501"] }  # written by MeshSculptor
 select = ["E", "F", "I", "B", "UP"]
 
 [tool.pytest.ini_options]

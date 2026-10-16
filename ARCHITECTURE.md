@@ -21,19 +21,24 @@ viewer.show(SimpleNamespace(batches=lambda: [balls.batch(), arrows.batch()]), ed
 viewer.run()
 ```
 
-Standard meshes (`valo/meshes.py`, all unit-sized, Z-up, CCW outward): `sphere`, `icosphere`, `cube`,
-`cylinder`, `cone`, `torus`, `capsule`, `arrow` (tail at origin, tip at z=1), `plane` (double-sided);
-`transform(mesh, M)` and `merge(*meshes)` build new ones. `examples/mesh_gallery/` shows them all.
+Meshes live in the `valo/meshes/` package; import everything from `valo.meshes`.
+- **`primitives.py`**: the standard meshes, all unit-sized, Z-up and CCW outward. They are `sphere`, `icosphere`, `cube`,
+  `cylinder`, `cone`, `torus`, `capsule`, `arrow` (tail at origin, tip at z=1) and `plane` (double-sided).
+  `examples/mesh_gallery/` shows them all.
+- **`ops.py`**: `transform` and `merge`.
+- **`builders.py`**: `revolve`, `parametric` and `heightfield`.
+- **`check.py`**: diagnostics.
+- **`sculpt.py`** and **`library/`**: the sculpting workflow below.
 
 ## Sculpting meshes into the library
 
 ```
-your_shape.py ──valo-sculpt──▶ MeshSculptor ──Save──▶ valo/library/<name>.py ──▶ library.mesh("<name>")
+your_shape.py ──valo-sculpt──▶ MeshSculptor ──Save──▶ valo/meshes/library/<name>.py ──▶ library.mesh("<name>")
  mesh(a=1.0, n=32)              sliders from the       same file, tuned values     Sculpt.build(): mesh(**params)
  RANGES / MATERIAL / TRANSFORM  signature, transform,  as defaults + MATERIAL +    with TRANSFORM baked in
                                 material, check()      TRANSFORM (AST rewrite)
 ```
-A sculpt file is plain Python (contract in `valo/sculpt.py`): a `mesh(...)` function whose parameters
+A sculpt file is plain Python (contract in `valo/meshes/sculpt.py`): a `mesh(...)` function whose parameters
 all have defaults (`float`, `int`, `bool`), optionally `RANGES`, `MATERIAL`, `TRANSFORM`. Build shapes with
 `meshes.revolve` ((ρ, z) profile; repeat a point for a hard edge), `meshes.parametric` (P(u, v), outward is
 ∂u × ∂v) or `meshes.heightfield` (z = f(x, y)). `meshes.check` (winding, unit normals, watertight + volume)
@@ -61,12 +66,13 @@ Viewer.draw()
 ## Dependencies
 
 ```
-engine:  geometry, meshes, materials, undo     (leaves: numpy only, materials holds a GPU buffer)
-         render  → geometry, meshes, materials
+engine:  geometry, materials, undo              (leaves: numpy only, materials holds a GPU buffer)
+         meshes/  data ← ops ← builders ← primitives;  data ← check;  ops ← sculpt ← library
+                  (sculpt → geometry, library → materials)
+         render  → geometry, materials, meshes.data, meshes.primitives
          ui      → materials, undo
          app     → render, ui
-         sculpt  → geometry, meshes;   library → sculpt
-tools:   tools/sculptor → app, library, sculpt  (the `valo-sculpt` command)
+tools:   tools/sculptor → app, meshes  (the `valo-sculpt` command)
 apps:    examples/crystal_studio: studio → crystal → valo
          examples/mesh_gallery:   gallery → valo
 ```
@@ -77,8 +83,8 @@ apps:    examples/crystal_studio: studio → crystal → valo
 | Request | Change |
 |---|---|
 | New shading model | `valo/materials.py`: WGSL in `FRAGMENT_WGSL` + parameter list in `SCHEMA`. Panels and pipelines pick it up. |
-| New mesh shape | sculpt it: `uv run valo-sculpt my_shape.py`, then Save to library (→ `valo/library/`, checked by the tests). A primitive every app needs goes in `valo/meshes.py` + `STANDARD`. |
-| New mesh builder | `valo/meshes.py`, next to `revolve` / `parametric` / `heightfield`; test it with `check()`. |
+| New mesh shape | sculpt it: `uv run valo-sculpt my_shape.py`, then Save to library (→ `valo/meshes/library/`, checked by the tests). A primitive every app needs goes in `valo/meshes/primitives.py` + `STANDARD`. |
+| New mesh builder | `valo/meshes/builders.py`, next to `revolve` / `parametric` / `heightfield`; test it with `check()`. |
 | Bonds, vector fields | app: `renderer.instances(meshes.cylinder() / arrow(), m)` + `instance_matrices(..., z_axis=...)`. |
 | Polyhedra, isosurfaces (per-scene meshes) | app: build a `MeshData` and draw it with one identity instance. |
 | Animation (vibrations, precession) | engine: time in the frame uniform; per-instance amplitudes; displacement in `vs_main`. |

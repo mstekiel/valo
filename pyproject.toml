@@ -1,0 +1,34 @@
+[project]
+name = "valo"
+version = "0.1.0"
+description = "Interactive scientific 3D rendering engine: wgpu + glfw + Dear ImGui"
+requires-python = ">=3.12"
+dependencies = [
+    "glfw>=2.11.0",
+    "imgui-bundle>=1.92,<1.92.900",
+    "numpy>=2.0",
+    "rendercanvas>=2.7",
+    "wgpu>=0.32,<0.33",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests", "examples"]
+addopts = "--strict-markers -q"
+markers = ["gpu: needs a GPU adapter (renders offscreen)"]
+
+[dependency-groups]
+dev = [
+    "pillow>=12.3.0",
+    "pytest>=9.1.1",
+    "ruff>=0.17.1",
+]

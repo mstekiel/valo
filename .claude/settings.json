@@ -1,0 +1,29 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(uv sync*)",
+      "Bash(uv run *)",
+      "Bash(uv tree*)",
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git add *)",
+      "Bash(git commit *)"
+    ],
+    "ask": [
+      "Bash(uv add *)",
+      "Bash(uv remove *)",
+      "Bash(uv lock*)"
+    ],
+    "deny": [
+      "Bash(pip *)",
+      "Bash(python -m pip*)",
+      "Bash(uv pip *)",
+      "Bash(conda *)",
+      "Bash(poetry *)",
+      "Bash(git push*)",
+      "Bash(git reset --hard*)",
+      "Bash(git clean*)"
+    ]
+  }
+}

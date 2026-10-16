@@ -4,7 +4,7 @@ Frame = scene pass (linear HDR into an offscreen rgba16float texture) → post p
 into the window region left of the panel) → ImGui pass (drawn by the app). sRGB encoding happens
 only in POST_WGSL, so the window surface format doesn't matter.
 
-Bind groups: 0 = frame (camera, light), 1 = material, 2 = per-instance atom data.
+Bind groups: 0 = frame (camera, light), 1 = material, 2 = per-instance model matrices.
 """
 
 from __future__ import annotations
@@ -15,8 +15,9 @@ from dataclasses import dataclass
 import numpy as np
 import wgpu
 
-from .geometry import MeshData, look_at, pack_mat4, perspective_reversed_z, sphere_mesh
+from .geometry import instance_matrices, look_at, pack_mat4, perspective_reversed_z
 from .materials import FRAGMENT_WGSL, Material
+from .meshes import MeshData, sphere
 
 DEPTH_FORMAT = "depth32float"
 SCENE_FORMAT = "rgba16float"  # linear HDR scene colour; encoded to sRGB in POST_WGSL
@@ -35,8 +36,8 @@ struct Material {
 };
 @group(1) @binding(0) var<uniform> material: Material;
 
-// Per-instance data for one species: xyz = atom centre, w = radius. One draw call per species.
-@group(2) @binding(0) var<storage, read> atoms: array<vec4f>;
+// Per-instance model matrix (math convention, packed by pack_mat4). One draw call per batch.
+@group(2) @binding(0) var<storage, read> instances: array<mat4x4f>;
 
 struct VsOut {
     @builtin(position) pos: vec4f,
@@ -47,12 +48,16 @@ struct VsOut {
 @vertex
 fn vs_main(@location(0) position: vec3f, @location(1) normal: vec3f,
            @builtin(instance_index) i: u32) -> VsOut {
-    let atom = atoms[i];
+    let m = instances[i];
     var out: VsOut;
-    let world = atom.xyz + position * (2.0 * atom.w);   // mesh has unit diameter
+    let world = (m * vec4f(position, 1.0)).xyz;
     out.pos = frame.view_proj * vec4f(world, 1.0);
     out.world = world;
-    out.normal = normal;                               // uniform scale: normals unchanged
+    // Normals by the cofactor matrix (= det · inverse-transpose): right for non-uniform scale, no inverse.
+    let a = m[0].xyz;
+    let b = m[1].xyz;
+    let c = m[2].xyz;
+    out.normal = mat3x3f(cross(b, c), cross(c, a), cross(a, b)) * normal * sign(dot(a, cross(b, c)));
     return out;
 }
 
@@ -128,35 +133,44 @@ class OrbitCamera:
         self.distance = max(3.0, radius / math.sin(math.radians(self.fovy / 2)) * 0.95)
 
 
-class Spheres:
-    """Instanced spheres sharing one material: a grow-only storage buffer of vec4(centre, radius).
+class Instances:
+    """Instances of one mesh sharing one material: a grow-only storage buffer of model matrices.
 
-    ``batch()`` is the (material, instance bind group, count) tuple the renderer draws.
+    ``batch()`` is the (material, mesh, instance bind group, count) tuple the renderer draws.
     """
 
-    def __init__(self, device: wgpu.GPUDevice, instance_layout, material: Material):
-        self.device, self.layout, self.material = device, instance_layout, material
+    def __init__(self, device: wgpu.GPUDevice, instance_layout, mesh: GpuMesh, material: Material):
+        self.device, self.layout, self.mesh, self.material = device, instance_layout, mesh, material
         self.count = self.capacity = 0  # capacity: instances the buffer can hold
         self.buffer = self.bind_group = None
-        self.set(np.zeros((0, 3)), 0.5)
+        self.set(np.zeros((0, 4, 4)))
 
-    def set(self, centers, radii) -> None:
-        """Upload centres (N, 3) and radii (one value or N values)."""
-        centers = np.asarray(centers, np.float32).reshape(-1, 3)
-        self.count = len(centers)
-        data = np.zeros((max(self.count, 1), 4), np.float32)  # buffers can't be empty
-        data[: self.count, :3] = centers
-        data[: self.count, 3] = radii
+    def set(self, matrices) -> None:
+        """Upload (N, 4, 4) math-convention model matrices, e.g. from ``geometry.instance_matrices``."""
+        matrices = np.asarray(matrices, np.float32).reshape(-1, 4, 4)
+        self.count = len(matrices)
+        data = np.zeros((max(self.count, 1), 4, 4), np.float32)  # buffers can't be empty
+        data[: self.count] = pack_mat4(matrices)
         if self.buffer is None or self.capacity < len(data):  # grow only; shrinking reuses the buffer
             self.capacity = max(len(data), 2 * self.capacity)
             self.buffer = self.device.create_buffer(
-                size=self.capacity * 16, usage=wgpu.BufferUsage.STORAGE | wgpu.BufferUsage.COPY_DST)
+                size=self.capacity * 64, usage=wgpu.BufferUsage.STORAGE | wgpu.BufferUsage.COPY_DST)
             self.bind_group = self.device.create_bind_group(
                 layout=self.layout, entries=[{"binding": 0, "resource": {"buffer": self.buffer}}])
         self.device.queue.write_buffer(self.buffer, 0, data)
 
     def batch(self):
-        return self.material, self.bind_group, self.count
+        return self.material, self.mesh, self.bind_group, self.count
+
+
+class Spheres(Instances):
+    """Instances of the unit-diameter sphere, placed by centre and radius."""
+
+    def set(self, centers, radii=0.5) -> None:
+        """Upload centres (N, 3) and radii (one value or N values)."""
+        centers = np.asarray(centers, np.float32).reshape(-1, 3)
+        diameters = 2 * np.broadcast_to(np.asarray(radii, np.float32), len(centers))[:, None]
+        super().set(instance_matrices(centers, diameters))
 
 
 class Renderer:
@@ -197,15 +211,25 @@ class Renderer:
             primitive={"topology": "triangle-list"},
             fragment={"module": post, "entry_point": "fs_main", "targets": [{"format": surface_format}]},
         )
-        self.sphere = GpuMesh(device, sphere_mesh(20, 40))  # unit diameter; scaled per instance
+        self._meshes: dict[MeshData, GpuMesh] = {}
+        self.sphere = self.mesh(sphere(20, 40))  # unit diameter; scaled per instance
         self._targets = None
 
     def material(self, name: str, shading: str, **params) -> Material:
         """A new material bound with this renderer's layout."""
         return Material(self.device, self.material_layout, name, shading, **params)
 
+    def mesh(self, data: MeshData) -> GpuMesh:
+        """``data`` on the GPU, uploaded once per MeshData object."""
+        if data not in self._meshes:
+            self._meshes[data] = GpuMesh(self.device, data)
+        return self._meshes[data]
+
+    def instances(self, mesh: MeshData, material: Material) -> Instances:
+        return Instances(self.device, self.instance_layout, self.mesh(mesh), material)
+
     def spheres(self, material: Material) -> Spheres:
-        return Spheres(self.device, self.instance_layout, material)
+        return Spheres(self.device, self.instance_layout, self.sphere, material)
 
     def _scene_targets(self, w: int, h: int):
         if self._targets is None or self._targets[0] != (w, h):
@@ -221,7 +245,7 @@ class Renderer:
     def render(self, surface_texture, viewport_width: int, scene, camera: OrbitCamera) -> None:
         """Draw ``scene`` into the left ``viewport_width`` pixels of ``surface_texture``.
 
-        ``scene.batches()`` yields (material, instance_bind_group, instance_count) tuples.
+        ``scene.batches()`` yields (material, gpu_mesh, instance_bind_group, instance_count) tuples.
         """
         h = surface_texture.size[1]
         vw = max(1, viewport_width)
@@ -235,8 +259,8 @@ class Renderer:
         frame[20:23] = light / np.linalg.norm(light)
         self.device.queue.write_buffer(self.frame_buffer, 0, frame)
 
-        batches = [b for b in scene.batches() if b[2] > 0]
-        for material, _, _ in batches:
+        batches = [b for b in scene.batches() if b[3] > 0]
+        for material, *_ in batches:
             material.flush()  # no-op unless edited since last frame
 
         encoder = self.device.create_command_encoder()
@@ -247,11 +271,11 @@ class Renderer:
                                       "depth_load_op": "clear", "depth_store_op": "store"},
         )
         rpass.set_bind_group(0, self.frame_bg)
-        for material, instances_bg, count in batches:  # one instanced draw call per batch
+        for material, mesh, instances_bg, count in batches:  # one instanced draw call per batch
             rpass.set_pipeline(self.pipelines[material.shading])
             rpass.set_bind_group(1, material.bind_group)
             rpass.set_bind_group(2, instances_bg)
-            self.sphere.draw(rpass, instances=count)
+            mesh.draw(rpass, instances=count)
         rpass.end()
 
         rpass = encoder.begin_render_pass(color_attachments=[{

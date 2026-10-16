@@ -49,3 +49,21 @@ def test_spheres_render_and_material_edits_undo_exactly(viewer):
     assert np.abs(snap(viewer).astype(int) - before).max() > 0
     editor.undo_stack.undo()
     assert np.array_equal(snap(viewer), before)
+
+
+def test_any_mesh_draws_instanced_with_its_own_transforms(viewer):
+    from valo import instance_matrices, meshes
+
+    m = viewer.renderer.material("Matte", "lambert", base_color=(0.8, 0.8, 0.8))
+    cubes = viewer.renderer.instances(meshes.cube(), m)
+    arrows = viewer.renderer.instances(meshes.arrow(), m)
+    assert viewer.renderer.instances(meshes.cube(), m).mesh is not cubes.mesh  # cache is per MeshData object
+    viewer.show(SimpleNamespace(batches=lambda: [cubes.batch(), arrows.batch()]))
+    viewer.camera.fit(3.0)
+    empty = snap(viewer)
+
+    cubes.set(instance_matrices([[-1, 0, 0], [1, 0, 0]], [[0.5], [1.0]]))
+    with_cubes = snap(viewer)
+    assert (with_cubes != empty).any(-1).sum() > 500
+    arrows.set(instance_matrices([[0, 0, 0]], (0.3, 0.3, 2.0), z_axis=(0, 1, 1)))
+    assert (snap(viewer) != with_cubes).any(-1).sum() > 200

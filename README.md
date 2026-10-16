@@ -7,6 +7,7 @@ Dear ImGui for the side panel. Apps hand the `Viewer` a scene of instanced, shad
 ```powershell
 uv sync
 uv run python examples/crystal_studio/studio.py   # example app: rock-salt crystal + material editor
+uv run python examples/mesh_gallery/gallery.py    # example app: every standard mesh, instanced arrows
 uv run pytest                                     # engine + example tests (GPU tests render offscreen)
 ```
 

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
 
 import numpy as np
 
@@ -56,28 +55,32 @@ def pack_mat4(m):
     return np.ascontiguousarray(np.swapaxes(np.asarray(m, np.float32), -1, -2))
 
 
-@dataclass
-class MeshData:
-    vertices: np.ndarray  # (N, 6) float32: position xyz, normal xyz
-    indices: np.ndarray  # (M,) uint32
+def instance_matrices(positions, scale=1.0, z_axis=None) -> np.ndarray:
+    """(N, 4, 4) model matrices M = T · R · S, one per position.
+
+    ``scale`` broadcasts against (N, 3): a scalar, per-axis (3,), per-instance (N, 1) or (N, 3).
+    ``z_axis`` (3,) or (N, 3): R turns the mesh's +Z onto that direction (lengths are ignored; use the
+    scale for them). For arrows along vectors v: ``instance_matrices(origins, np.c_[w, w, |v|], v)``.
+    """
+    p = np.asarray(positions, float).reshape(-1, 3)
+    n = len(p)
+    m = np.zeros((n, 4, 4))
+    m[:, :3, :3] = rotations_z_to(np.broadcast_to(z_axis, (n, 3))) if z_axis is not None else np.eye(3)
+    m[:, :3, :3] *= np.broadcast_to(np.asarray(scale, float), (n, 3))[:, None, :]  # scale the columns
+    m[:, :3, 3] = p
+    m[:, 3, 3] = 1.0
+    return m.astype(np.float32)
 
 
-def _grid_indices(nu, nv):
-    idx = []
-    for i in range(nu):
-        for j in range(nv):
-            a = i * (nv + 1) + j
-            b = a + nv + 1
-            idx += [a, b, a + 1, a + 1, b, b + 1]
-    return np.array(idx, np.uint32)
-
-
-def sphere_mesh(n_lat=48, n_lon=96, r=0.5):
-    v = []
-    for i in range(n_lat + 1):
-        th = math.pi * i / n_lat
-        for j in range(n_lon + 1):
-            ph = 2 * math.pi * j / n_lon
-            n = (math.sin(th) * math.cos(ph), math.sin(th) * math.sin(ph), math.cos(th))
-            v.append((*(r * c for c in n), *n))
-    return MeshData(np.array(v, np.float32), _grid_indices(n_lat, n_lon))
+def rotations_z_to(directions) -> np.ndarray:
+    """(N, 3, 3) shortest-arc rotations taking +Z onto each direction (zero vectors → identity)."""
+    d = np.asarray(directions, float).reshape(-1, 3)
+    length = np.linalg.norm(d, axis=1, keepdims=True)
+    d = np.where(length > 1e-12, d / np.where(length > 0, length, 1), (0.0, 0.0, 1.0))
+    x, y, c = d[:, 0], d[:, 1], d[:, 2]
+    k = np.zeros((len(d), 3, 3))  # cross-product matrix of +Z × d = (-y, x, 0)
+    k[:, 0, 2], k[:, 1, 2], k[:, 2, 0], k[:, 2, 1] = x, y, -x, -y
+    flip = c < -1 + 1e-9  # straight down: any half-turn about a horizontal axis
+    r = np.eye(3) + k + k @ k / np.where(flip, 1.0, 1.0 + c)[:, None, None]
+    r[flip] = np.diag([1.0, -1.0, -1.0])
+    return r

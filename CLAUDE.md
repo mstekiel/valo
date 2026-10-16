@@ -60,4 +60,6 @@ Apps built on it live in `examples/`. Design and extension points: `ARCHITECTURE
    app → `examples/<name>/test_*.py`.
 3. Implement. Run `uv run ruff check --fix . && uv run pytest` until green.
 4. If the change is visual, render offscreen and look at the image before saying it's done.
-5. Commit with a short conventional message (`feat:`, `fix:`, `refactor:`). Never push.
+5. Commit with a short conventional message (`feat:`, `fix:`, `refactor:`, `test:`, `docs:`). Never push.
+   Keep commits small: at most 3–5 files each. Split a feature into a series of commits, each one coherent and
+   green on its own (e.g. engine change + its test → app using it → docs). Stage with explicit paths, not `git add -A`.

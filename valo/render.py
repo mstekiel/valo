@@ -10,6 +10,7 @@ Bind groups: 0 = frame (camera, light), 1 = material, 2 = per-instance model mat
 from __future__ import annotations
 
 import math
+import weakref
 from dataclasses import dataclass
 
 import numpy as np
@@ -211,7 +212,7 @@ class Renderer:
             primitive={"topology": "triangle-list"},
             fragment={"module": post, "entry_point": "fs_main", "targets": [{"format": surface_format}]},
         )
-        self._meshes: dict[MeshData, GpuMesh] = {}
+        self._meshes: weakref.WeakKeyDictionary[MeshData, GpuMesh] = weakref.WeakKeyDictionary()
         self.sphere = self.mesh(sphere(20, 40))  # unit diameter; scaled per instance
         self._targets = None
 
@@ -220,7 +221,7 @@ class Renderer:
         return Material(self.device, self.material_layout, name, shading, **params)
 
     def mesh(self, data: MeshData) -> GpuMesh:
-        """``data`` on the GPU, uploaded once per MeshData object."""
+        """``data`` on the GPU, uploaded once per MeshData object (and released when that object is gone)."""
         if data not in self._meshes:
             self._meshes[data] = GpuMesh(self.device, data)
         return self._meshes[data]

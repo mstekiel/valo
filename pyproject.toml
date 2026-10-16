@@ -15,6 +15,9 @@ dependencies = [
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+[project.scripts]
+valo-sculpt = "valo.tools.sculptor:main"
+
 [tool.ruff]
 line-length = 120
 

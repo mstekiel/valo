@@ -25,6 +25,21 @@ Standard meshes (`valo/meshes.py`, all unit-sized, Z-up, CCW outward): `sphere`,
 `cylinder`, `cone`, `torus`, `capsule`, `arrow` (tail at origin, tip at z=1), `plane` (double-sided);
 `transform(mesh, M)` and `merge(*meshes)` build new ones. `examples/mesh_gallery/` shows them all.
 
+## Sculpting meshes into the library
+
+```
+your_shape.py ──valo-sculpt──▶ MeshSculptor ──Save──▶ valo/library/<name>.py ──▶ library.mesh("<name>")
+ mesh(a=1.0, n=32)              sliders from the       same file, tuned values     Sculpt.build(): mesh(**params)
+ RANGES / MATERIAL / TRANSFORM  signature, transform,  as defaults + MATERIAL +    with TRANSFORM baked in
+                                material, check()      TRANSFORM (AST rewrite)
+```
+A sculpt file is plain Python (contract in `valo/sculpt.py`): a `mesh(...)` function whose parameters
+all have defaults (`float`, `int`, `bool`), optionally `RANGES`, `MATERIAL`, `TRANSFORM`. Build shapes with
+`meshes.revolve` ((ρ, z) profile; repeat a point for a hard edge), `meshes.parametric` (P(u, v), outward is
+∂u × ∂v) or `meshes.heightfield` (z = f(x, y)). `meshes.check` (winding, unit normals, watertight + volume)
+drives the Diagnostics panel and the tests, which run it on every library entry. Preview and library share
+`Sculpt.build`, so what you see is what's saved. Starter sculpts: `examples/sculpts/`.
+
 A real app subclasses `Editor`: its actions are methods that push `Command`s, and `panel()` draws its
 widgets (`material_section(m)` gives the schema-driven material editor). The base class draws the
 docked window, Ctrl+Z/Y, History and View. A scene with `bounding_radius()` gets the camera fitted on `show`.
@@ -50,6 +65,8 @@ engine:  geometry, meshes, materials, undo     (leaves: numpy only, materials ho
          render  → geometry, meshes, materials
          ui      → materials, undo
          app     → render, ui
+         sculpt  → geometry, meshes;   library → sculpt
+tools:   tools/sculptor → app, library, sculpt  (the `valo-sculpt` command)
 apps:    examples/crystal_studio: studio → crystal → valo
          examples/mesh_gallery:   gallery → valo
 ```
@@ -60,7 +77,8 @@ apps:    examples/crystal_studio: studio → crystal → valo
 | Request | Change |
 |---|---|
 | New shading model | `valo/materials.py`: WGSL in `FRAGMENT_WGSL` + parameter list in `SCHEMA`. Panels and pipelines pick it up. |
-| New standard mesh | `valo/meshes.py`: a function returning `MeshData` (a `_revolve` profile for round shapes), add it to `STANDARD`; the mesh tests check winding and volume. |
+| New mesh shape | sculpt it: `uv run valo-sculpt my_shape.py`, then Save to library (→ `valo/library/`, checked by the tests). A primitive every app needs goes in `valo/meshes.py` + `STANDARD`. |
+| New mesh builder | `valo/meshes.py`, next to `revolve` / `parametric` / `heightfield`; test it with `check()`. |
 | Bonds, vector fields | app: `renderer.instances(meshes.cylinder() / arrow(), m)` + `instance_matrices(..., z_axis=...)`. |
 | Polyhedra, isosurfaces (per-scene meshes) | app: build a `MeshData` and draw it with one identity instance. |
 | Animation (vibrations, precession) | engine: time in the frame uniform; per-instance amplitudes; displacement in `vs_main`. |

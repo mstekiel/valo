@@ -159,11 +159,15 @@ class Material:
             self.device.queue.write_buffer(self.buffer, 0, self.data)
             self.dirty = False
 
-    def to_json(self) -> str:
+    def to_dict(self, digits: int = 4) -> dict:
+        """Shading + the parameters it uses (rounded), e.g. ``renderer.material(name, **d)`` rebuilds it."""
         def fmt(v):
-            return [round(x, 3) for x in v] if isinstance(v, tuple) else (round(v, 3) if isinstance(v, float) else v)
-        items = {"name": self.name, "shading": self.shading, **{s.key: self.get(s.key) for s in SCHEMA[self.shading]}}
-        return "{\n" + ",\n".join(f"  {json.dumps(k)}: {json.dumps(fmt(v))}" for k, v in items.items()) + "\n}"
+            return [round(x, digits) for x in v] if isinstance(v, tuple) else round(v, digits)
+        return {"shading": self.shading, **{s.key: fmt(self.get(s.key)) for s in SCHEMA[self.shading]}}
+
+    def to_json(self) -> str:
+        items = {"name": self.name, **self.to_dict(digits=3)}
+        return "{\n" + ",\n".join(f"  {json.dumps(k)}: {json.dumps(v)}" for k, v in items.items()) + "\n}"
 
 
 # colour conversion: materials store linear RGB, UIs show sRGB

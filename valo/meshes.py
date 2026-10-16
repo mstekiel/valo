@@ -3,9 +3,8 @@
 Conventions: vertices are position xyz + unit normal xyz; triangles are counter-clockwise seen from
 outside; Z-up; unit-sized and centred at the origin unless a function says otherwise.
 
-Most round shapes are surfaces of revolution: a profile of (ρ, z, normal ρ, normal z) points, traversed
-from the bottom of the axis to the top on the outside, swept around Z. Points repeated with a different
-normal give a hard edge.
+Builders for new shapes: ``revolve`` (a (ρ, z) profile swept around Z), ``parametric`` (f(u, v) → xyz),
+``heightfield`` (z = f(x, y)), plus ``transform`` and ``merge``. ``check`` reports what's wrong with a mesh.
 """
 
 from __future__ import annotations
@@ -75,8 +74,33 @@ def _quad(center, normal, u, v) -> MeshData:
     return _mesh([c - u - v, c + u - v, c + u + v, c - u + v], [normal] * 4, [0, 1, 2, 0, 2, 3])
 
 
-def _revolve(profile, segments: int) -> MeshData:
-    prof = np.asarray(profile, float)  # (K, 4): rho, z, n_rho, n_z
+def _profile_normals(prof: np.ndarray) -> np.ndarray:
+    """(K, 2) outward (n_rho, n_z) for a (ρ, z) profile: neighbouring segments averaged; a point repeated
+    twice in a row is a hard edge (each copy takes the normal of its own side)."""
+    d = np.diff(prof, axis=0)
+    length = np.linalg.norm(d, axis=1)
+    seg = np.zeros_like(d)
+    seg[length > 0] = np.c_[d[:, 1], -d[:, 0]][length > 0] / length[length > 0, None]
+    n = np.zeros_like(prof)
+    n[:-1] += seg  # segment k touches points k and k + 1
+    n[1:] += seg
+    norm = np.linalg.norm(n, axis=1)
+    good = np.flatnonzero(norm > 0)
+    if not len(good):
+        raise ValueError("profile has no segment of non-zero length")
+    nearest = good[np.abs(np.arange(len(n))[:, None] - good[None, :]).argmin(1)]  # e.g. a trailing repeat
+    return n[nearest] / norm[nearest, None]
+
+
+def revolve(profile, segments: int = 32) -> MeshData:
+    """Sweep a profile around Z. ``profile`` is (K, 2) of (ρ, z), or (K, 4) with explicit (n_ρ, n_z).
+
+    Go from the bottom of the axis to the top on the outside (start and end at ρ = 0 for a closed
+    solid). Normals of a (K, 2) profile are computed; repeat a point to make a hard edge there.
+    """
+    prof = np.asarray(profile, float)
+    if prof.shape[1] == 2:
+        prof = np.c_[prof, _profile_normals(prof)]
     a = np.linspace(0, 2 * math.pi, segments + 1)[:, None]  # seam duplicated for a clean grid
     cos, sin = np.cos(a), np.sin(a)
     grid = (segments + 1, len(prof))
@@ -159,7 +183,7 @@ def plane(size: float = 1.0) -> MeshData:
 def cylinder(segments: int = 32, r: float = 0.5, h: float = 1.0) -> MeshData:
     """Along Z, z ∈ [−h/2, h/2], with flat caps."""
     z0, z1 = -h / 2, h / 2
-    return _revolve([(0, z0, 0, -1), (r, z0, 0, -1), (r, z0, 1, 0), (r, z1, 1, 0), (r, z1, 0, 1), (0, z1, 0, 1)],
+    return revolve([(0, z0, 0, -1), (r, z0, 0, -1), (r, z0, 1, 0), (r, z1, 1, 0), (r, z1, 0, 1), (0, z1, 0, 1)],
                     segments)
 
 
@@ -167,7 +191,7 @@ def cone(segments: int = 32, r: float = 0.5, h: float = 1.0) -> MeshData:
     """Base (radius r) at z = −h/2, apex at z = +h/2."""
     z0, z1 = -h / 2, h / 2
     nr, nz = _slope_normal(r, z0, 0, z1)
-    return _revolve([(0, z0, 0, -1), (r, z0, 0, -1), (r, z0, nr, nz), (0, z1, nr, nz)], segments)
+    return revolve([(0, z0, 0, -1), (r, z0, 0, -1), (r, z0, nr, nz), (0, z1, nr, nz)], segments)
 
 
 def torus(major: float = 0.35, minor: float = 0.15, nu: int = 48, nv: int = 24) -> MeshData:
@@ -186,16 +210,111 @@ def capsule(r: float = 0.25, length: float = 1.0, segments: int = 32, rings: int
         return [(r * math.sin(t), z + r * math.cos(t), math.sin(t), math.cos(t))
                 for t in np.linspace(th0, th1, rings + 1)]
 
-    return _revolve(cap(-c, math.pi, math.pi / 2) + cap(c, math.pi / 2, 0), segments)
+    return revolve(cap(-c, math.pi, math.pi / 2) + cap(c, math.pi / 2, 0), segments)
 
 
 def arrow(shaft_r: float = 0.15, head_r: float = 0.5, head_len: float = 0.35, segments: int = 24) -> MeshData:
     """Tail at the origin, tip at z = 1, head diameter 1 (= 2·head_r): scale (w, w, length) to fit a vector."""
     zh = 1.0 - head_len
     nr, nz = _slope_normal(head_r, zh, 0, 1)
-    return _revolve([(0, 0, 0, -1), (shaft_r, 0, 0, -1), (shaft_r, 0, 1, 0), (shaft_r, zh, 1, 0),
+    return revolve([(0, 0, 0, -1), (shaft_r, 0, 0, -1), (shaft_r, 0, 1, 0), (shaft_r, zh, 1, 0),
                      (shaft_r, zh, 0, -1), (head_r, zh, 0, -1), (head_r, zh, nr, nz), (0, 1, nr, nz)], segments)
 
 
 STANDARD = {"sphere": sphere, "icosphere": icosphere, "cube": cube, "cylinder": cylinder, "cone": cone,
             "torus": torus, "capsule": capsule, "arrow": arrow, "plane": plane}
+
+
+# -- builders for new shapes
+
+
+def parametric(f, nu: int = 64, nv: int = 64, u=(0.0, 1.0), v=(0.0, 1.0), flip: bool = False) -> MeshData:
+    """Surface P = f(u, v) over a grid; ``f`` takes and returns numpy arrays (xyz stacked on the last axis,
+    or a tuple of three arrays). Outward is ∂P/∂u × ∂P/∂v; pass ``flip`` if your surface faces the other way.
+    """
+    def evaluate(uu, vv):
+        p = f(uu, vv)
+        return np.stack(np.broadcast_arrays(*p), -1) if isinstance(p, tuple) else np.asarray(p, float)
+
+    uu, vv = np.meshgrid(np.linspace(*u, nu + 1), np.linspace(*v, nv + 1), indexing="ij")
+    hu, hv = 1e-4 * (u[1] - u[0]), 1e-4 * (v[1] - v[0])
+
+    def normals(uu, vv):
+        du = evaluate(uu + hu, vv) - evaluate(uu - hu, vv)
+        dv = evaluate(uu, vv + hv) - evaluate(uu, vv - hv)
+        return np.cross(du, dv)
+
+    n = normals(uu, vv)
+    flat = np.linalg.norm(n, axis=-1) < 1e-12 * max(hu * hv, 1e-300)  # poles: step a little inwards
+    if flat.any():
+        su = np.where(uu < (u[0] + u[1]) / 2, 1, -1) * 1e-3 * (u[1] - u[0])
+        sv = np.where(vv < (v[0] + v[1]) / 2, 1, -1) * 1e-3 * (v[1] - v[0])
+        n[flat] = normals(uu + su, vv + sv)[flat]
+    n /= np.linalg.norm(n, axis=-1, keepdims=True)
+    idx = _grid_indices(nu, nv).reshape(-1, 3)
+    if flip:
+        n, idx = -n, idx[:, ::-1]
+    return _mesh(evaluate(uu, vv).reshape(-1, 3), n.reshape(-1, 3), idx)
+
+
+def heightfield(f, size: float = 1.0, n: int = 64) -> MeshData:
+    """Terrain z = f(x, y) over the square |x|, |y| ≤ size/2, facing +Z (one-sided)."""
+    h = size / 2
+    return parametric(lambda x, y: (x, y, f(x, y)), n, n, (-h, h), (-h, h))
+
+
+# -- diagnostics
+
+
+@dataclass
+class MeshReport:
+    vertices: int
+    triangles: int
+    degenerate: int  # zero-area triangles (harmless seams and poles, but wasted work)
+    bad_normals: int  # not unit length
+    flipped: int  # wound against their vertex normals (shows up as holes: back faces are culled)
+    watertight: bool  # closed and consistently wound, once vertices are welded by position
+    volume: float | None  # enclosed volume, when watertight
+
+    @property
+    def ok(self) -> bool:
+        return self.bad_normals == 0 and self.flipped == 0
+
+    def lines(self) -> list[str]:
+        out = [f"{self.vertices} vertices, {self.triangles} triangles ({self.degenerate} degenerate)",
+               f"normals: {'ok' if not self.bad_normals else f'{self.bad_normals} not unit length'}",
+               f"winding: {'ok' if not self.flipped else f'{self.flipped} triangles flipped'}"]
+        out.append(f"watertight, volume {self.volume:.4g}" if self.watertight else "open (not watertight)")
+        return out
+
+
+def check(mesh: MeshData) -> MeshReport:
+    """What's wrong with ``mesh``: the checks the tests and the MeshSculptor panel share."""
+    p = mesh.positions.astype(float)
+    n = mesh.normals.astype(float)
+    t = mesh.indices.reshape(-1, 3).astype(np.int64)
+    bad_normals = int((~(np.abs(np.linalg.norm(n, axis=1) - 1) <= 1e-3)).sum())  # NaN counts as bad
+    if not len(t):
+        return MeshReport(len(p), 0, 0, bad_normals, 0, False, None)
+
+    face = np.cross(p[t[:, 1]] - p[t[:, 0]], p[t[:, 2]] - p[t[:, 0]])
+    scale = float(np.ptp(p, axis=0).max()) or 1.0
+    real = np.linalg.norm(face, axis=1) > 1e-10 * scale**2
+    flipped = int((np.einsum("ij,ij->i", face, n[t].mean(1))[real] <= 0).sum())
+
+    # Weld vertices by position (seams and hard edges duplicate them), then every edge of a closed,
+    # consistently wound surface appears exactly once in each direction.
+    _, weld = np.unique(np.round(p / scale, 6), axis=0, return_inverse=True)
+    w = weld.ravel()[t]
+    distinct = (w[:, 0] != w[:, 1]) & (w[:, 1] != w[:, 2]) & (w[:, 2] != w[:, 0])
+    w = w[distinct & real]
+    edges = np.concatenate([w[:, [0, 1]], w[:, [1, 2]], w[:, [2, 0]]])
+    key = edges[:, 0] * (len(p) + 1) + edges[:, 1]
+    rev = edges[:, 1] * (len(p) + 1) + edges[:, 0]
+    keys, counts = np.unique(key, return_counts=True)
+    watertight = bool(len(w)) and (counts == 1).all() and np.isin(rev, keys).all()
+    volume = None
+    if watertight:
+        q = p[t[distinct & real]]
+        volume = float(np.einsum("ij,ij->i", q[:, 0], np.cross(q[:, 1], q[:, 2])).sum() / 6)
+    return MeshReport(len(p), len(t), int((~real).sum()), bad_normals, flipped, watertight, volume)

@@ -8,8 +8,12 @@ Dear ImGui for the side panel. Apps hand the `Viewer` a scene of instanced, shad
 uv sync
 uv run python examples/crystal_studio/studio.py   # example app: rock-salt crystal + material editor
 uv run python examples/mesh_gallery/gallery.py    # example app: every standard mesh, instanced arrows
+uv run valo-sculpt examples/sculpts/vase.py      # MeshSculptor: sculpt a mesh from a .py file, save to the library
 uv run pytest                                     # engine + example tests (GPU tests render offscreen)
 ```
+
+MeshSculptor hot-reloads the sculpt file whenever you save it in your editor. "Save to library" writes
+`valo/library/<name>.py`, and apps use it as `valo.library.mesh("<name>")`.
 
 Mouse: left-drag orbits, wheel zooms. Ctrl+Z / Ctrl+Y undo / redo.
 

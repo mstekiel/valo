@@ -10,15 +10,18 @@ import numpy as np
 
 @dataclass(eq=False)  # identity hash: the renderer caches one GPU upload per MeshData
 class MeshData:
+    """A triangle mesh: per-vertex position and unit normal, and uint32 triangle indices."""
     vertices: np.ndarray  # (N, 6) float32: position xyz, normal xyz
     indices: np.ndarray  # (M,) uint32
 
     @property
     def positions(self) -> np.ndarray:
+        """(N, 3) vertex positions (a view into ``vertices``)."""
         return self.vertices[:, :3]
 
     @property
     def normals(self) -> np.ndarray:
+        """(N, 3) unit vertex normals (a view into ``vertices``)."""
         return self.vertices[:, 3:]
 
 

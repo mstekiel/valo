@@ -20,20 +20,24 @@ LIBRARY_DIR = Path(__file__).parent
 
 
 def names() -> list[str]:
+    """Names of all saved library meshes, sorted."""
     return sorted(p.stem for p in LIBRARY_DIR.glob("*.py") if not p.name.startswith("_"))
 
 
 def path(name: str) -> Path:
+    """File path of library entry ``name`` (it may not exist yet)."""
     return LIBRARY_DIR / f"{name}.py"
 
 
 def load(name: str) -> Sculpt:
+    """The library entry ``name`` as a Sculpt (raises KeyError if there is none)."""
     if not path(name).exists():
         raise KeyError(f"no library mesh {name!r}; have {names()}")
     return Sculpt.load(path(name))
 
 
 def mesh(name: str, **params) -> MeshData:
+    """Build library mesh ``name`` with its saved transform; ``params`` override saved defaults."""
     return load(name).build(params)
 
 

@@ -12,6 +12,7 @@ from .ops import merge
 
 
 def sphere(n_lat: int = 48, n_lon: int = 96, r: float = 0.5) -> MeshData:
+    """UV sphere of radius ``r`` (default diameter 1) with ``n_lat`` × ``n_lon`` quads."""
     v = []
     for i in range(n_lat + 1):
         th = math.pi * i / n_lat

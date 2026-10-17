@@ -11,6 +11,7 @@ from .data import MeshData
 
 @dataclass
 class MeshReport:
+    """What ``check()`` found in a mesh: counts, broken normals or winding, watertightness and volume."""
     vertices: int
     triangles: int
     degenerate: int  # zero-area triangles (harmless seams and poles, but wasted work)
@@ -21,9 +22,11 @@ class MeshReport:
 
     @property
     def ok(self) -> bool:
+        """True when normals and winding are all fine (open meshes can be ok)."""
         return self.bad_normals == 0 and self.flipped == 0
 
     def lines(self) -> list[str]:
+        """The report as short human-readable lines (used by the Diagnostics panel)."""
         out = [f"{self.vertices} vertices, {self.triangles} triangles ({self.degenerate} degenerate)",
                f"normals: {'ok' if not self.bad_normals else f'{self.bad_normals} not unit length'}",
                f"winding: {'ok' if not self.flipped else f'{self.flipped} triangles flipped'}"]

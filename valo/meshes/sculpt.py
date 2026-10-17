@@ -37,6 +37,7 @@ _counter = itertools.count()
 
 @dataclass
 class ShapeParam:
+    """One parameter of a sculpt's ``mesh()``: name, widget kind, default and slider range."""
     name: str
     kind: str  # "float" | "int" | "bool" → decides the widget
     default: float | int | bool
@@ -88,6 +89,7 @@ def _literal(v) -> str:
 
 
 class Sculpt:
+    """A loaded sculpt file: its ``mesh()`` function, parameters, MATERIAL and TRANSFORM."""
     def __init__(self, path: Path, source: str, module):
         self.path, self.source, self.module = path, source, module
         self.func = getattr(module, "mesh", None)
@@ -116,6 +118,7 @@ class Sculpt:
         return cls(path, source, module)
 
     def defaults(self) -> dict:
+        """The parameter defaults of ``mesh()`` as a dict."""
         return {p.name: p.default for p in self.params}
 
     def build(self, params: dict | None = None, transform_: dict | None = None) -> MeshData:
@@ -172,6 +175,7 @@ class Sculpt:
         return src.decode("utf-8")
 
     def save(self, target, params: dict, material: dict | None, transform_: dict) -> Path:
+        """Write the sculpt with new defaults, material and transform to ``target``; returns the path."""
         target = Path(target)
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(self.rewrite(params, material, transform_), encoding="utf-8", newline="")

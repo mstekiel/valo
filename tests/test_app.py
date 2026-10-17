@@ -67,3 +67,15 @@ def test_any_mesh_draws_instanced_with_its_own_transforms(viewer):
     assert (with_cubes != empty).any(-1).sum() > 500
     arrows.set(instance_matrices([[0, 0, 0]], (0.3, 0.3, 2.0), z_axis=(0, 1, 1)))
     assert (snap(viewer) != with_cubes).any(-1).sum() > 200
+
+
+def test_vector_fonts_with_icons_are_loaded(viewer):
+    from imgui_bundle import imgui
+
+    from valo.ui_style import ICON, mono_font
+
+    imgui.set_current_context(viewer.imgui.imgui_context)
+    io = imgui.get_io()
+    assert len(io.fonts.fonts) == 2 and io.font_default is io.fonts.fonts[0]
+    assert io.font_default.is_glyph_in_font(ord(ICON.FLOPPY_DISK))  # icons merged into the UI font
+    assert mono_font() is io.fonts.fonts[1]

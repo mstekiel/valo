@@ -79,6 +79,44 @@ def instance_matrices(positions, scale=1.0, z_axis=None) -> np.ndarray:
     return m.astype(np.float32)
 
 
+def decompose(m) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Split a model matrix M = T · R · S into (translation (3,), rotation (3, 3), scale (3,)).
+
+    A mirror shows up as a negative x scale. Shear is not represented (instance_matrices never makes any).
+    """
+    m = np.asarray(m, float)
+    a = m[:3, :3]
+    scale = np.linalg.norm(a, axis=0)
+    if np.linalg.det(a) < 0:
+        scale[0] = -scale[0]
+    rotation = a / np.where(scale == 0, 1.0, scale)
+    return m[:3, 3].copy(), rotation, scale
+
+
+def axis_angle(rotation) -> tuple[np.ndarray, float]:
+    """(unit axis, angle in degrees) of a 3×3 rotation; the axis is +Z for the identity."""
+    r = np.asarray(rotation, float)
+    angle = math.acos(float(np.clip((np.trace(r) - 1) / 2, -1.0, 1.0)))
+    axis = np.array([r[2, 1] - r[1, 2], r[0, 2] - r[2, 0], r[1, 0] - r[0, 1]])
+    if np.linalg.norm(axis) < 1e-9:  # 0° or 180°: take the axis from the symmetric part
+        if angle < 1e-6:
+            return np.array([0.0, 0.0, 1.0]), 0.0
+        nn = (r + np.eye(3)) / 2  # = n nᵀ at 180°
+        axis = nn[:, int(np.argmax(np.diag(nn)))]
+    return axis / np.linalg.norm(axis), math.degrees(angle)
+
+
+def euler_xyz(rotation) -> np.ndarray:
+    """Angles (degrees) applied x, then y, then z, i.e. R = Rz · Ry · Rx (the sculpt TRANSFORM convention)."""
+    r = np.asarray(rotation, float)
+    y = math.asin(float(np.clip(-r[2, 0], -1.0, 1.0)))
+    if abs(r[2, 0]) < 1 - 1e-9:
+        x, z = math.atan2(r[2, 1], r[2, 2]), math.atan2(r[1, 0], r[0, 0])
+    else:  # gimbal lock: put everything into z
+        x, z = 0.0, math.atan2(-r[0, 1], r[1, 1])
+    return np.degrees([x, y, z])
+
+
 def rotations_z_to(directions) -> np.ndarray:
     """(N, 3, 3) shortest-arc rotations taking +Z onto each direction (zero vectors → identity)."""
     d = np.asarray(directions, float).reshape(-1, 3)

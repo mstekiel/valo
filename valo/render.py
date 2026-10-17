@@ -11,7 +11,9 @@ from __future__ import annotations
 
 import math
 import weakref
+from collections.abc import Callable
 from dataclasses import dataclass
+from typing import NamedTuple
 
 import numpy as np
 import wgpu
@@ -229,14 +231,27 @@ class OrbitCamera:
         self.ortho_height = self._height_at_target()
 
 
+class Batch(NamedTuple):
+    """What a scene's ``batches()`` yields: one instanced draw. ``source`` is the Instances (for picking/info)."""
+
+    material: Material
+    mesh: GpuMesh
+    bind_group: object
+    count: int
+    source: object = None
+
+
 class Instances:
     """Instances of one mesh sharing one material: a grow-only storage buffer of model matrices.
 
-    ``batch()`` is the (material, mesh, instance bind group, count) tuple the renderer draws.
+    ``batch()`` is the Batch the renderer draws. ``label`` names the object in the Info panel, and
+    ``info(i) -> dict`` (optional) adds scene-specific lines for instance ``i``.
     """
 
-    def __init__(self, device: wgpu.GPUDevice, instance_layout, mesh: GpuMesh, material: Material):
+    def __init__(self, device: wgpu.GPUDevice, instance_layout, mesh: GpuMesh, material: Material,
+                 label: str | None = None, info: Callable[[int], dict] | None = None):
         self.device, self.layout, self.mesh, self.material = device, instance_layout, mesh, material
+        self.label, self.info = label, info
         self.count = self.capacity = 0  # capacity: instances the buffer can hold
         self.buffer = self.bind_group = None
         self.set(np.zeros((0, 4, 4)))
@@ -244,6 +259,7 @@ class Instances:
     def set(self, matrices) -> None:
         """Upload (N, 4, 4) math-convention model matrices, e.g. from ``geometry.instance_matrices``."""
         matrices = np.asarray(matrices, np.float32).reshape(-1, 4, 4)
+        self.matrices = matrices.copy()  # CPU copy: picking, info and centring read it
         self.count = len(matrices)
         data = np.zeros((max(self.count, 1), 4, 4), np.float32)  # buffers can't be empty
         data[: self.count] = pack_mat4(matrices)
@@ -255,9 +271,9 @@ class Instances:
                 layout=self.layout, entries=[{"binding": 0, "resource": {"buffer": self.buffer}}])
         self.device.queue.write_buffer(self.buffer, 0, data)
 
-    def batch(self):
-        """The (material, mesh, bind group, count) tuple a scene's ``batches()`` returns for these instances."""
-        return self.material, self.mesh, self.bind_group, self.count
+    def batch(self) -> Batch:
+        """The Batch a scene's ``batches()`` returns for these instances."""
+        return Batch(self.material, self.mesh, self.bind_group, self.count, self)
 
 
 class Spheres(Instances):
@@ -323,13 +339,13 @@ class Renderer:
             self._meshes[data] = GpuMesh(self.device, data)
         return self._meshes[data]
 
-    def instances(self, mesh: MeshData, material: Material) -> Instances:
+    def instances(self, mesh: MeshData, material: Material, label: str | None = None, info=None) -> Instances:
         """New instanced batch of ``mesh`` with ``material`` (call ``.set(matrices)`` to place them)."""
-        return Instances(self.device, self.instance_layout, self.mesh(mesh), material)
+        return Instances(self.device, self.instance_layout, self.mesh(mesh), material, label, info)
 
-    def spheres(self, material: Material) -> Spheres:
+    def spheres(self, material: Material, label: str | None = None, info=None) -> Spheres:
         """New instanced batch of unit spheres with ``material`` (call ``.set(centers, radii)``)."""
-        return Spheres(self.device, self.instance_layout, self.sphere, material)
+        return Spheres(self.device, self.instance_layout, self.sphere, material, label, info)
 
     def _scene_targets(self, w: int, h: int):
         if self._targets is None or self._targets[0] != (w, h):
@@ -380,7 +396,7 @@ class Renderer:
                                       "depth_load_op": "clear", "depth_store_op": "store"},
         )
         rpass.set_bind_group(0, self.frame_bg)
-        for material, mesh, instances_bg, count in batches:  # one instanced draw call per batch
+        for material, mesh, instances_bg, count, *_ in batches:  # one instanced draw call per batch
             rpass.set_pipeline(self.pipelines[material.shading])
             rpass.set_bind_group(1, material.bind_group)
             rpass.set_bind_group(2, instances_bg)

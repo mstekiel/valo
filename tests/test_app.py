@@ -368,3 +368,15 @@ def test_preferences_window_edits_rc_live(viewer):
         with pytest.raises(ValueError):
             editor.set_preference("camera.fov", 500)
     editor.set_ui_scale(rc.ui.scale)
+
+
+def test_batches_carry_their_instances_and_matrices(viewer):
+    from valo import instance_matrices, meshes
+
+    m = viewer.renderer.material("M", "lambert")
+    cubes = viewer.renderer.instances(meshes.cube(), m, label="cubes", info=lambda i: {"index": i})
+    matrices = instance_matrices([[0, 0, 0], [2, 0, 0]])
+    cubes.set(matrices)
+    b = cubes.batch()
+    assert b.source is cubes and b[:4] == (m, cubes.mesh, cubes.bind_group, 2)
+    assert np.array_equal(cubes.matrices, matrices) and cubes.label == "cubes" and cubes.info(1) == {"index": 1}

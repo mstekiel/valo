@@ -213,3 +213,24 @@ def test_valo_config_writes_a_commented_defaults_file(tmp_path):
     assert dict(loaded.items()) == dict(RC().items())
     with pytest.raises(SystemExit):
         main(["--write-defaults", str(path)])  # never overwrites
+
+
+def test_decompose_returns_what_instance_matrices_built():
+    from valo.geometry import axis_angle, decompose, euler_xyz, rotate
+    from valo.meshes.sculpt import transform_matrix
+
+    m = instance_matrices([[1.0, -2.0, 3.0]], [[0.5, 2.0, 1.5]], z_axis=[[1.0, 1.0, 0.0]])[0]
+    t, r, s = decompose(m)
+    assert t == pytest.approx([1, -2, 3]) and s == pytest.approx([0.5, 2.0, 1.5])
+    assert r @ [0, 0, 1] == pytest.approx(np.array([1, 1, 0]) / np.sqrt(2), abs=1e-6)
+    assert np.allclose(r @ r.T, np.eye(3), atol=1e-6)
+
+    axis, angle = axis_angle(rotate((1, 2, 2), np.radians(70))[:3, :3])
+    assert axis == pytest.approx(np.array([1, 2, 2]) / 3) and angle == pytest.approx(70)
+    assert axis_angle(np.eye(3))[1] == 0.0
+    for ax in ((0, 1, 0), (1, -1, 0), (1, 2, -2)):  # 180° takes another code path
+        axis, angle = axis_angle(rotate(ax, np.pi)[:3, :3])
+        assert abs(axis @ np.array(ax)) == pytest.approx(np.linalg.norm(ax)) and angle == pytest.approx(180, abs=1e-4)
+
+    tm = transform_matrix({"rotate_deg": [10.0, -25.0, 140.0]})
+    assert euler_xyz(decompose(tm)[1]) == pytest.approx([10, -25, 140])

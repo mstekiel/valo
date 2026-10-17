@@ -1,5 +1,7 @@
 """Scene lighting: one directional light, either a headlight (fixed relative to the camera) or fixed in the world.
 
+Plus a global hemisphere ambient: sky colour from above, ground colour from below, one intensity.
+
 Angles say where the light comes FROM, in degrees:
 - **headlight:** in the camera's frame. Azimuth 0 / elevation 0 is straight from the viewer;
   negative azimuth is from the left, positive elevation from above.
@@ -33,6 +35,9 @@ class Lighting:
     elevation: float = 30.0
     color: tuple = (1.0, 1.0, 1.0)  # linear RGB
     intensity: float = 1.0
+    sky: tuple = (0.55, 0.62, 0.72)  # hemisphere ambient: colour from above (linear), also the reflected sky
+    ground: tuple = (0.10, 0.09, 0.08)  # ...and from below
+    ambient: float = 0.3  # ambient intensity; each material scales it by its own `ambient`
 
     def direction(self, camera) -> np.ndarray:
         """Unit world vector pointing toward the light."""

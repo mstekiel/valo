@@ -21,18 +21,16 @@ FRAGMENT_WGSL = {
 @fragment fn fs_main(in: VsOut) -> @location(0) vec4f {
     let s = surface(in);
     let d = max(dot(s.n, s.l), 0.0);
-    let amb = material.pbr.z;
-    let light = frame.light_color.rgb;
-    return vec4f(material.base_color.rgb * (amb + (1.0 - amb) * d * light) + material.emissive.rgb, 1.0);
+    let lit = ambient_light(s.n) * material.pbr.z + d * frame.light_color.rgb;
+    return vec4f(material.base_color.rgb * lit + material.emissive.rgb, 1.0);
 }""",
     "blinn_phong": """
 @fragment fn fs_main(in: VsOut) -> @location(0) vec4f {
     let s = surface(in);
     let d = max(dot(s.n, s.l), 0.0);
     let spec = select(0.0, pow(max(dot(s.n, normalize(s.l + s.v)), 0.0), material.specular.w), d > 0.0);
-    let amb = material.pbr.z;
-    let light = frame.light_color.rgb;
-    return vec4f(material.base_color.rgb * (amb + (1.0 - amb) * d * light)
+    let lit = ambient_light(s.n) * material.pbr.z + d * frame.light_color.rgb;
+    return vec4f(material.base_color.rgb * lit
                  + material.specular.rgb * spec * frame.light_color.rgb + material.emissive.rgb, 1.0);
 }""",
     "pbr": """
@@ -56,7 +54,7 @@ FRAGMENT_WGSL = {
     let direct = ((1.0 - f) * (1.0 - metallic) * base / PI + spec) * 3.0 * ndl * frame.light_color.rgb;
     let fr = f0 + (max(vec3f(1.0 - rough), f0) - f0) * pow(1.0 - ndv, 5.0);
     let env = environment(reflect(-s.v, s.n)) * fr * (1.0 - 0.75 * rough);
-    let ambient = material.pbr.z * environment(s.n) * base * (1.0 - metallic);
+    let ambient = material.pbr.z * ambient_light(s.n) * base * (1.0 - metallic);
     return vec4f(direct + env + ambient + material.emissive.rgb, 1.0);
 }""",
     "toon": """
@@ -65,9 +63,8 @@ FRAGMENT_WGSL = {
     let bands = max(material.pbr.w, 1.0);
     let d = floor(max(dot(s.n, s.l), 0.0) * bands + 0.5) / bands;
     let rim = smoothstep(0.55, 0.75, 1.0 - max(dot(s.n, s.v), 0.0)) * 0.35;
-    let amb = material.pbr.z;
-    let light = frame.light_color.rgb;
-    return vec4f(material.base_color.rgb * (amb + (1.0 - amb) * d * light) + vec3f(rim) + material.emissive.rgb, 1.0);
+    let lit = ambient_light(s.n) * material.pbr.z + d * frame.light_color.rgb;
+    return vec4f(material.base_color.rgb * lit + vec3f(rim) + material.emissive.rgb, 1.0);
 }""",
 }
 
@@ -93,7 +90,7 @@ SPEC_COLOR = ParamSpec("specular_color", "Specular colour", "color", 4, (0.6, 0.
 SHININESS = ParamSpec("shininess", "Shininess", "float", 7, (48.0,), 1.0, 1024.0, log=True)
 METALLIC = ParamSpec("metallic", "Metallic", "float", 8, (0.0,))
 ROUGHNESS = ParamSpec("roughness", "Roughness", "float", 9, (0.4,), 0.04, 1.0)
-AMBIENT = ParamSpec("ambient", "Ambient", "float", 10, (0.15,))
+AMBIENT = ParamSpec("ambient", "Ambient", "float", 10, (1.0,))  # × the scene's global ambient light
 BANDS = ParamSpec("bands", "Bands", "int", 11, (3,), 1, 8)
 EMISSIVE = ParamSpec("emissive", "Emissive", "color", 12, (0.0, 0.0, 0.0))
 ALL_SPECS = [BASE, SPEC_COLOR, SHININESS, METALLIC, ROUGHNESS, AMBIENT, BANDS, EMISSIVE]

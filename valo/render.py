@@ -34,6 +34,8 @@ struct Frame {
     view_dir: vec4f,   // xyz unit forward; w = 1 perspective, 0 orthographic
     light_dir: vec4f,  // xyz unit vector toward the light
     light_color: vec4f,  // rgb = colour × intensity (linear)
+    sky: vec4f,        // rgb = hemisphere colour above; w = ambient intensity
+    ground: vec4f,     // rgb = hemisphere colour below
 };
 @group(0) @binding(0) var<uniform> frame: Frame;
 
@@ -70,8 +72,12 @@ fn vs_main(@location(0) position: vec3f, @location(1) normal: vec3f,
     return out;
 }
 
-fn environment(dir: vec3f) -> vec3f {   // stand-in sky/ground for reflections
-    return mix(vec3f(0.10, 0.09, 0.08), vec3f(0.55, 0.62, 0.72), clamp(dir.z * 0.5 + 0.5, 0.0, 1.0));
+fn environment(dir: vec3f) -> vec3f {   // the scene's sky/ground hemisphere, for reflections
+    return mix(frame.ground.rgb, frame.sky.rgb, clamp(dir.z * 0.5 + 0.5, 0.0, 1.0));
+}
+
+fn ambient_light(n: vec3f) -> vec3f {   // global hemisphere ambient; materials scale it by their `ambient`
+    return environment(n) * frame.sky.w;
 }
 
 struct Surface { n: vec3f, v: vec3f, l: vec3f };
@@ -244,7 +250,7 @@ class Renderer:
         self.frame_layout = layout(wgpu.BufferBindingType.uniform, vf)
         self.material_layout = layout(wgpu.BufferBindingType.uniform, vf)
         self.instance_layout = layout(wgpu.BufferBindingType.read_only_storage, wgpu.ShaderStage.VERTEX)
-        self.frame_buffer = device.create_buffer(size=128, usage=wgpu.BufferUsage.UNIFORM | wgpu.BufferUsage.COPY_DST)
+        self.frame_buffer = device.create_buffer(size=160, usage=wgpu.BufferUsage.UNIFORM | wgpu.BufferUsage.COPY_DST)
         self.frame_bg = device.create_bind_group(
             layout=self.frame_layout, entries=[{"binding": 0, "resource": {"buffer": self.frame_buffer}}])
 
@@ -316,13 +322,14 @@ class Renderer:
 
         view_proj, eye = camera.matrices(vw / h)
         lighting = lighting or Lighting()
-        frame = np.zeros(32, np.float32)
+        frame = np.zeros(40, np.float32)
         frame[:16] = pack_mat4(view_proj).ravel()
         frame[16:19] = eye
         frame[20:23] = camera.forward()
         frame[23] = camera.projection == "perspective"
         frame[24:27] = lighting.direction(camera)
         frame[28:31] = lighting.radiance()
+        frame[32:35], frame[35], frame[36:39] = lighting.sky, lighting.ambient, lighting.ground
         self.device.queue.write_buffer(self.frame_buffer, 0, frame)
 
         batches = [b for b in scene.batches() if b[3] > 0]

@@ -174,3 +174,21 @@ def test_orthographic_shading_is_the_same_for_identical_spheres(viewer):
 
     persp, ortho = patches_differ("perspective"), patches_differ("orthographic")
     assert ortho < 0.5 and persp > 3 * ortho
+
+
+def test_global_ambient_lights_the_unlit_side(viewer):
+    from valo import OrbitCamera
+    from valo.lighting import Lighting
+
+    m = viewer.renderer.material("Matte", "lambert", base_color=(0.8, 0.8, 0.8))
+    ball = viewer.renderer.spheres(m)
+    ball.set([[0, 0, 0]], 0.8)
+    viewer.show(SimpleNamespace(batches=lambda: [ball.batch()]))
+    viewer.camera = OrbitCamera(azimuth=0.0, elevation=0.0, distance=4.0)
+    viewer.lighting = Lighting("headlight", azimuth=180.0, elevation=0.0)  # from behind: the visible side is unlit
+    lit = snap(viewer)
+    viewer.lighting.ambient = 0.0
+    dark = snap(viewer)
+    background = lit[0, 0]
+    assert lit.max() > 60 and (dark <= background).all()  # only ambient lit the front: without it, black on bg
+    viewer.lighting = Lighting()

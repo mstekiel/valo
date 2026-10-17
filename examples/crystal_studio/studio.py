@@ -29,6 +29,7 @@ class CrystalEditor(Editor):
 
     @property
     def species(self) -> Species:
+        """The species selected in the panel."""
         return self.crystal.species[self.selected]
 
     def _rebuild(self) -> None:
@@ -38,6 +39,7 @@ class CrystalEditor(Editor):
 
     # -- crystal actions
     def set_count(self, axis: int, value: int) -> None:
+        """Set the number of atoms along ``axis`` (undoable)."""
         sc, old = self.crystal, self.crystal.n[axis]
         value = int(np.clip(value, 1, MAX_ATOMS_PER_AXIS))
         if value == old:
@@ -53,6 +55,7 @@ class CrystalEditor(Editor):
         self.undo_stack.push(Command(f"atoms along {'xyz'[axis]}", apply(old), apply(value), merge_key=("n", axis)))
 
     def set_spacing(self, value: float) -> None:
+        """Set the lattice spacing (undoable)."""
         sc, old = self.crystal, self.crystal.spacing
 
         def apply(v):
@@ -65,6 +68,7 @@ class CrystalEditor(Editor):
         self.undo_stack.push(Command("spacing", apply(old), apply(value), merge_key=("spacing",)))
 
     def set_radius(self, value: float) -> None:
+        """Set the selected species' atom radius (undoable)."""
         sp, old = self.species, self.species.radius
         self.crystal.set_radius(sp, value)
         self.undo_stack.push(Command(f"{sp.name}: radius", lambda: self.crystal.set_radius(sp, old),
@@ -72,6 +76,7 @@ class CrystalEditor(Editor):
 
     # -- material actions on the selected species
     def assign(self, material: Material) -> None:
+        """Give the selected species another material from the library (undoable)."""
         sp, old = self.species, self.species.material
         if material is old:
             return
@@ -80,15 +85,18 @@ class CrystalEditor(Editor):
                                      lambda: setattr(sp, "material", old), lambda: setattr(sp, "material", material)))
 
     def duplicate(self) -> None:
+        """Copy the selected species' material and assign the copy (undoable)."""
         copy = self.crystal.duplicate(self.species.material)
         self.watch(copy)
         self.assign(copy)
 
     # -- panel
     def windows(self):
+        """Crystal, Species and Material-as-data windows."""
         return {"Crystal": self.crystal_window, "Species": self.species_window, "Material as data": self.data_window}
 
     def crystal_window(self) -> None:
+        """Lattice size, spacing and atom counts."""
         sc = self.crystal
         imgui.separator_text("Boundaries (rock-salt)")
         for axis, label in enumerate(("Atoms along x", "Atoms along y", "Atoms along z")):
@@ -104,6 +112,7 @@ class CrystalEditor(Editor):
         imgui.text_disabled(f"{len(sc.species)} instanced draw calls, {self.triangles_per_atom} triangles per atom")
 
     def species_window(self) -> None:
+        """Species picker, radius, material choice and material editor."""
         sc = self.crystal
         for i, sp in enumerate(sc.species):
             if i:
@@ -126,6 +135,7 @@ class CrystalEditor(Editor):
         self.material_section(m)
 
     def data_window(self) -> None:
+        """The selected species' material as JSON."""
         imgui.text_disabled(f"Material of {self.species.name}")
         imgui.push_font(mono_font(), 0.0)
         imgui.text_unformatted(self.species.material.to_json())
@@ -133,6 +143,7 @@ class CrystalEditor(Editor):
 
 
 def build(viewer: Viewer) -> CrystalEditor:
+    """Build the crystal and its editor and show them in ``viewer``; returns the editor."""
     crystal = Crystal(viewer.renderer)
     editor = CrystalEditor(crystal, viewer.camera, viewer.renderer.sphere.count // 3)
     viewer.show(crystal, editor)
@@ -140,6 +151,7 @@ def build(viewer: Viewer) -> CrystalEditor:
 
 
 def main() -> None:
+    """Run the crystal studio in a window."""
     viewer = Viewer(title="Crystal studio")
     build(viewer)
     viewer.run()

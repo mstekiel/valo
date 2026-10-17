@@ -47,11 +47,13 @@ class SculptScene:
         self.normal_length = 0.08
 
     def set_mesh(self, data: meshes.MeshData) -> None:
+        """Show ``data`` (uploading it once) and refresh the normals overlay."""
         self.data = data
         self.body.mesh = self.renderer.mesh(data)  # the replaced GPU mesh is freed with its MeshData
         self.update_normals()
 
     def update_normals(self) -> None:
+        """Rebuild the normals overlay arrows (at most MAX_NORMAL_ARROWS) at the current length."""
         if self.data is None:
             return
         p, n = self.data.positions, self.data.normals
@@ -61,19 +63,23 @@ class SculptScene:
         self.arrows.set(instance_matrices(p[pick], np.c_[w, w, np.full(len(pick), length)], z_axis=n[pick]))
 
     def center(self) -> np.ndarray:
+        """Centre of the mesh's bounding box."""
         p = self.data.positions
         return (p.min(0) + p.max(0)) / 2
 
     def bounding_radius(self) -> float:
+        """Radius of the sphere around the centre that contains every vertex (for camera fitting)."""
         if self.data is None or not len(self.data.positions):
             return 1.0
         return float(np.linalg.norm(self.data.positions - self.center(), axis=1).max())
 
     def batches(self):
+        """The mesh, plus the normals overlay when it is switched on."""
         return [self.body.batch()] + ([self.arrows.batch()] if self.show_normals else [])
 
 
 class SculptorEditor(Editor):
+    """MeshSculptor's editor: shape, transform and material edits with undo, hot reload and saving."""
     title = "MeshSculptor"
     dock_bottom = ("Diagnostics",)
     bottom_share = 0.45
@@ -98,6 +104,7 @@ class SculptorEditor(Editor):
 
     @property
     def material(self):
+        """The sculpt's material (shown on the mesh and written on save)."""
         return self.scene.body.material
 
     # -- file
@@ -133,6 +140,7 @@ class SculptorEditor(Editor):
             pass
 
     def rebuild(self) -> None:
+        """Rebuild the mesh from the current values and transform; on error keep the last good mesh."""
         if self.sculpt is None:
             return
         try:
@@ -160,6 +168,7 @@ class SculptorEditor(Editor):
 
     # -- actions with undo
     def set_shape_param(self, name: str, value) -> None:
+        """Set shape parameter ``name`` and rebuild the mesh (undoable)."""
         old = self.values.get(name)
         if name not in self.values or value == old:
             return
@@ -191,17 +200,21 @@ class SculptorEditor(Editor):
 
     # -- panel
     def gui(self) -> None:
+        """Poll the sculpt file for changes, then draw the UI."""
         self.poll()  # hot reload, whichever windows are open
         super().gui()
 
     def windows(self):
+        """Shape, Transform, Material, File and Diagnostics windows."""
         return {"Shape": self.shape_window, "Transform": self.transform_window, "Material": self.material_window,
                 "File": self.file_window, "Diagnostics": self.diagnostics_window}
 
     def menus(self):
+        """The File menu."""
         return {"File": self.file_menu}
 
     def file_menu(self) -> None:
+        """File menu items: reload the sculpt file, save to the library."""
         if imgui.menu_item(f"{ICON.ARROWS_ROTATE} Reload sculpt file")[0]:
             self.reload()
         if imgui.menu_item(f"{ICON.FLOPPY_DISK} Save to library as '{self.save_name}'")[0]:
@@ -222,6 +235,7 @@ class SculptorEditor(Editor):
         imgui.separator()
 
     def shape_window(self) -> None:
+        """Sliders for the sculpt's ``mesh()`` parameters, and the last error if any."""
         self._error_box()
         if not self.sculpt:
             return
@@ -240,6 +254,7 @@ class SculptorEditor(Editor):
                 self.set_shape_param(p.name, p.default)
 
     def transform_window(self) -> None:
+        """Translate / rotate / scale that is baked into the saved mesh."""
         imgui.text_disabled("Baked into the saved mesh")
         changed, v = imgui.drag_float3("Translate", self.transform["translate"], 0.01)
         if changed:
@@ -261,9 +276,11 @@ class SculptorEditor(Editor):
                 self.set_transform(kind, value)
 
     def material_window(self) -> None:
+        """Material editor for the sculpt."""
         self.material_section(self.material)
 
     def file_window(self) -> None:
+        """Sculpt file path and status, reload, and save to the library."""
         imgui.text_wrapped(str(self.path))
         imgui.text_disabled(f"{self.status}   (hot-reloads on save)")
         if imgui.button(f"{ICON.ARROWS_ROTATE} Reload now"):
@@ -280,6 +297,7 @@ class SculptorEditor(Editor):
                 self.confirm_overwrite = False
 
     def diagnostics_window(self) -> None:
+        """check() report of the current mesh and the normals overlay toggle."""
         if self.report:
             for line in self.report.lines():
                 if line.startswith(("normals: ", "winding: ")) and not line.endswith("ok"):
@@ -294,6 +312,7 @@ class SculptorEditor(Editor):
                 self.scene.update_normals()
 
 def build(viewer, path) -> SculptorEditor:
+    """Load the sculpt at ``path`` into ``viewer`` and aim the camera at it; returns the editor."""
     scene = SculptScene(viewer.renderer)
     editor = SculptorEditor(scene, path)
     viewer.show(scene, editor)  # fits the camera distance to the mesh
@@ -303,6 +322,7 @@ def build(viewer, path) -> SculptorEditor:
 
 
 def main(argv=None) -> None:
+    """Command-line entry point: ``valo-sculpt <file.py> [--size WxH]``."""
     from ..app import Viewer
 
     ap = argparse.ArgumentParser(prog="valo-sculpt", description=__doc__.split("\n\n")[0])

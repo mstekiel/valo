@@ -34,18 +34,22 @@ class Species:
 
     @property
     def material(self) -> Material:
+        """Material of this species' atoms."""
         return self.spheres.material
 
     @material.setter
     def material(self, m: Material) -> None:
+        """Change the material of this species' atoms."""
         self.spheres.material = m
 
     @property
     def count(self) -> int:
+        """Number of atoms of this species."""
         return self.spheres.count
 
 
 class Crystal:
+    """A rock-salt crystal: lattice size and spacing, its species, and a shared material library."""
     def __init__(self, renderer: Renderer):
         # Material library. Species point at entries; entries can be shared or swapped.
         new = renderer.material
@@ -65,6 +69,7 @@ class Crystal:
 
     # -- materials
     def duplicate(self, m: Material) -> Material:
+        """Copy ``m`` under a new unique name and add it to the library."""
         names, i = {x.name for x in self.materials}, 2
         while f"{m.name} {i}" in names:
             i += 1
@@ -73,14 +78,17 @@ class Crystal:
         return copy
 
     def users(self, m: Material) -> list[str]:
+        """Names of the species that use material ``m``."""
         return [s.name for s in self.species if s.material is m]
 
     # -- structure
     @property
     def total_atoms(self) -> int:
+        """Number of atoms of all species."""
         return sum(s.count for s in self.species)
 
     def bounding_radius(self) -> float:
+        """Radius of a sphere around the origin containing every atom."""
         corner = float(np.linalg.norm(np.asarray(self.n) - 1)) * self.spacing / 2
         return corner + max(s.radius for s in self.species)
 
@@ -91,6 +99,7 @@ class Crystal:
             self._upload(sp)
 
     def set_radius(self, sp: Species, r: float) -> None:
+        """Set the atom radius of species ``sp`` and re-upload it."""
         sp.radius = float(r)
         self._upload(sp)
 
@@ -99,4 +108,5 @@ class Crystal:
 
     # -- what the renderer draws
     def batches(self):
+        """One instanced batch per species."""
         return [sp.spheres.batch() for sp in self.species]

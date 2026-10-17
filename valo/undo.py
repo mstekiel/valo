@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 
 @dataclass
 class Command:
+    """One undoable edit: a label, undo and redo callables, and an optional merge key."""
     label: str
     undo: Callable[[], None]
     redo: Callable[[], None]
@@ -18,6 +19,7 @@ class Command:
 
 
 class UndoStack:
+    """Linear undo/redo history that merges rapid edits of the same thing."""
     MERGE_S = 0.8  # consecutive edits of the same (material, key) within this window merge
 
     def __init__(self):
@@ -26,6 +28,7 @@ class UndoStack:
         self.applying = False
 
     def push(self, cmd: Command) -> None:
+        """Record ``cmd`` (or merge it into the last one) and clear the redo list; ignored while undoing."""
         if self.applying:
             return
         top = self.done[-1] if self.done else None
@@ -46,7 +49,9 @@ class UndoStack:
             dst.append(cmd)
 
     def undo(self):
+        """Undo the last edit."""
         self._move(self.done, self.undone, "undo")
 
     def redo(self):
+        """Redo the last undone edit."""
         self._move(self.undone, self.done, "redo")

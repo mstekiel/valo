@@ -71,6 +71,7 @@ FRAGMENT_WGSL = {
 
 @dataclass(frozen=True)
 class ParamSpec:
+    """One editable material parameter: its widget kind, slot in the uniform buffer, default and range."""
     key: str
     label: str
     kind: str  # "color" | "float" | "int"  → decides the widget
@@ -82,6 +83,7 @@ class ParamSpec:
 
     @property
     def size(self):
+        """Number of floats the parameter occupies (3 for a colour, else 1)."""
         return 3 if self.kind == "color" else 1
 
 
@@ -129,9 +131,11 @@ class Material:
 
     @staticmethod
     def spec(key: str) -> ParamSpec:
+        """The ParamSpec for parameter ``key``."""
         return next(s for s in ALL_SPECS if s.key == key)
 
     def get(self, key: str):
+        """Current value of ``key``: a float, an RGB tuple, or the shading name for ``"shading"``."""
         if key == "shading":
             return self.shading
         s = self.spec(key)
@@ -139,6 +143,7 @@ class Material:
         return tuple(float(x) for x in v) if s.kind == "color" else float(v[0])
 
     def set(self, key: str, value, notify: bool = True) -> None:
+        """Set ``key`` (clamped to its range) and notify listeners if the value changed."""
         old = self.get(key)
         if key == "shading":
             if value not in SCHEMA:
@@ -155,6 +160,7 @@ class Material:
                 cb(self, key, old, new)
 
     def flush(self) -> None:
+        """Upload the parameters to the GPU if they changed since the last flush."""
         if self.dirty:
             self.device.queue.write_buffer(self.buffer, 0, self.data)
             self.dirty = False
@@ -166,6 +172,7 @@ class Material:
         return {"shading": self.shading, **{s.key: fmt(self.get(s.key)) for s in SCHEMA[self.shading]}}
 
     def to_json(self) -> str:
+        """The material as pretty-printed JSON (name, shading and its parameters)."""
         items = {"name": self.name, **self.to_dict(digits=3)}
         return "{\n" + ",\n".join(f"  {json.dumps(k)}: {json.dumps(v)}" for k, v in items.items()) + "\n}"
 
@@ -174,8 +181,10 @@ class Material:
 
 
 def linear_to_srgb(c):
+    """Convert one linear colour channel to sRGB (0–1)."""
     return 12.92 * c if c <= 0.0031308 else 1.055 * c ** (1 / 2.4) - 0.055
 
 
 def srgb_to_linear(c):
+    """Convert one sRGB colour channel (0–1) to linear."""
     return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4

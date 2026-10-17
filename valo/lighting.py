@@ -30,6 +30,7 @@ def _camera_basis(camera) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
 
 @dataclass
 class Lighting:
+    """The scene's directional light (headlight or fixed) and its global hemisphere ambient."""
     mode: str = "headlight"
     azimuth: float = -30.0
     elevation: float = 30.0
@@ -62,4 +63,5 @@ class Lighting:
         self.elevation = math.degrees(math.asin(float(np.clip(z, -1.0, 1.0))))
 
     def radiance(self) -> np.ndarray:
+        """Light colour times intensity (linear RGB), as sent to the shaders."""
         return np.asarray(self.color, float) * self.intensity

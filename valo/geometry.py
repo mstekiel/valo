@@ -8,16 +8,19 @@ import numpy as np
 
 
 def translate(x, y, z):
+    """4×4 translation matrix."""
     m = np.eye(4, dtype=np.float32)
     m[:3, 3] = (x, y, z)
     return m
 
 
 def scale(sx, sy=None, sz=None):
+    """4×4 scale matrix; one argument scales uniformly."""
     return np.diag([sx, sx if sy is None else sy, sx if sz is None else sz, 1.0]).astype(np.float32)
 
 
 def rotate(axis, angle):
+    """4×4 rotation by ``angle`` radians about ``axis`` (right-handed)."""
     a = np.asarray(axis, float) / np.linalg.norm(axis)
     k = np.array([[0, -a[2], a[1]], [a[2], 0, -a[0]], [-a[1], a[0], 0]])
     m = np.eye(4, dtype=np.float32)
@@ -26,6 +29,7 @@ def rotate(axis, angle):
 
 
 def look_at(eye, target, up=(0.0, 0.0, 1.0)):
+    """View matrix of a camera at ``eye`` looking at ``target`` (Z-up by default)."""
     eye, target, up = (np.asarray(v, float) for v in (eye, target, up))
     f = (target - eye) / np.linalg.norm(target - eye)
     s = np.cross(f, up)
@@ -38,6 +42,7 @@ def look_at(eye, target, up=(0.0, 0.0, 1.0)):
 
 
 def perspective_reversed_z(fovy_deg, aspect, near=0.05):
+    """Perspective projection with reversed-Z depth (1 at ``near``, 0 at infinity)."""
     f = 1.0 / math.tan(math.radians(fovy_deg) / 2)
     m = np.zeros((4, 4), np.float32)
     m[0, 0], m[1, 1], m[2, 3], m[3, 2] = f / aspect, f, near, -1.0
@@ -53,6 +58,7 @@ def orthographic_reversed_z(height, aspect, near, far):
 
 
 def normal_matrix(model):
+    """4×4 matrix that transforms normals for ``model``: the inverse-transpose of its 3×3 part."""
     n = np.eye(4, dtype=np.float32)
     n[:3, :3] = np.linalg.inv(model[:3, :3]).T
     return n

@@ -409,3 +409,27 @@ def test_pick_finds_the_batch_and_instance_under_a_pixel(viewer):
     assert hit.world_point[1] < 0  # the near side, facing the camera at -Y
     assert viewer.renderer.pick(viewer.viewport, scene, cam, *pixel([0, 0, -2.5])) is None  # background
     assert viewer.renderer.pick(viewer.viewport, scene, cam, -5, -5) is None  # outside the viewport
+
+
+def test_hovered_object_is_highlighted_and_nothing_else(viewer):
+    from valo import Editor, OrbitCamera, rc_context
+
+    m = viewer.renderer.material("M", "lambert", base_color=(0.5, 0.5, 0.5))
+    balls = viewer.renderer.spheres(m)
+    balls.set([[-1.2, 0, 0], [1.2, 0, 0]], 0.6)
+    viewer.show(SimpleNamespace(batches=lambda: [balls.batch()]), Editor())
+    viewer.camera = cam = OrbitCamera(azimuth=-90.0, elevation=0.0, distance=6.0)
+    viewer.snapshot()
+    x0, y0, w, h = viewer.viewport
+    clip = cam.matrices(w / h)[0] @ np.array([-1.2, 0, 0, 1.0])
+    r = viewer.canvas.get_pixel_ratio()
+    sx, sy = x0 + (clip[0] / clip[3] + 1) / 2 * w, y0 + (1 - clip[1] / clip[3]) / 2 * h
+    viewer.pointer = (sx / r, sy / r)
+    with rc_context({"highlight.strength": 0.0}):
+        plain = viewer.snapshot().astype(int)
+    lit = viewer.snapshot().astype(int)
+    assert viewer.hover and viewer.hover.instance_index == 0
+    changed = np.abs(lit - plain).max(-1) > 3
+    assert changed.sum() > 200
+    assert not changed[:, w // 2 :].any()  # the other sphere (right half) and the background stay as they were
+    viewer.pointer = None

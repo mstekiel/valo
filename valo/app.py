@@ -96,13 +96,20 @@ class Viewer:
             self.camera.azimuth = (self.camera.azimuth + rc.camera.auto_rotate_speed * dt) % 360
         for _ in range(3):  # the layout is known only after the ImGui frame: redraw if the scene rect moved
             self.viewport = self._scene_viewport(texture)
-            self.renderer.render(texture, self.viewport, self.scene, self.camera, self.lighting)
+            self.renderer.render(texture, self.viewport, self.scene, self.camera, self.lighting, self._highlights())
             self.hover = self._pick_under_pointer()
             if not ed:
                 return
             self.imgui.render()  # windows on top of the same texture
             if self._scene_viewport(texture) == self.viewport:
                 return
+
+    def _highlights(self) -> list:
+        """(batch, instance, rgb) tints for the renderer: the hovered object (last frame's pick)."""
+        h = rc.highlight
+        if not (h.enabled and self.hover):
+            return []
+        return [(self.hover.batch_index, self.hover.instance_index, tuple(c * h.strength for c in h.color))]
 
     def _pick_under_pointer(self):
         """The Pick under the mouse pointer, if picking is on and the pointer is over the scene."""

@@ -104,6 +104,18 @@ fn fs_main(in: VsOut) -> @location(0) vec4u {
     return vec4u(pick.batch.x, in.instance, bitcast<u32>(in.pos.z), 1u);
 }
 """
+HIGHLIGHT_WGSL = """
+struct Highlight { color: vec4f };   // rgb = colour × strength
+@group(1) @binding(0) var<uniform> hl: Highlight;
+
+@fragment
+fn fs_main(in: VsOut) -> @location(0) vec4f {   // additive: a soft tint plus a brighter rim
+    let n = normalize(in.normal);
+    let v = select(-frame.view_dir.xyz, normalize(frame.eye.xyz - in.world), frame.view_dir.w > 0.5);
+    let rim = pow(1.0 - max(dot(n, v), 0.0), 2.0);
+    return vec4f(hl.color.rgb * (0.35 + rim), 0.0);
+}
+"""
 PICK_FORMAT = "rgba32uint"  # (batch + 1, instance, depth bits, 1)
 
 
@@ -154,11 +166,11 @@ class GpuMesh:
         self.ib = device.create_buffer_with_data(data=data.indices, usage=wgpu.BufferUsage.INDEX)
         self.count = len(data.indices)
 
-    def draw(self, rpass, instances: int = 1):
-        """Draw the mesh ``instances`` times in the current render pass."""
+    def draw(self, rpass, instances: int = 1, first_instance: int = 0):
+        """Draw instances ``first_instance`` .. ``first_instance + instances - 1`` in the current render pass."""
         rpass.set_vertex_buffer(0, self.vb)
         rpass.set_index_buffer(self.ib, wgpu.IndexFormat.uint32)
-        rpass.draw_indexed(self.count, instances)
+        rpass.draw_indexed(self.count, instances, 0, 0, first_instance)
 
 
 PROJECTIONS = ("perspective", "orthographic")
@@ -349,6 +361,24 @@ class Renderer:
             primitive={"topology": "triangle-list"},
             fragment={"module": post, "entry_point": "fs_main", "targets": [{"format": surface_format}]},
         )
+        hl_layout = layout(wgpu.BufferBindingType.uniform, wgpu.ShaderStage.FRAGMENT)
+        hl_module = device.create_shader_module(code=VERTEX_WGSL + HIGHLIGHT_WGSL)
+        add = {"color": {"src_factor": "one", "dst_factor": "one", "operation": "add"},
+               "alpha": {"src_factor": "zero", "dst_factor": "one", "operation": "add"}}
+        self.highlight_pipeline = device.create_render_pipeline(  # drawn over the scene, same depth
+            layout=device.create_pipeline_layout(
+                bind_group_layouts=[self.frame_layout, hl_layout, self.instance_layout]),
+            vertex={"module": hl_module, "entry_point": "vs_main", "buffers": [VERTEX_LAYOUT]},
+            primitive={"topology": "triangle-list", "cull_mode": "back"},
+            depth_stencil={"format": DEPTH_FORMAT, "depth_write_enabled": False, "depth_compare": "greater-equal"},
+            fragment={"module": hl_module, "entry_point": "fs_main",
+                      "targets": [{"format": SCENE_FORMAT, "blend": add}]},
+        )
+        self._hl_buffers = []
+        for _ in range(2):  # hover, selection
+            buf = device.create_buffer(size=16, usage=wgpu.BufferUsage.UNIFORM | wgpu.BufferUsage.COPY_DST)
+            self._hl_buffers.append((buf, device.create_bind_group(
+                layout=hl_layout, entries=[{"binding": 0, "resource": {"buffer": buf}}])))
         self.post_origin = device.create_buffer(size=16, usage=wgpu.BufferUsage.UNIFORM | wgpu.BufferUsage.COPY_DST)
         self._meshes: weakref.WeakKeyDictionary[MeshData, GpuMesh] = weakref.WeakKeyDictionary()
         self.sphere = self.mesh(sphere(20, 40))  # unit diameter; scaled per instance
@@ -459,11 +489,12 @@ class Renderer:
         return self._targets[1:]
 
     def render(self, surface_texture, viewport: tuple[int, int, int, int], scene, camera: OrbitCamera,
-               lighting: Lighting | None = None) -> None:
+               lighting: Lighting | None = None, highlights=()) -> None:
         """Draw ``scene`` into the ``viewport`` = (x, y, w, h) rectangle of ``surface_texture`` (framebuffer
         pixels, origin top-left); the rest of the texture is cleared to the window background.
 
-        ``scene.batches()`` yields (material, gpu_mesh, instance_bind_group, instance_count) tuples.
+        ``scene.batches()`` yields Batch (material, gpu_mesh, instance_bind_group, instance_count, source)
+        tuples. ``highlights``: up to two (batch_index, instance_index, rgb) tints drawn over those instances.
         """
         tw, th = surface_texture.size[:2]
         x, y = (int(np.clip(c, 0, lim - 1)) for c, lim in zip(viewport[:2], (tw, th), strict=True))
@@ -483,7 +514,8 @@ class Renderer:
         frame[32:35], frame[35], frame[36:39] = lighting.sky, lighting.ambient, lighting.ground
         self.device.queue.write_buffer(self.frame_buffer, 0, frame)
 
-        batches = [b for b in scene.batches() if b[3] > 0]
+        all_batches = list(scene.batches())
+        batches = [b for b in all_batches if b[3] > 0]
         for material, *_ in batches:
             material.flush()  # no-op unless edited since last frame
 
@@ -500,6 +532,14 @@ class Renderer:
             rpass.set_bind_group(1, material.bind_group)
             rpass.set_bind_group(2, instances_bg)
             mesh.draw(rpass, instances=count)
+        if highlights:
+            rpass.set_pipeline(self.highlight_pipeline)
+        for (bi, ii, rgb), (buf, bg) in zip(highlights, self._hl_buffers, strict=False):
+            if bi < len(all_batches) and ii < all_batches[bi][3]:
+                self.device.queue.write_buffer(buf, 0, np.array([*rgb, 0.0], np.float32))
+                rpass.set_bind_group(1, bg)
+                rpass.set_bind_group(2, all_batches[bi][2])
+                all_batches[bi][1].draw(rpass, instances=1, first_instance=ii)
         rpass.end()
 
         rpass = encoder.begin_render_pass(color_attachments=[{

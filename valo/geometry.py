@@ -44,6 +44,14 @@ def perspective_reversed_z(fovy_deg, aspect, near=0.05):
     return m
 
 
+def orthographic_reversed_z(height, aspect, near, far):
+    """Parallel projection showing ``height`` world units vertically; reversed-Z: depth 1 at near, 0 at far."""
+    m = np.zeros((4, 4), np.float32)
+    m[0, 0], m[1, 1] = 2.0 / (height * aspect), 2.0 / height
+    m[2, 2], m[2, 3], m[3, 3] = 1.0 / (far - near), far / (far - near), 1.0
+    return m
+
+
 def normal_matrix(model):
     n = np.eye(4, dtype=np.float32)
     n[:3, :3] = np.linalg.inv(model[:3, :3]).T

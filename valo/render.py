@@ -16,7 +16,7 @@ from dataclasses import dataclass
 import numpy as np
 import wgpu
 
-from .geometry import instance_matrices, look_at, pack_mat4, perspective_reversed_z
+from .geometry import instance_matrices, look_at, orthographic_reversed_z, pack_mat4, perspective_reversed_z
 from .materials import FRAGMENT_WGSL, Material
 from .meshes.data import MeshData
 from .meshes.primitives import sphere
@@ -117,6 +117,13 @@ class GpuMesh:
         rpass.draw_indexed(self.count, instances)
 
 
+PROJECTIONS = ("perspective", "orthographic")
+VIEWS = {  # name → (azimuth, elevation): looking from that side toward the target
+    "+X": (0.0, 0.0), "-X": (180.0, 0.0), "+Y": (90.0, 0.0), "-Y": (-90.0, 0.0),
+    "+Z": (-90.0, 89.99), "-Z": (-90.0, -89.99), "Iso": (-55.0, 25.0),
+}
+
+
 @dataclass
 class OrbitCamera:
     azimuth: float = -55.0
@@ -124,16 +131,54 @@ class OrbitCamera:
     distance: float = 14.0
     target: tuple = (0.0, 0.0, 0.0)
     fovy: float = 35.0
+    projection: str = "perspective"  # or "orthographic"
+    ortho_height: float = 10.0  # world units visible vertically in orthographic mode
+
+    def eye(self) -> np.ndarray:
+        az, el = math.radians(self.azimuth), math.radians(self.elevation)
+        return np.asarray(self.target, float) + self.distance * np.array(
+            [math.cos(el) * math.cos(az), math.cos(el) * math.sin(az), math.sin(el)])
+
+    def forward(self) -> np.ndarray:
+        """Unit view direction, from the eye toward the target."""
+        f = np.asarray(self.target, float) - self.eye()
+        return f / np.linalg.norm(f)
+
+    def projection_matrix(self, aspect: float) -> np.ndarray:
+        if self.projection == "orthographic":  # the whole scene, even behind the eye, fits in depth
+            return orthographic_reversed_z(self.ortho_height, aspect, -3 * self.distance, 5 * self.distance)
+        return perspective_reversed_z(self.fovy, aspect)
 
     def matrices(self, aspect: float):
-        az, el = math.radians(self.azimuth), math.radians(self.elevation)
-        eye = np.asarray(self.target) + self.distance * np.array(
-            [math.cos(el) * math.cos(az), math.cos(el) * math.sin(az), math.sin(el)])
-        return perspective_reversed_z(self.fovy, aspect) @ look_at(eye, self.target), eye
+        eye = self.eye()
+        return self.projection_matrix(aspect) @ look_at(eye, self.target), eye
+
+    def _height_at_target(self) -> float:
+        return 2 * self.distance * math.tan(math.radians(self.fovy / 2))
+
+    def set_projection(self, projection: str) -> None:
+        """Switch projection keeping the target the same size on screen."""
+        if projection not in PROJECTIONS:
+            raise ValueError(f"unknown projection {projection!r}")
+        if projection == self.projection:
+            return
+        if projection == "orthographic":
+            self.ortho_height = self._height_at_target()
+        else:
+            self.distance = self.ortho_height / (2 * math.tan(math.radians(self.fovy / 2)))
+        self.projection = projection
+
+    def zoom(self, factor: float) -> None:
+        """Zoom out by ``factor`` (> 1) or in (< 1)."""
+        if self.projection == "orthographic":
+            self.ortho_height = float(np.clip(self.ortho_height * factor, 0.05, 500.0))
+        else:
+            self.distance = float(np.clip(self.distance * factor, 2.0, 120.0))
 
     def fit(self, radius: float) -> None:
-        """Move back far enough that a sphere of ``radius`` around the target fits vertically."""
+        """Move back far enough that a sphere of ``radius`` around the target fits vertically (both projections)."""
         self.distance = max(3.0, radius / math.sin(math.radians(self.fovy / 2)) * 0.95)
+        self.ortho_height = self._height_at_target()
 
 
 class Instances:

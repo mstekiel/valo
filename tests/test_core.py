@@ -58,3 +58,32 @@ def test_undo_merges_rapid_edits_of_same_key():
     assert value["x"] == 0
     stack.redo()
     assert value["x"] == 3
+
+
+def test_orthographic_reversed_z_maps_near_to_one_and_far_to_zero():
+    from valo.geometry import orthographic_reversed_z
+
+    m = orthographic_reversed_z(4.0, 2.0, 1.0, 9.0)
+    for z, depth in ((-1.0, 1.0), (-9.0, 0.0)):
+        p = m @ np.array([0, 0, z, 1.0])
+        assert p[2] / p[3] == pytest.approx(depth)
+    assert (m @ np.array([4.0, 2.0, -5, 1]))[:2] == pytest.approx([1, 1])  # half width = height·aspect/2
+
+
+def test_switching_projection_keeps_the_target_plane_the_same_size():
+    from valo.render import OrbitCamera
+
+    cam = OrbitCamera(distance=10.0)
+    point = np.asarray(cam.target) + np.cross(cam.forward(), (0, 0, 1)) * 1.5  # beside the target, on its plane
+
+    def ndc():
+        vp, _ = cam.matrices(1.5)
+        p = vp @ np.r_[point, 1.0]
+        return p[:2] / p[3]
+
+    persp = ndc()
+    cam.set_projection("orthographic")
+    assert ndc() == pytest.approx(persp, abs=1e-5)
+    cam.zoom(2.0)
+    cam.set_projection("perspective")
+    assert cam.distance == pytest.approx(20.0)

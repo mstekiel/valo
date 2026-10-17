@@ -132,4 +132,4 @@ class Viewer:
             cam.azimuth = az0 - 0.4 * (event["x"] - x0)
             cam.elevation = float(np.clip(el0 + 0.3 * (event["y"] - y0), -85, 85))
         elif kind == "wheel":
-            cam.distance = float(np.clip(cam.distance * 1.0015 ** event["dy"], 2.0, 120.0))
+            cam.zoom(1.0015 ** event["dy"])

@@ -38,7 +38,7 @@ def sculptor(viewer, tmp_path, monkeypatch):
 def snap(viewer) -> np.ndarray:
     for _ in range(2):
         img = np.asarray(viewer.canvas.draw())[:, :, :3].copy()
-    return img[:, : viewer.viewport_width]
+    return viewer.crop(img)
 
 
 def touch_later(path: Path, text: str) -> None:

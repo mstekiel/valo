@@ -25,6 +25,7 @@ from ..meshes import library
 from ..meshes.sculpt import IDENTITY, Sculpt
 from ..render import Renderer
 from ..ui import Editor
+from ..ui_style import ICON, mono_font
 from ..undo import Command
 
 POLL_S = 0.3  # how often the sculpt file's mtime is checked
@@ -74,6 +75,8 @@ class SculptScene:
 
 class SculptorEditor(Editor):
     title = "MeshSculptor"
+    dock_bottom = ("Diagnostics", "History")
+    bottom_share = 0.3
 
     def __init__(self, scene: SculptScene, path):
         super().__init__()
@@ -187,45 +190,57 @@ class SculptorEditor(Editor):
         self.undo_stack.push(Command(f"transform: {kind}", apply(old), apply(value), merge_key=("transform", kind)))
 
     # -- panel
-    def panel(self) -> None:
-        self.poll()
+    def gui(self) -> None:
+        self.poll()  # hot reload, whichever windows are open
+        super().gui()
 
-        imgui.separator_text("Sculpt file")
-        imgui.text_wrapped(str(self.path))
-        imgui.text_disabled(f"{self.status}   (hot-reloads on save)")
-        if imgui.button("Reload now"):
+    def windows(self):
+        return {"Shape": self.shape_window, "Transform": self.transform_window, "Material": self.material_window,
+                "File": self.file_window, "Diagnostics": self.diagnostics_window}
+
+    def menus(self):
+        return {"File": self.file_menu}
+
+    def file_menu(self) -> None:
+        if imgui.menu_item(f"{ICON.ARROWS_ROTATE} Reload sculpt file")[0]:
             self.reload()
-        if self.error:
-            imgui.push_style_color(imgui.Col_.text, ERROR_COLOR)
-            imgui.text_wrapped(self.error)
-            imgui.pop_style_color()
-            imgui.text_disabled("showing the last good mesh")
-        _, self.save_name = imgui.input_text("Name", self.save_name)
-        if imgui.button("Save to library"):
-            self.confirm_overwrite = self.save() is None and library.path(self.save_name.strip()).exists()
-        if self.confirm_overwrite:
-            imgui.same_line()
-            if imgui.button("Overwrite"):
-                self.save(overwrite=True)
-                self.confirm_overwrite = False
+        if imgui.menu_item(f"{ICON.FLOPPY_DISK} Save to library as '{self.save_name}'")[0]:
+            self._save_clicked()
 
-        if self.sculpt:
-            imgui.separator_text("Shape parameters")
+    def _save_clicked(self) -> None:
+        self.confirm_overwrite = self.save() is None and library.path(self.save_name.strip()).exists()
+
+    def _error_box(self) -> None:
+        if not self.error:
+            return
+        imgui.push_style_color(imgui.Col_.text, ERROR_COLOR)
+        imgui.push_font(mono_font(), 0.0)
+        imgui.text_wrapped(self.error)
+        imgui.pop_font()
+        imgui.pop_style_color()
+        imgui.text_disabled("showing the last good mesh")
+        imgui.separator()
+
+    def shape_window(self) -> None:
+        self._error_box()
+        if not self.sculpt:
+            return
+        for p in self.sculpt.params:
+            v = self.values[p.name]
+            if p.kind == "float":
+                changed, v = imgui.slider_float(p.name, v, p.lo, p.hi, "%.4g")
+            elif p.kind == "int":
+                changed, v = imgui.slider_int(p.name, int(v), int(p.lo), int(p.hi))
+            else:
+                changed, v = imgui.checkbox(p.name, bool(v))
+            if changed:
+                self.set_shape_param(p.name, v)
+        if imgui.button(f"{ICON.ARROW_ROTATE_LEFT} Reset parameters"):
             for p in self.sculpt.params:
-                v = self.values[p.name]
-                if p.kind == "float":
-                    changed, v = imgui.slider_float(p.name, v, p.lo, p.hi, "%.4g")
-                elif p.kind == "int":
-                    changed, v = imgui.slider_int(p.name, int(v), int(p.lo), int(p.hi))
-                else:
-                    changed, v = imgui.checkbox(p.name, bool(v))
-                if changed:
-                    self.set_shape_param(p.name, v)
-            if imgui.button("Reset parameters"):
-                for p in self.sculpt.params:
-                    self.set_shape_param(p.name, p.default)
+                self.set_shape_param(p.name, p.default)
 
-        imgui.separator_text("Transform (baked into the saved mesh)")
+    def transform_window(self) -> None:
+        imgui.text_disabled("Baked into the saved mesh")
         changed, v = imgui.drag_float3("Translate", self.transform["translate"], 0.01)
         if changed:
             self.set_transform("translate", v)
@@ -241,27 +256,42 @@ class SculptorEditor(Editor):
             changed, v = imgui.drag_float3("Scale xyz", self.transform["scale"], 0.01, 0.01, 100.0)
             if changed:
                 self.set_transform("scale", v)
-        if imgui.button("Reset transform"):
+        if imgui.button(f"{ICON.ARROW_ROTATE_LEFT} Reset transform"):
             for kind, value in IDENTITY.items():
                 self.set_transform(kind, value)
 
-        imgui.separator_text("Material")
+    def material_window(self) -> None:
         self.material_section(self.material)
 
-        imgui.separator_text("Diagnostics")
+    def file_window(self) -> None:
+        imgui.text_wrapped(str(self.path))
+        imgui.text_disabled(f"{self.status}   (hot-reloads on save)")
+        if imgui.button(f"{ICON.ARROWS_ROTATE} Reload now"):
+            self.reload()
+        self._error_box()
+        imgui.separator_text("Save to library")
+        _, self.save_name = imgui.input_text("Name", self.save_name)
+        if imgui.button(f"{ICON.FLOPPY_DISK} Save"):
+            self._save_clicked()
+        if self.confirm_overwrite:
+            imgui.same_line()
+            if imgui.button(f"{ICON.TRIANGLE_EXCLAMATION} Overwrite"):
+                self.save(overwrite=True)
+                self.confirm_overwrite = False
+
+    def diagnostics_window(self) -> None:
         if self.report:
             for line in self.report.lines():
                 if line.startswith(("normals: ", "winding: ")) and not line.endswith("ok"):
                     imgui.text_colored(ERROR_COLOR, line)
                 else:
                     imgui.text(line)
-        changed, self.scene.show_normals = imgui.checkbox("Show normals", self.scene.show_normals)
+        _, self.scene.show_normals = imgui.checkbox("Show normals", self.scene.show_normals)
         if self.scene.show_normals:
             changed, length = imgui.slider_float("Normal length", self.scene.normal_length, 0.01, 0.5)
             if changed:
                 self.scene.normal_length = length
                 self.scene.update_normals()
-
 
 def build(viewer, path) -> SculptorEditor:
     scene = SculptScene(viewer.renderer)
@@ -282,7 +312,8 @@ def main(argv=None) -> None:
     if not args.file.exists():
         ap.error(f"{args.file} does not exist")
     w, h = (int(x) for x in args.size.lower().split("x"))
-    viewer = Viewer(title=f"MeshSculptor: {args.file.name}", size=(w, h))
+    viewer = Viewer(title=f"MeshSculptor: {args.file.name}", size=(w, h),
+                    layout_file=Path.home() / ".valo" / "meshsculptor.ini")  # one layout for every sculpt
     build(viewer, args.file)
     viewer.run()
 

@@ -22,8 +22,13 @@ valo-sculpt = "valo.tools.sculptor:main"
 line-length = 120
 
 [tool.ruff.lint]
-per-file-ignores = { "valo/meshes/library/*.py" = ["E501"] }  # written by MeshSculptor
-select = ["E", "F", "I", "B", "UP"]
+select = ["E", "F", "I", "B", "UP", "D1"]  # D1: every public module, class and function has a docstring
+ignore = ["D105", "D107"]  # magic methods and __init__ (the class docstring covers it)
+
+[tool.ruff.lint.per-file-ignores]
+"valo/meshes/library/*.py" = ["E501", "D103"]  # written by MeshSculptor from your sculpt file
+"tests/*.py" = ["D103"]  # test names say what they check
+"examples/**/test_*.py" = ["D103"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests", "examples"]

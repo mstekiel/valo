@@ -54,6 +54,10 @@ Apps built on it live in `examples/`. Design and extension points: `ARCHITECTURE
    (crystals, molecules, …); apps use only the public API in `valo/__init__.py`.
 5. Prefer the smallest change that works. Don't add layers, plugins or abstractions before a feature needs them;
    when it does, update `ARCHITECTURE.md` in the same change.
+6. Every public module, class, function and method has a docstring: at least one sentence saying what it does or
+   returns, with units and conventions where they matter (degrees, linear vs sRGB, logical vs framebuffer pixels).
+   Ruff's `D1` rules enforce it; tests and saved library entries are exempt. Private helpers (`_name`) get one
+   when the code isn't obvious.
 
 ## Workflow for a feature request
 

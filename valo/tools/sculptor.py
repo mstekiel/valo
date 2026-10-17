@@ -37,10 +37,13 @@ class SculptScene:
 
     def __init__(self, renderer: Renderer):
         self.renderer = renderer
-        self.body = renderer.instances(meshes.cube(), renderer.material("Sculpt", "pbr"))
+        self.body = renderer.instances(meshes.cube(), renderer.material("Sculpt", "pbr"), label="sculpt",
+                                       info=lambda i: self.mesh_info())
         self.body.set(np.eye(4)[None])
         self.arrows = renderer.instances(meshes.arrow(), renderer.material("Normals", "unlit",
-                                                                          base_color=(1.0, 0.75, 0.1)))
+                                                                          base_color=(1.0, 0.75, 0.1)),
+                                         label="normal", info=self.normal_info)
+        self._normal_vertices = np.zeros(0, int)  # vertex index of each overlay arrow
         self.data: meshes.MeshData | None = None
         self.show_normals = False
         self.normal_length = 0.08
@@ -60,6 +63,22 @@ class SculptScene:
         length = self.normal_length
         w = np.full(len(pick), 0.12 * length)
         self.arrows.set(instance_matrices(p[pick], np.c_[w, w, np.full(len(pick), length)], z_axis=n[pick]))
+        self._normal_vertices = pick
+
+    def mesh_info(self) -> dict:
+        """Info rows for the sculpted mesh: vertex and triangle counts and the check() verdict."""
+        if self.data is None:
+            return {}
+        report = meshes.check(self.data)
+        return {"Vertices": report.vertices, "Triangles": report.triangles,
+                "Check": "ok" if report.ok else "; ".join(report.lines()[1:3]),
+                "Closed": f"yes, volume {report.volume:.4g}" if report.watertight else "no"}
+
+    def normal_info(self, i: int) -> dict:
+        """Info rows for overlay arrow ``i``: the vertex it starts at and that vertex's normal."""
+        v = int(self._normal_vertices[i])
+        n = self.data.normals[v]
+        return {"Vertex": v, "Normal": "(" + ", ".join(f"{c + 0.0:.3f}" for c in n) + ")"}
 
     def center(self) -> np.ndarray:
         """Centre of the mesh's bounding box."""
@@ -149,6 +168,7 @@ class SculptorEditor(Editor):
             return
         self.error = None
         self.scene.set_mesh(data)
+        self.scene.body.label = self.path.stem
         self.report = meshes.check(data)
 
     def save(self, name: str | None = None, overwrite: bool = False) -> Path | None:

@@ -32,7 +32,7 @@ class Gallery:
     def __init__(self, renderer: Renderer):
         self.items: list[tuple[str, Instances]] = []
         for k, (name, mesh, shading, params) in enumerate(SHAPES):
-            inst = renderer.instances(mesh, renderer.material(name.capitalize(), shading, **params))
+            inst = renderer.instances(mesh, renderer.material(name.capitalize(), shading, **params), label=name)
             x, y = -2.4 + 1.6 * (k % 4), 0.9 - 1.8 * (k // 4)
             if name == "arrow":  # tail at the origin: stands on the floor
                 inst.set(instance_matrices([(x, y, 0.01)], (0.5, 0.5, 1.0)))
@@ -42,8 +42,8 @@ class Gallery:
                 inst.set(instance_matrices([(x, y, 0.51)]))
             self.items.append((name, inst))
 
-        ring = renderer.instances(meshes.arrow(), renderer.material("Ring arrows", "pbr",
-                                                                    base_color=(0.85, 0.3, 0.1), roughness=0.4))
+        ring_material = renderer.material("Ring arrows", "pbr", base_color=(0.85, 0.3, 0.1), roughness=0.4)
+        ring = renderer.instances(meshes.arrow(), ring_material, label="ring of arrows")
         a = np.linspace(0, 2 * math.pi, 16, endpoint=False)
         origins = np.c_[3.6 * np.cos(a), 3.6 * np.sin(a), np.full_like(a, 0.4)]
         vectors = np.c_[-np.sin(a), np.cos(a), 0.3 * np.sin(2 * a)]  # tangential, tilting up and down (above the floor)
@@ -51,7 +51,8 @@ class Gallery:
         ring.set(instance_matrices(origins, np.c_[w, w, np.linalg.norm(vectors, axis=1)], z_axis=vectors))
         self.items.append(("ring of arrows", ring))
 
-        floor = renderer.instances(meshes.plane(), renderer.material("Floor", "lambert", base_color=(0.3, 0.3, 0.32)))
+        floor = renderer.instances(meshes.plane(), renderer.material("Floor", "lambert", base_color=(0.3, 0.3, 0.32)),
+                                   label="floor")
         floor.set(instance_matrices([(0, 0, 0)], (9.5, 9.5, 1)))
         self.items.append(("floor", floor))
 

@@ -63,9 +63,18 @@ class Crystal:
         ]
         self.species = [Species("A (Na)", 0.30, renderer.spheres(sodium)),
                         Species("B (Cl)", 0.42, renderer.spheres(chlorine))]
+        for sp in self.species:  # what the Info window shows for a hovered atom
+            sp.spheres.label = sp.name
+            sp.spheres.info = lambda i, sp=sp: self.site_info(sp, i)
         self.n = [6, 6, 6]
         self.spacing = 1.0
         self.rebuild()
+
+    def site_info(self, sp: Species, i: int) -> dict:
+        """Info rows for atom ``i`` of species ``sp``: species, lattice site (i, j, k) and radius."""
+        centre = sp.spheres.matrices[i][:3, 3]
+        ijk = np.rint(centre / self.spacing + (np.asarray(self.n) - 1) / 2).astype(int)
+        return {"Species": sp.name, "Lattice site": tuple(int(c) for c in ijk), "Radius": f"{sp.radius:.2f}"}
 
     # -- materials
     def duplicate(self, m: Material) -> Material:

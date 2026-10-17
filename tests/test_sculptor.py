@@ -106,3 +106,16 @@ def test_save_button_asks_before_overwriting(sculptor):
     assert library.path("twice").exists() and not ed.confirm_overwrite
     ed._save_clicked()  # exists now: the panel shows an Overwrite button instead of saving
     assert ed.confirm_overwrite and "exists" in ed.status
+
+
+def test_info_rows_for_the_sculpt_and_its_normals(sculptor):
+    ed = sculptor
+    body = ed.scene.body
+    assert body.label == "vase"
+    info = body.info(0)
+    assert info["Vertices"] == ed.report.vertices and info["Check"] == "ok" and info["Closed"].startswith("yes")
+    ed.scene.show_normals = True
+    ed.scene.update_normals()
+    row = ed.scene.arrows.info(3)
+    v = row["Vertex"]
+    assert np.allclose(ed.scene.arrows.matrices[3][:3, 3], ed.scene.data.positions[v])

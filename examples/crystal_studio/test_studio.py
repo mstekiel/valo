@@ -61,3 +61,13 @@ def test_edits_change_the_image_and_undo_restores_it_exactly(studio):
     ed.selected = 0
     assert [s.count for s in crystal.species] == [108, 108]
     assert np.array_equal(viewer.snapshot(), before)
+
+
+@pytest.mark.gpu
+def test_hovered_atom_shows_its_species_and_lattice_site(studio):
+    _, ed = studio
+    sp = ed.crystal.species[1]
+    info = sp.spheres.info(0)
+    assert sp.spheres.label == sp.name and info["Species"] == sp.name
+    i, j, k = info["Lattice site"]
+    assert all(0 <= c < n for c, n in zip((i, j, k), ed.crystal.n, strict=True)) and (i + j + k) % 2 == 1  # B sites

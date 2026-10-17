@@ -110,6 +110,12 @@ class Viewer:
         """Width of the scene viewport in framebuffer pixels."""
         return self.viewport[2]
 
+    def snapshot(self) -> np.ndarray:
+        """Draw two frames offscreen (ImGui lays out on the first) and return the scene region, (h, w, 3) uint8."""
+        for _ in range(2):
+            img = np.asarray(self.canvas.draw())[:, :, :3]
+        return self.crop(img).copy()
+
     def crop(self, image):
         """The scene part of a full-window ``image`` (e.g. from an offscreen ``canvas.draw()``)."""
         x, y, w, h = self.viewport

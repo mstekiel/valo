@@ -21,18 +21,12 @@ def gallery():
     return viewer, build(viewer)
 
 
-def snap(viewer) -> np.ndarray:
-    for _ in range(2):  # ImGui lays out on the first frame, settles on the second
-        img = np.asarray(viewer.canvas.draw())[:, :, :3].copy()
-    return viewer.crop(img)
-
-
 def test_every_shape_changes_the_image_and_undo_restores_it(gallery):
     viewer, ed = gallery
-    before = snap(viewer)
+    before = viewer.snapshot()
     assert before.std() > 5, "viewport is blank"
     for name, inst in ed.gallery.items:  # emissive red on one shape at a time must show up
         ed.set_param(inst.material, "emissive", (1.0, 0.0, 0.0))
-        assert np.abs(snap(viewer).astype(int) - before).max() > 50, f"{name} not visible"
+        assert np.abs(viewer.snapshot().astype(int) - before).max() > 50, f"{name} not visible"
         ed.undo_stack.undo()
-    assert np.array_equal(snap(viewer), before)
+    assert np.array_equal(viewer.snapshot(), before)

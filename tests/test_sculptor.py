@@ -35,12 +35,6 @@ def sculptor(viewer, tmp_path, monkeypatch):
     return build(viewer, path)
 
 
-def snap(viewer) -> np.ndarray:
-    for _ in range(2):
-        img = np.asarray(viewer.canvas.draw())[:, :, :3].copy()
-    return viewer.crop(img)
-
-
 def touch_later(path: Path, text: str) -> None:
     path.write_text(text, encoding="utf-8")
     t = path.stat().st_mtime + 5  # mtime resolution can be coarse; make the change unmistakable
@@ -49,15 +43,15 @@ def touch_later(path: Path, text: str) -> None:
 
 def test_shape_transform_and_material_edits_undo_exactly(sculptor, viewer):
     ed = sculptor
-    before = snap(viewer)
+    before = viewer.snapshot()
     assert before.std() > 5 and ed.error is None and ed.report.ok
     ed.set_shape_param("belly", 0.5)
     ed.set_transform("rotate_deg", [45.0, 0.0, 0.0])
     ed.set_param(ed.material, "base_color", (0.1, 0.8, 0.1))
-    assert np.abs(snap(viewer).astype(int) - before).max() > 50
+    assert np.abs(viewer.snapshot().astype(int) - before).max() > 50
     while ed.undo_stack.done:
         ed.undo_stack.undo()
-    assert np.array_equal(snap(viewer), before)
+    assert np.array_equal(viewer.snapshot(), before)
 
 
 def test_hot_reload_keeps_values_and_survives_errors(sculptor):

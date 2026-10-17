@@ -33,17 +33,11 @@ def studio():
     return viewer, build(viewer)
 
 
-def snap(viewer) -> np.ndarray:
-    for _ in range(2):  # ImGui lays out on the first frame, settles on the second
-        img = np.asarray(viewer.canvas.draw())[:, :, :3].copy()
-    return viewer.crop(img)  # scene region only
-
-
 @pytest.mark.gpu
 def test_edits_change_the_image_and_undo_restores_it_exactly(studio):
     viewer, ed = studio
     crystal = ed.crystal
-    before = snap(viewer)
+    before = viewer.snapshot()
     assert before.std() > 5, "viewport is blank"
 
     ed.set_count(0, 9)
@@ -58,11 +52,11 @@ def test_edits_change_the_image_and_undo_restores_it_exactly(studio):
     ed.set_param(ed.species.material, "bands", 4)
     ed.duplicate()
     ed.set_param(ed.species.material, "base_color", (1.0, 0.0, 0.0))
-    edited = snap(viewer)
+    edited = viewer.snapshot()
     assert np.abs(edited.astype(int) - before).max() > 0
 
     while ed.undo_stack.done:
         ed.undo_stack.undo()
     ed.selected = 0
     assert [s.count for s in crystal.species] == [108, 108]
-    assert np.array_equal(snap(viewer), before)
+    assert np.array_equal(viewer.snapshot(), before)

@@ -21,15 +21,9 @@ def viewer():
         pytest.skip(f"no GPU adapter: {exc}")
 
 
-def snap(viewer) -> np.ndarray:
-    for _ in range(2):  # ImGui lays out on the first frame, settles on the second
-        img = np.asarray(viewer.canvas.draw())[:, :, :3].copy()
-    return viewer.crop(img)  # scene region only
-
-
 def test_empty_viewer_draws_the_background(viewer):
     viewer.show(SimpleNamespace(batches=list))
-    img = snap(viewer)
+    img = viewer.snapshot()
     assert (img == img[0, 0]).all()
 
 
@@ -42,13 +36,13 @@ def test_spheres_render_and_material_edits_undo_exactly(viewer):
     editor = Editor()
     editor.watch(m)
     viewer.show(SimpleNamespace(batches=lambda: [balls.batch()], bounding_radius=lambda: 2.5), editor)
-    before = snap(viewer)
+    before = viewer.snapshot()
     assert before.std() > 5, "viewport is blank"
 
     editor.set_param(m, "shading", "toon")
-    assert np.abs(snap(viewer).astype(int) - before).max() > 0
+    assert np.abs(viewer.snapshot().astype(int) - before).max() > 0
     editor.undo_stack.undo()
-    assert np.array_equal(snap(viewer), before)
+    assert np.array_equal(viewer.snapshot(), before)
 
 
 def test_any_mesh_draws_instanced_with_its_own_transforms(viewer):
@@ -60,13 +54,13 @@ def test_any_mesh_draws_instanced_with_its_own_transforms(viewer):
     assert viewer.renderer.instances(meshes.cube(), m).mesh is not cubes.mesh  # cache is per MeshData object
     viewer.show(SimpleNamespace(batches=lambda: [cubes.batch(), arrows.batch()]))
     viewer.camera.fit(3.0)
-    empty = snap(viewer)
+    empty = viewer.snapshot()
 
     cubes.set(instance_matrices([[-1, 0, 0], [1, 0, 0]], [[0.5], [1.0]]))
-    with_cubes = snap(viewer)
+    with_cubes = viewer.snapshot()
     assert (with_cubes != empty).any(-1).sum() > 500
     arrows.set(instance_matrices([[0, 0, 0]], (0.3, 0.3, 2.0), z_axis=(0, 1, 1)))
-    assert (snap(viewer) != with_cubes).any(-1).sum() > 200
+    assert (viewer.snapshot() != with_cubes).any(-1).sum() > 200
 
 
 def test_vector_fonts_with_icons_are_loaded(viewer):
@@ -127,7 +121,7 @@ def test_scene_fills_the_central_dock_node_and_windows_dock_around_it(viewer):
 
     editor = Two()
     viewer.show(SimpleNamespace(batches=list), editor)
-    snap(viewer)
+    viewer.snapshot()
     x, y, w, h = viewer.viewport
     assert x == 0 and 0 < y < 60  # below the menu bar
     assert 0.6 < w / viewer.canvas.get_physical_size()[0] < 0.8  # right column takes the rest
@@ -164,7 +158,7 @@ def test_orthographic_shading_is_the_same_for_identical_spheres(viewer):
 
     def patches_differ(projection):  # mean difference of the two spheres' pixels, each centred on its projection
         cam.set_projection(projection)
-        img = snap(viewer).astype(int)
+        img = viewer.snapshot().astype(int)
         h, w = img.shape[:2]
         clip = centres @ cam.matrices(w / h)[0].T
         px = ((clip[:, 0] / clip[:, 3] + 1) / 2 * w).round().astype(int)
@@ -186,9 +180,9 @@ def test_global_ambient_lights_the_unlit_side(viewer):
     viewer.show(SimpleNamespace(batches=lambda: [ball.batch()]))
     viewer.camera = OrbitCamera(azimuth=0.0, elevation=0.0, distance=4.0)
     viewer.lighting = Lighting("headlight", azimuth=180.0, elevation=0.0)  # from behind: the visible side is unlit
-    lit = snap(viewer)
+    lit = viewer.snapshot()
     viewer.lighting.ambient = 0.0
-    dark = snap(viewer)
+    dark = viewer.snapshot()
     background = lit[0, 0]
     assert lit.max() > 60 and (dark <= background).all()  # only ambient lit the front: without it, black on bg
     viewer.lighting = Lighting()
@@ -206,7 +200,7 @@ def test_camera_and_light_settings_undo_exactly(viewer):
     viewer.camera, viewer.lighting = OrbitCamera(distance=4.0), Lighting()
     editor = Editor()
     viewer.show(SimpleNamespace(batches=lambda: [cubes.batch()], bounding_radius=lambda: 0.9), editor)
-    before, cam0 = snap(viewer), copy.copy(viewer.camera)
+    before, cam0 = viewer.snapshot(), copy.copy(viewer.camera)
     editor.set_projection("orthographic")
     editor.set_view("+X")
     editor.set_light_mode("fixed")
@@ -215,11 +209,11 @@ def test_camera_and_light_settings_undo_exactly(viewer):
     editor.set_flat_ambient((0.2, 0.2, 0.9))
     editor.fit_view()
     assert viewer.camera.projection == "orthographic" and viewer.lighting.sky == viewer.lighting.ground
-    assert np.abs(snap(viewer).astype(int) - before).max() > 30
+    assert np.abs(viewer.snapshot().astype(int) - before).max() > 30
     while editor.undo_stack.done:
         editor.undo_stack.undo()
     assert viewer.camera == cam0 and viewer.lighting == Lighting()
-    assert np.array_equal(snap(viewer), before)
+    assert np.array_equal(viewer.snapshot(), before)
 
 
 @pytest.mark.parametrize(("mode", "changes"), [("headlight", False), ("fixed", True)])
@@ -232,8 +226,8 @@ def test_orbiting_changes_the_shading_only_with_a_fixed_light(viewer, mode, chan
     ball.set([[0, 0, 0]], 0.8)
     viewer.show(SimpleNamespace(batches=lambda: [ball.batch()]))
     viewer.camera, viewer.lighting = OrbitCamera(elevation=0.0, distance=4.0), Lighting(mode, -40.0, 20.0)
-    first = snap(viewer)
+    first = viewer.snapshot()
     viewer.camera.azimuth += 180  # a sphere looks the same from behind, unless the light stayed put
-    differs = np.abs(snap(viewer).astype(int) - first).max() > 30
+    differs = np.abs(viewer.snapshot().astype(int) - first).max() > 30
     assert differs == changes
     viewer.lighting = Lighting()

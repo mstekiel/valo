@@ -56,9 +56,24 @@ class Editor:
         m.set(key, value)
 
     def reset(self, m: Material) -> None:
-        """Reset every parameter of ``m``'s shading model to its default."""
-        for s in SCHEMA[m.shading]:
-            self.set_param(m, s.key, s.default)
+        """Reset every parameter of ``m``'s shading model to its default, as one undo step."""
+        old = {s.key: m.get(s.key) for s in SCHEMA[m.shading]}
+        new = {s.key: s.default for s in SCHEMA[m.shading]}
+
+        def apply(values):
+            def f():
+                for key, value in values.items():
+                    m.set(key, value)
+            return f
+
+        stack = self.undo_stack
+        stack.applying = True  # the per-parameter events would each push a Command; record one instead
+        try:
+            apply(new)()
+        finally:
+            stack.applying = False
+        if {k: m.get(k) for k in old} != old:
+            stack.push(Command(f"{m.name}: reset", apply(old), apply(new)))
 
     # -- what an app provides
     def windows(self) -> dict[str, Callable[[], None]]:

@@ -188,33 +188,6 @@ def test_global_ambient_lights_the_unlit_side(viewer):
     viewer.lighting = Lighting()
 
 
-def test_camera_and_light_settings_undo_exactly(viewer):
-    import copy
-
-    from valo import Editor, OrbitCamera
-    from valo.lighting import Lighting
-
-    m = viewer.renderer.material("Shiny", "blinn_phong", base_color=(0.7, 0.3, 0.2))
-    cubes = viewer.renderer.instances(__import__("valo").meshes.cube(), m)
-    cubes.set(np.eye(4)[None])
-    viewer.camera, viewer.lighting = OrbitCamera(distance=4.0), Lighting()
-    editor = Editor()
-    viewer.show(SimpleNamespace(batches=lambda: [cubes.batch()], bounding_radius=lambda: 0.9), editor)
-    before, cam0 = viewer.snapshot(), copy.copy(viewer.camera)
-    editor.set_projection("orthographic")
-    editor.set_view("+X")
-    editor.set_light_mode("fixed")
-    editor.set_light("azimuth", 120.0)
-    editor.set_light("color", (1.0, 0.5, 0.2))
-    editor.set_flat_ambient((0.2, 0.2, 0.9))
-    editor.fit_view()
-    assert viewer.camera.projection == "orthographic" and viewer.lighting.sky == viewer.lighting.ground
-    assert np.abs(viewer.snapshot().astype(int) - before).max() > 30
-    while editor.undo_stack.done:
-        editor.undo_stack.undo()
-    assert viewer.camera == cam0 and viewer.lighting == Lighting()
-    assert np.array_equal(viewer.snapshot(), before)
-
 
 @pytest.mark.parametrize(("mode", "changes"), [("headlight", False), ("fixed", True)])
 def test_orbiting_changes_the_shading_only_with_a_fixed_light(viewer, mode, changes):
@@ -231,3 +204,118 @@ def test_orbiting_changes_the_shading_only_with_a_fixed_light(viewer, mode, chan
     differs = np.abs(viewer.snapshot().astype(int) - first).max() > 30
     assert differs == changes
     viewer.lighting = Lighting()
+
+
+# -- every shared Editor action: changes something, and undo restores state and image exactly
+EDITOR_ACTIONS = {  # name → (action(editor, material), changes the image)
+    "projection": (lambda ed, m: ed.set_projection("orthographic"), True),
+    "field of view": (lambda ed, m: ed.set_fov(60.0), True),
+    "view preset": (lambda ed, m: ed.set_view("+X"), True),
+    "fit view": (lambda ed, m: ed.fit_view(), True),
+    "light mode": (lambda ed, m: ed.set_light_mode("fixed"), False),  # switching keeps the light where it is
+    "light direction": (lambda ed, m: ed.set_light("azimuth", 90.0), True),
+    "light colour": (lambda ed, m: ed.set_light("color", (1.0, 0.3, 0.1)), True),
+    "light intensity": (lambda ed, m: ed.set_light("intensity", 2.0), True),
+    "ambient intensity": (lambda ed, m: ed.set_light("ambient", 1.2), True),
+    "sky colour": (lambda ed, m: ed.set_light("sky", (1.0, 0.0, 0.0)), True),
+    "flat ambient": (lambda ed, m: ed.set_flat_ambient((0.0, 0.0, 1.0)), True),
+    "material parameter": (lambda ed, m: ed.set_param(m, "base_color", (0.0, 1.0, 0.0)), True),
+    "material reset": (lambda ed, m: ed.reset(m), True),
+}
+
+
+@pytest.mark.parametrize("name", list(EDITOR_ACTIONS))
+def test_editor_action_undoes_exactly(viewer, name):
+    import copy
+
+    from valo import Editor, Lighting, OrbitCamera, meshes
+
+    action, visible = EDITOR_ACTIONS[name]
+    m = viewer.renderer.material("Shiny", "blinn_phong", base_color=(0.7, 0.3, 0.2), shininess=200.0)
+    cube = viewer.renderer.instances(meshes.cube(), m)
+    cube.set(np.eye(4)[None])
+    viewer.camera, viewer.lighting = OrbitCamera(), Lighting()
+    editor = Editor()
+    editor.watch(m)
+    viewer.show(SimpleNamespace(batches=lambda: [cube.batch()], bounding_radius=lambda: 0.9), editor)
+    viewer.camera.distance = 6.0  # not fitted, so "fit view" has something to do
+
+    def state():
+        return copy.copy(viewer.camera), copy.copy(viewer.lighting), m.data.copy()
+
+    before, image = state(), viewer.snapshot()
+    action(editor, m)
+    after = state()
+    assert not (after[0] == before[0] and after[1] == before[1] and np.array_equal(after[2], before[2]))
+    assert (np.abs(viewer.snapshot().astype(int) - image).max() > 10) == visible
+    assert len(editor.undo_stack.done) == 1
+    editor.undo_stack.undo()
+    restored = state()
+    assert restored[0] == before[0] and restored[1] == before[1] and np.array_equal(restored[2], before[2])
+    assert np.array_equal(viewer.snapshot(), image)
+    editor.undo_stack.redo()
+    assert state()[0] == after[0] and state()[1] == after[1]
+    viewer.lighting = Lighting()
+
+
+def test_mouse_orbits_and_zooms_only_over_the_scene(viewer):
+    from valo import Editor, OrbitCamera
+
+    viewer.camera = cam = OrbitCamera()
+    viewer.show(SimpleNamespace(batches=list), Editor())
+    viewer.snapshot()  # lays out the dock, so the scene rect is known
+    x, y, w, h = viewer.editor.scene_rect
+    inside, outside = (x + w / 2, y + h / 2), (x + w + 20, y + h / 2)  # outside: over the right dock column
+
+    def drag(start, dx):
+        viewer.on_pointer({"event_type": "pointer_down", "button": 1, "x": start[0], "y": start[1]})
+        viewer.on_pointer({"event_type": "pointer_move", "x": start[0] + dx, "y": start[1] + 10})
+        viewer.on_pointer({"event_type": "pointer_up", "x": start[0] + dx, "y": start[1] + 10})
+
+    az, el, dist = cam.azimuth, cam.elevation, cam.distance
+    drag(outside, 50)
+    viewer.on_pointer({"event_type": "wheel", "dy": 100, "x": outside[0], "y": outside[1]})
+    assert (cam.azimuth, cam.elevation, cam.distance) == (az, el, dist)
+    drag(inside, 50)
+    assert cam.azimuth == pytest.approx(az - 20) and cam.elevation == pytest.approx(el + 3)
+    viewer.on_pointer({"event_type": "wheel", "dy": 100, "x": inside[0], "y": inside[1]})
+    assert cam.distance > dist
+    cam.set_projection("orthographic")
+    height = cam.ortho_height
+    viewer.on_pointer({"event_type": "wheel", "dy": -100, "x": inside[0], "y": inside[1]})
+    assert cam.ortho_height < height  # orthographic zoom changes the visible height
+
+
+def test_reset_layout_shows_closed_windows_and_ui_scale_resizes(viewer):
+    from imgui_bundle import imgui
+
+    from valo import Editor
+
+    editor = Editor()
+    viewer.show(SimpleNamespace(batches=list), editor)
+    viewer.snapshot()
+    editor.visible["History"] = False
+    viewer.snapshot()
+    editor.reset_layout()
+    viewer.snapshot()
+    assert editor.visible["History"]
+    editor.set_ui_scale(1.5)
+    imgui.set_current_context(viewer.imgui.imgui_context)
+    assert imgui.get_style().font_scale_main == 1.5 and editor.ui_scale == 1.5
+    editor.set_ui_scale(1.0)
+
+
+def test_material_parameters_clamp_round_and_rebuild_from_dict(viewer):
+    m = viewer.renderer.material("M", "toon", base_color=(2.0, -1.0, 0.5), bands=3.6, ambient=7.0)
+    assert m.get("base_color") == (1.0, 0.0, 0.5)  # clamped to the schema range
+    assert m.get("bands") == 4.0 and m.get("ambient") == 1.0  # ints round, floats clamp
+    seen = []
+    m.listeners.append(lambda *event: seen.append(event[1:]))
+    m.set("bands", 4.2)  # rounds to the same value: no event
+    m.set("bands", 6)
+    assert seen == [("bands", 4.0, 6.0)]
+    with pytest.raises(ValueError):
+        m.set("shading", "chrome")
+    d = m.to_dict()
+    copy = viewer.renderer.material("copy", d.pop("shading"), **d)
+    assert np.allclose(copy.data, m.data, atol=1e-4)

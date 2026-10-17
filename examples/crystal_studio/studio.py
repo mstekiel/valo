@@ -9,7 +9,7 @@ import numpy as np
 from crystal import MAX_ATOMS_PER_AXIS, Crystal, Species
 from imgui_bundle import imgui
 
-from valo import Command, Editor, Material, OrbitCamera, Viewer
+from valo import ICON, Command, Editor, Material, OrbitCamera, Viewer, mono_font
 
 
 class CrystalEditor(Editor):
@@ -85,9 +85,12 @@ class CrystalEditor(Editor):
         self.assign(copy)
 
     # -- panel
-    def panel(self) -> None:
+    def windows(self):
+        return {"Crystal": self.crystal_window, "Species": self.species_window, "Material as data": self.data_window}
+
+    def crystal_window(self) -> None:
         sc = self.crystal
-        imgui.separator_text("Crystal boundaries (rock-salt)")
+        imgui.separator_text("Boundaries (rock-salt)")
         for axis, label in enumerate(("Atoms along x", "Atoms along y", "Atoms along z")):
             changed, v = imgui.slider_int(label, sc.n[axis], 1, MAX_ATOMS_PER_AXIS)
             if changed:
@@ -100,7 +103,8 @@ class CrystalEditor(Editor):
         imgui.text(f"{sc.total_atoms} atoms ({counts})")
         imgui.text_disabled(f"{len(sc.species)} instanced draw calls, {self.triangles_per_atom} triangles per atom")
 
-        imgui.separator_text("Species")
+    def species_window(self) -> None:
+        sc = self.crystal
         for i, sp in enumerate(sc.species):
             if i:
                 imgui.same_line()
@@ -114,15 +118,18 @@ class CrystalEditor(Editor):
         changed, mi = imgui.combo("Material", mats.index(self.species.material), [x.name for x in mats])
         if changed:
             self.assign(mats[mi])
-        if imgui.button("Duplicate material"):
+        if imgui.button(f"{ICON.CLONE} Duplicate material"):
             self.duplicate()
         m = self.species.material
         users = sc.users(m)
         imgui.text_disabled("Used by: " + ", ".join(users) + ("  (shared)" if len(users) > 1 else ""))
         self.material_section(m)
 
-        imgui.separator_text("Material as data")
-        imgui.text_unformatted(m.to_json())
+    def data_window(self) -> None:
+        imgui.text_disabled(f"Material of {self.species.name}")
+        imgui.push_font(mono_font(), 0.0)
+        imgui.text_unformatted(self.species.material.to_json())
+        imgui.pop_font()
 
 
 def build(viewer: Viewer) -> CrystalEditor:

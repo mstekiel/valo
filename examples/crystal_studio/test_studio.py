@@ -36,7 +36,7 @@ def studio():
 def snap(viewer) -> np.ndarray:
     for _ in range(2):  # ImGui lays out on the first frame, settles on the second
         img = np.asarray(viewer.canvas.draw())[:, :, :3].copy()
-    return img[:, : viewer.viewport_width]  # scene region only
+    return viewer.crop(img)  # scene region only
 
 
 @pytest.mark.gpu

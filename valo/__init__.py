@@ -21,7 +21,9 @@ from .materials import SCHEMA, SHADINGS, Material
 from .meshes import MeshData, Sculpt, library
 from .render import Instances, OrbitCamera, Renderer, Spheres
 from .ui import Editor
+from .ui_style import ICON, mono_font
 from .undo import Command, UndoStack
 
-__all__ = ["SCHEMA", "SHADINGS", "Command", "Editor", "Instances", "Material", "MeshData", "OrbitCamera",
-           "Renderer", "Sculpt", "Spheres", "UndoStack", "Viewer", "instance_matrices", "library", "meshes"]
+__all__ = ["ICON", "SCHEMA", "SHADINGS", "Command", "Editor", "Instances", "Material", "MeshData", "OrbitCamera",
+           "Renderer", "Sculpt", "Spheres", "UndoStack", "Viewer", "instance_matrices", "library", "meshes",
+           "mono_font"]

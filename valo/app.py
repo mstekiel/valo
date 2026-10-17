@@ -67,6 +67,7 @@ class Viewer:
         """Draw ``scene`` from now on, with ``editor``'s windows (if any) docked around it."""
         self.scene, self.editor = scene, editor
         if editor:
+            editor.viewer = self
             self.imgui.set_gui(editor.gui)
         if hasattr(scene, "bounding_radius"):
             self.camera.fit(scene.bounding_radius())

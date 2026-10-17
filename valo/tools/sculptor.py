@@ -75,8 +75,8 @@ class SculptScene:
 
 class SculptorEditor(Editor):
     title = "MeshSculptor"
-    dock_bottom = ("Diagnostics", "History")
-    bottom_share = 0.3
+    dock_bottom = ("Diagnostics",)
+    bottom_share = 0.45
 
     def __init__(self, scene: SculptScene, path):
         super().__init__()

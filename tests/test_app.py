@@ -132,7 +132,7 @@ def test_scene_fills_the_central_dock_node_and_windows_dock_around_it(viewer):
     assert x == 0 and 0 < y < 60  # below the menu bar
     assert 0.6 < w / viewer.canvas.get_physical_size()[0] < 0.8  # right column takes the rest
     assert y + h == viewer.canvas.get_physical_size()[1]
-    assert set(editor.visible) == {"A", "B", "History"} and all(editor.visible.values())
+    assert set(editor.visible) == {"A", "B", "Camera", "Lighting", "History"} and all(editor.visible.values())
     assert viewer.layout_file is None  # offscreen canvas: never writes a layout file
 
 
@@ -191,4 +191,49 @@ def test_global_ambient_lights_the_unlit_side(viewer):
     dark = snap(viewer)
     background = lit[0, 0]
     assert lit.max() > 60 and (dark <= background).all()  # only ambient lit the front: without it, black on bg
+    viewer.lighting = Lighting()
+
+
+def test_camera_and_light_settings_undo_exactly(viewer):
+    import copy
+
+    from valo import Editor, OrbitCamera
+    from valo.lighting import Lighting
+
+    m = viewer.renderer.material("Shiny", "blinn_phong", base_color=(0.7, 0.3, 0.2))
+    cubes = viewer.renderer.instances(__import__("valo").meshes.cube(), m)
+    cubes.set(np.eye(4)[None])
+    viewer.camera, viewer.lighting = OrbitCamera(distance=4.0), Lighting()
+    editor = Editor()
+    viewer.show(SimpleNamespace(batches=lambda: [cubes.batch()], bounding_radius=lambda: 0.9), editor)
+    before, cam0 = snap(viewer), copy.copy(viewer.camera)
+    editor.set_projection("orthographic")
+    editor.set_view("+X")
+    editor.set_light_mode("fixed")
+    editor.set_light("azimuth", 120.0)
+    editor.set_light("color", (1.0, 0.5, 0.2))
+    editor.set_flat_ambient((0.2, 0.2, 0.9))
+    editor.fit_view()
+    assert viewer.camera.projection == "orthographic" and viewer.lighting.sky == viewer.lighting.ground
+    assert np.abs(snap(viewer).astype(int) - before).max() > 30
+    while editor.undo_stack.done:
+        editor.undo_stack.undo()
+    assert viewer.camera == cam0 and viewer.lighting == Lighting()
+    assert np.array_equal(snap(viewer), before)
+
+
+@pytest.mark.parametrize(("mode", "changes"), [("headlight", False), ("fixed", True)])
+def test_orbiting_changes_the_shading_only_with_a_fixed_light(viewer, mode, changes):
+    from valo import OrbitCamera
+    from valo.lighting import Lighting
+
+    m = viewer.renderer.material("Matte", "lambert", base_color=(0.8, 0.8, 0.8))
+    ball = viewer.renderer.spheres(m)
+    ball.set([[0, 0, 0]], 0.8)
+    viewer.show(SimpleNamespace(batches=lambda: [ball.batch()]))
+    viewer.camera, viewer.lighting = OrbitCamera(elevation=0.0, distance=4.0), Lighting(mode, -40.0, 20.0)
+    first = snap(viewer)
+    viewer.camera.azimuth += 180  # a sphere looks the same from behind, unless the light stayed put
+    differs = np.abs(snap(viewer).astype(int) - first).max() > 30
+    assert differs == changes
     viewer.lighting = Lighting()

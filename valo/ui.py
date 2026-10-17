@@ -9,27 +9,32 @@ History window, and the default layout (app windows tabbed in a right column, Hi
 
 from __future__ import annotations
 
+import copy
 from collections.abc import Callable
 
 from imgui_bundle import imgui
 from imgui_bundle.imgui import internal
 
+from .lighting import MODES
 from .materials import SCHEMA, SHADINGS, Material, linear_to_srgb, srgb_to_linear
+from .render import PROJECTIONS, VIEWS
 from .ui_style import ICON, apply_style
 from .undo import Command, UndoStack
 
 UI_SCALES = (0.85, 1.0, 1.15, 1.3, 1.5, 1.75, 2.0)
+SHARED_WINDOWS = ("Camera", "Lighting", "History")  # added by the base class, docked in the lower part
 
 
 class Editor:
     title = "valo"
     right_column = 0.3  # share of the window width for the right dock column
-    dock_bottom = ("History",)  # windows docked under the right column; the others are tabs in it
-    bottom_share = 0.25  # height share of that lower part
+    dock_bottom: tuple[str, ...] = ()  # app windows docked under the right column, before the shared ones
+    bottom_share = 0.42  # height share of that lower part (Camera, Lighting, History live there)
 
     def __init__(self):
         self.undo_stack = UndoStack()
         self.auto_rotate = False
+        self.viewer = None  # set by Viewer.show(): camera, lighting and scene
         self.ui_scale = 1.0
         self.visible: dict[str, bool] = {}
         self.scene_rect: tuple[float, float, float, float] | None = None  # central dock node, logical pixels
@@ -89,6 +94,134 @@ class Editor:
         if imgui.button(f"{ICON.ARROW_ROTATE_LEFT} Reset material parameters"):
             self.reset(m)
 
+    # -- camera and lighting actions (navigation with the mouse is not undoable; these settings are)
+    def _record(self, label: str, obj, keys: tuple[str, ...], mutate: Callable[[], None], merge_key=None) -> None:
+        """Run ``mutate`` and push a Command that restores / re-applies ``obj``'s ``keys``."""
+        old = {k: copy.copy(getattr(obj, k)) for k in keys}
+        mutate()
+        new = {k: copy.copy(getattr(obj, k)) for k in keys}
+        if new == old:
+            return
+
+        def restore(state):
+            def f():
+                for k, v in state.items():
+                    setattr(obj, k, copy.copy(v))
+            return f
+
+        self.undo_stack.push(Command(label, restore(old), restore(new), merge_key=merge_key))
+
+    def set_projection(self, projection: str) -> None:
+        cam = self.viewer.camera
+        self._record(f"camera: {projection}", cam, ("projection", "distance", "ortho_height"),
+                     lambda: cam.set_projection(projection))
+
+    def set_fov(self, degrees: float) -> None:
+        cam = self.viewer.camera
+        self._record("camera: field of view", cam, ("fovy",), lambda: setattr(cam, "fovy", float(degrees)),
+                     merge_key=("camera", "fovy"))
+
+    def set_view(self, name: str) -> None:
+        """Look from a preset side: one of ``render.VIEWS`` (+X ... -Z, Iso)."""
+        cam = self.viewer.camera
+
+        def look():
+            cam.azimuth, cam.elevation = VIEWS[name]
+
+        self._record(f"camera: view {name}", cam, ("azimuth", "elevation"), look)
+
+    def fit_view(self) -> None:
+        cam, scene = self.viewer.camera, self.viewer.scene
+        if hasattr(scene, "bounding_radius"):
+            self._record("camera: fit", cam, ("distance", "ortho_height"), lambda: cam.fit(scene.bounding_radius()))
+
+    def set_light(self, key: str, value) -> None:
+        """Any ``Lighting`` field except ``mode``: azimuth, elevation, color, intensity, sky, ground, ambient."""
+        light = self.viewer.lighting
+        value = tuple(float(c) for c in value) if isinstance(value, (tuple, list)) else float(value)
+        self._record(f"light: {key}", light, (key,), lambda: setattr(light, key, value), merge_key=("light", key))
+
+    def set_light_mode(self, mode: str) -> None:
+        light, cam = self.viewer.lighting, self.viewer.camera
+        self._record(f"light: {mode}", light, ("mode", "azimuth", "elevation"), lambda: light.set_mode(mode, cam))
+
+    def set_flat_ambient(self, rgb) -> None:
+        """One ambient colour from every side (sky = ground)."""
+        light, rgb = self.viewer.lighting, tuple(float(c) for c in rgb)
+
+        def flat():
+            light.sky = light.ground = rgb
+
+        self._record("light: ambient colour", light, ("sky", "ground"), flat, merge_key=("light", "flat"))
+
+    # -- shared windows
+    def camera_window(self) -> None:
+        cam = self.viewer.camera
+        for p in PROJECTIONS:
+            if imgui.radio_button(p.capitalize(), cam.projection == p):
+                self.set_projection(p)
+            imgui.same_line()
+        imgui.new_line()
+        if cam.projection == "perspective":
+            changed, v = imgui.slider_float("Field of view", cam.fovy, 10.0, 90.0, "%.0f deg")
+            if changed:
+                self.set_fov(v)
+        imgui.text_disabled("View from")
+        for i, name in enumerate(VIEWS):
+            if i:
+                imgui.same_line()
+            if imgui.button(name):
+                self.set_view(name)
+        if imgui.button(f"{ICON.EXPAND} Fit"):
+            self.fit_view()
+        imgui.same_line()
+        _, self.auto_rotate = imgui.checkbox("Auto-rotate", self.auto_rotate)
+
+    def _color(self, label: str, rgb) -> tuple[bool, list[float]]:
+        """sRGB colour swatch for a linear colour."""
+        changed, col = imgui.color_edit3(label, [linear_to_srgb(c) for c in rgb], imgui.ColorEditFlags_.no_inputs)
+        return changed, [srgb_to_linear(c) for c in col]
+
+    def lighting_window(self) -> None:
+        light = self.viewer.lighting
+        for m in MODES:
+            if imgui.radio_button(m.capitalize(), light.mode == m):
+                self.set_light_mode(m)
+            imgui.same_line()
+        imgui.new_line()
+        imgui.text_disabled("moves with the camera" if light.mode == "headlight" else "stays put in the world")
+        for key, lo, hi in (("azimuth", -180.0, 180.0), ("elevation", -90.0, 90.0)):
+            changed, v = imgui.slider_float(key.capitalize(), getattr(light, key), lo, hi, "%.0f deg")
+            if changed:
+                self.set_light(key, v)
+        changed, col = self._color("##light colour", light.color)
+        if changed:
+            self.set_light("color", col)
+        imgui.same_line()
+        changed, v = imgui.slider_float("Light", light.intensity, 0.0, 3.0, "%.2f")
+        if changed:
+            self.set_light("intensity", v)
+
+        imgui.separator_text("Ambient (all objects)")
+        flat = tuple(light.sky) == tuple(light.ground)
+        changed, col = self._color("Sky" if not flat else "Colour", light.sky)
+        if changed:
+            if flat:
+                self.set_flat_ambient(col)
+            else:
+                self.set_light("sky", col)
+        if not flat:
+            imgui.same_line()
+            changed, col = self._color("Ground", light.ground)
+            if changed:
+                self.set_light("ground", col)
+        imgui.same_line()
+        if imgui.checkbox("Flat", flat)[0] and not flat:
+            self.set_flat_ambient(light.sky)
+        changed, v = imgui.slider_float("Ambient", light.ambient, 0.0, 1.5, "%.2f")
+        if changed:
+            self.set_light("ambient", v)
+
     def history_window(self) -> None:
         stack = self.undo_stack
         imgui.begin_disabled(not stack.done)
@@ -109,7 +242,11 @@ class Editor:
 
     # -- frame
     def all_windows(self) -> dict[str, Callable[[], None]]:
-        return {**self.windows(), "History": self.history_window}
+        shared = {"Camera": self.camera_window, "Lighting": self.lighting_window} if self.viewer else {}
+        return {**self.windows(), **shared, "History": self.history_window}
+
+    def _in_bottom(self, name: str) -> bool:
+        return name in self.dock_bottom or name in SHARED_WINDOWS
 
     def gui(self) -> None:
         """Called by the Viewer's ImguiRenderer every frame."""
@@ -128,8 +265,8 @@ class Editor:
             node = internal.dock_builder_get_node(dock_id)
             if self._layout == "force" or node is None or not node.is_split_node():  # nothing restored from file
                 self.build_layout(dock_id, list(wins))
-                bottom = [n for n in wins if n in self.dock_bottom]  # new windows grab focus in submission
-                self._focus = [n for n in wins if n not in self.dock_bottom][:1] + bottom[:1]  # order: fix next frame
+                bottom = [n for n in wins if self._in_bottom(n)]  # new windows grab focus in submission
+                self._focus = [n for n in wins if not self._in_bottom(n)][:1] + bottom[:1]  # order: fix next frame
             self._layout = None
         central = internal.dock_builder_get_central_node(dock_id)
         self.scene_rect = (central.pos.x, central.pos.y, central.size.x, central.size.y)
@@ -146,7 +283,7 @@ class Editor:
             self.visible[name] = bool(still_open)
 
     def build_layout(self, dock_id: int, names: list[str]) -> None:
-        """The default layout: a right column of tabbed app windows, ``dock_bottom`` windows below it."""
+        """The default layout: a right column of tabbed app windows; ``dock_bottom`` and shared windows below."""
         internal.dock_builder_remove_node(dock_id)
         internal.dock_builder_add_node(
             dock_id, imgui.DockNodeFlags_.passthru_central_node | internal.DockNodeFlagsPrivate_.dock_space)
@@ -155,7 +292,7 @@ class Editor:
         _, right, _ = internal.dock_builder_split_node_py(dock_id, imgui.Dir.right, self.right_column)
         _, bottom, top = internal.dock_builder_split_node_py(right, imgui.Dir.down, self.bottom_share)
         for name in names:
-            internal.dock_builder_dock_window(name, bottom if name in self.dock_bottom else top)
+            internal.dock_builder_dock_window(name, bottom if self._in_bottom(name) else top)
         internal.dock_builder_finish(dock_id)
 
     def reset_layout(self) -> None:
@@ -183,7 +320,6 @@ class Editor:
                 if imgui.menu_item(name, "", self.visible.get(name, True))[0]:
                     self.visible[name] = not self.visible.get(name, True)
             imgui.separator()
-            self.auto_rotate = imgui.menu_item("Auto-rotate camera", "", self.auto_rotate)[1]
             if imgui.begin_menu("UI scale"):
                 for s in UI_SCALES:
                     if imgui.menu_item(f"{s:.0%}", "", s == self.ui_scale)[0]:

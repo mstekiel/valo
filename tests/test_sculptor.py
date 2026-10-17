@@ -95,3 +95,14 @@ def meshes_ok(data) -> bool:
     from valo import meshes
 
     return meshes.check(data).ok
+
+
+def test_save_button_asks_before_overwriting(sculptor):
+    from valo.meshes import library
+
+    ed = sculptor
+    ed.save_name = "twice"
+    ed._save_clicked()
+    assert library.path("twice").exists() and not ed.confirm_overwrite
+    ed._save_clicked()  # exists now: the panel shows an Overwrite button instead of saving
+    assert ed.confirm_overwrite and "exists" in ed.status

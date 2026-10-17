@@ -64,6 +64,8 @@ class Gallery:
 
 class GalleryEditor(Editor):
     title = "Mesh gallery"
+    dock_bottom = ("Material",)  # under the shape list; History is a tab next to Shapes
+    bottom_share = 0.6
 
     def __init__(self, gallery: Gallery):
         super().__init__()
@@ -72,14 +74,20 @@ class GalleryEditor(Editor):
         for _, inst in gallery.items:
             self.watch(inst.material)
 
-    def panel(self) -> None:
-        names = [name for name, _ in self.gallery.items]
-        imgui.separator_text("Shape")
-        _, self.selected = imgui.combo("Shape", self.selected, names)
-        inst = self.gallery.items[self.selected][1]
-        imgui.text_disabled(f"{inst.count} instance(s), {inst.mesh.count // 3} triangles each")
-        self.material_section(inst.material)
+    def windows(self):
+        return {"Shapes": self.shapes_window, "Material": self.material_window}
 
+    def shapes_window(self) -> None:
+        for i, (name, inst) in enumerate(self.gallery.items):
+            if imgui.selectable(name, i == self.selected)[0]:
+                self.selected = i
+            imgui.same_line(imgui.get_content_region_avail().x * 0.6)
+            imgui.text_disabled(f"{inst.count} x {inst.mesh.count // 3} tris")
+
+    def material_window(self) -> None:
+        name, inst = self.gallery.items[self.selected]
+        imgui.text(name)
+        self.material_section(inst.material)
 
 def build(viewer: Viewer) -> GalleryEditor:
     gallery = Gallery(viewer.renderer)

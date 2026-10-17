@@ -25,6 +25,7 @@ class Editor:
     title = "valo"
     right_column = 0.3  # share of the window width for the right dock column
     dock_bottom = ("History",)  # windows docked under the right column; the others are tabs in it
+    bottom_share = 0.25  # height share of that lower part
 
     def __init__(self):
         self.undo_stack = UndoStack()
@@ -32,6 +33,7 @@ class Editor:
         self.ui_scale = 1.0
         self.visible: dict[str, bool] = {}
         self.scene_rect: tuple[float, float, float, float] | None = None  # central dock node, logical pixels
+        self._focus: str | None = None  # window to focus next frame
         self._layout = "auto"  # next frame: "auto" = default layout unless a saved one was restored, "force"
 
     # -- material actions (material edits reach the undo stack through watch())
@@ -121,10 +123,12 @@ class Editor:
         wins = self.all_windows()
         self._menu_bar(wins)
         dock_id = imgui.dock_space_over_viewport(0, None, imgui.DockNodeFlags_.passthru_central_node)
+        focus, self._focus = self._focus, None  # requested by last frame's layout build
         if self._layout:
             node = internal.dock_builder_get_node(dock_id)
             if self._layout == "force" or node is None or not node.is_split_node():  # nothing restored from file
                 self.build_layout(dock_id, list(wins))
+                self._focus = next(iter(wins))  # new windows grab focus: give it to the app's first, next frame
             self._layout = None
         central = internal.dock_builder_get_central_node(dock_id)
         self.scene_rect = (central.pos.x, central.pos.y, central.size.x, central.size.y)
@@ -132,6 +136,8 @@ class Editor:
         for name, draw in wins.items():
             if not self.visible.setdefault(name, True):
                 continue
+            if name == focus:
+                imgui.set_next_window_focus()
             expanded, still_open = imgui.begin(name, True)
             if expanded:
                 draw()
@@ -146,7 +152,7 @@ class Editor:
         viewport = imgui.get_main_viewport()
         internal.dock_builder_set_node_size(dock_id, viewport.work_size)
         _, right, _ = internal.dock_builder_split_node_py(dock_id, imgui.Dir.right, self.right_column)
-        _, bottom, top = internal.dock_builder_split_node_py(right, imgui.Dir.down, 0.25)
+        _, bottom, top = internal.dock_builder_split_node_py(right, imgui.Dir.down, self.bottom_share)
         for name in names:
             internal.dock_builder_dock_window(name, bottom if name in self.dock_bottom else top)
         internal.dock_builder_finish(dock_id)

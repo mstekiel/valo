@@ -24,7 +24,7 @@ def gallery():
 def snap(viewer) -> np.ndarray:
     for _ in range(2):  # ImGui lays out on the first frame, settles on the second
         img = np.asarray(viewer.canvas.draw())[:, :, :3].copy()
-    return img[:, : viewer.viewport_width]
+    return viewer.crop(img)
 
 
 def test_every_shape_changes_the_image_and_undo_restores_it(gallery):

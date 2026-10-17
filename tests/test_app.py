@@ -148,3 +148,29 @@ def test_layout_is_saved_on_close(tmp_path):
     assert not ini.exists()  # ImGui itself waits a few seconds before saving
     v.canvas.close()
     assert "[Window][History]" in ini.read_text()
+
+
+def test_orthographic_shading_is_the_same_for_identical_spheres(viewer):
+    """In orthographic mode the view vector is the same everywhere, so two identical spheres shade identically."""
+    from valo import OrbitCamera
+
+    m = viewer.renderer.material("Shiny", "pbr", base_color=(0.9, 0.9, 0.9), metallic=1.0, roughness=0.2)
+    balls = viewer.renderer.spheres(m)
+    balls.set([[-1.2, 0, 0], [1.2, 0, 0]], 0.5)
+    viewer.show(SimpleNamespace(batches=lambda: [balls.batch()]))
+    viewer.camera = cam = OrbitCamera(azimuth=90.0, elevation=0.0, distance=3.0)
+
+    centres = np.array([[-1.2, 0, 0, 1], [1.2, 0, 0, 1]])
+
+    def patches_differ(projection):  # mean difference of the two spheres' pixels, each centred on its projection
+        cam.set_projection(projection)
+        img = snap(viewer).astype(int)
+        h, w = img.shape[:2]
+        clip = centres @ cam.matrices(w / h)[0].T
+        px = ((clip[:, 0] / clip[:, 3] + 1) / 2 * w).round().astype(int)
+        py = ((1 - clip[:, 1] / clip[:, 3]) / 2 * h).round().astype(int)
+        a, b = (img[y - 25 : y + 25, x - 25 : x + 25] for x, y in zip(px, py, strict=True))
+        return np.abs(a - b).mean()
+
+    persp, ortho = patches_differ("perspective"), patches_differ("orthographic")
+    assert ortho < 0.5 and persp > 3 * ortho

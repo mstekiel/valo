@@ -27,7 +27,12 @@ SCENE_FORMAT = "rgba16float"  # linear HDR scene colour; encoded to sRGB in POST
 COMMON_WGSL = """
 const PI: f32 = 3.14159265;
 
-struct Frame { view_proj: mat4x4f, eye: vec4f, light_dir: vec4f };
+struct Frame {
+    view_proj: mat4x4f,
+    eye: vec4f,        // xyz camera position
+    view_dir: vec4f,   // xyz unit forward; w = 1 perspective, 0 orthographic
+    light_dir: vec4f,  // xyz unit vector toward the light
+};
 @group(0) @binding(0) var<uniform> frame: Frame;
 
 struct Material {
@@ -69,7 +74,9 @@ fn environment(dir: vec3f) -> vec3f {   // stand-in sky/ground for reflections
 
 struct Surface { n: vec3f, v: vec3f, l: vec3f };
 fn surface(in: VsOut) -> Surface {
-    return Surface(normalize(in.normal), normalize(frame.eye.xyz - in.world), frame.light_dir.xyz);
+    // Toward the viewer: per pixel in perspective, the same everywhere (−forward) in orthographic.
+    let v = select(-frame.view_dir.xyz, normalize(frame.eye.xyz - in.world), frame.view_dir.w > 0.5);
+    return Surface(normalize(in.normal), v, frame.light_dir.xyz);
 }
 """
 
@@ -235,7 +242,7 @@ class Renderer:
         self.frame_layout = layout(wgpu.BufferBindingType.uniform, vf)
         self.material_layout = layout(wgpu.BufferBindingType.uniform, vf)
         self.instance_layout = layout(wgpu.BufferBindingType.read_only_storage, wgpu.ShaderStage.VERTEX)
-        self.frame_buffer = device.create_buffer(size=96, usage=wgpu.BufferUsage.UNIFORM | wgpu.BufferUsage.COPY_DST)
+        self.frame_buffer = device.create_buffer(size=112, usage=wgpu.BufferUsage.UNIFORM | wgpu.BufferUsage.COPY_DST)
         self.frame_bg = device.create_bind_group(
             layout=self.frame_layout, entries=[{"binding": 0, "resource": {"buffer": self.frame_buffer}}])
 
@@ -305,11 +312,13 @@ class Renderer:
         self.device.queue.write_buffer(self.post_origin, 0, np.array([x, y, 0, 0], np.float32))
 
         view_proj, eye = camera.matrices(vw / h)
-        frame = np.zeros(24, np.float32)
+        frame = np.zeros(28, np.float32)
         frame[:16] = pack_mat4(view_proj).ravel()
         frame[16:19] = eye
+        frame[20:23] = camera.forward()
+        frame[23] = camera.projection == "perspective"
         light = np.array([-0.4, -0.6, 0.7])
-        frame[20:23] = light / np.linalg.norm(light)
+        frame[24:27] = light / np.linalg.norm(light)
         self.device.queue.write_buffer(self.frame_buffer, 0, frame)
 
         batches = [b for b in scene.batches() if b[3] > 0]

@@ -22,7 +22,8 @@ FRAGMENT_WGSL = {
     let s = surface(in);
     let d = max(dot(s.n, s.l), 0.0);
     let amb = material.pbr.z;
-    return vec4f(material.base_color.rgb * (amb + (1.0 - amb) * d) + material.emissive.rgb, 1.0);
+    let light = frame.light_color.rgb;
+    return vec4f(material.base_color.rgb * (amb + (1.0 - amb) * d * light) + material.emissive.rgb, 1.0);
 }""",
     "blinn_phong": """
 @fragment fn fs_main(in: VsOut) -> @location(0) vec4f {
@@ -30,8 +31,9 @@ FRAGMENT_WGSL = {
     let d = max(dot(s.n, s.l), 0.0);
     let spec = select(0.0, pow(max(dot(s.n, normalize(s.l + s.v)), 0.0), material.specular.w), d > 0.0);
     let amb = material.pbr.z;
-    return vec4f(material.base_color.rgb * (amb + (1.0 - amb) * d)
-                 + material.specular.rgb * spec + material.emissive.rgb, 1.0);
+    let light = frame.light_color.rgb;
+    return vec4f(material.base_color.rgb * (amb + (1.0 - amb) * d * light)
+                 + material.specular.rgb * spec * frame.light_color.rgb + material.emissive.rgb, 1.0);
 }""",
     "pbr": """
 @fragment fn fs_main(in: VsOut) -> @location(0) vec4f {   // metallic-roughness Cook-Torrance (GGX)
@@ -51,7 +53,7 @@ FRAGMENT_WGSL = {
     let f0 = mix(vec3f(0.04), base, metallic);
     let f = f0 + (1.0 - f0) * pow(1.0 - vdh, 5.0);
     let spec = dd * g * f / max(4.0 * ndv * ndl, 1e-4);
-    let direct = ((1.0 - f) * (1.0 - metallic) * base / PI + spec) * 3.0 * ndl;
+    let direct = ((1.0 - f) * (1.0 - metallic) * base / PI + spec) * 3.0 * ndl * frame.light_color.rgb;
     let fr = f0 + (max(vec3f(1.0 - rough), f0) - f0) * pow(1.0 - ndv, 5.0);
     let env = environment(reflect(-s.v, s.n)) * fr * (1.0 - 0.75 * rough);
     let ambient = material.pbr.z * environment(s.n) * base * (1.0 - metallic);
@@ -64,7 +66,8 @@ FRAGMENT_WGSL = {
     let d = floor(max(dot(s.n, s.l), 0.0) * bands + 0.5) / bands;
     let rim = smoothstep(0.55, 0.75, 1.0 - max(dot(s.n, s.v), 0.0)) * 0.35;
     let amb = material.pbr.z;
-    return vec4f(material.base_color.rgb * (amb + (1.0 - amb) * d) + vec3f(rim) + material.emissive.rgb, 1.0);
+    let light = frame.light_color.rgb;
+    return vec4f(material.base_color.rgb * (amb + (1.0 - amb) * d * light) + vec3f(rim) + material.emissive.rgb, 1.0);
 }""",
 }
 

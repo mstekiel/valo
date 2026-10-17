@@ -17,6 +17,7 @@ import numpy as np
 import wgpu
 
 from .geometry import instance_matrices, look_at, orthographic_reversed_z, pack_mat4, perspective_reversed_z
+from .lighting import Lighting
 from .materials import FRAGMENT_WGSL, Material
 from .meshes.data import MeshData
 from .meshes.primitives import sphere
@@ -32,6 +33,7 @@ struct Frame {
     eye: vec4f,        // xyz camera position
     view_dir: vec4f,   // xyz unit forward; w = 1 perspective, 0 orthographic
     light_dir: vec4f,  // xyz unit vector toward the light
+    light_color: vec4f,  // rgb = colour × intensity (linear)
 };
 @group(0) @binding(0) var<uniform> frame: Frame;
 
@@ -242,7 +244,7 @@ class Renderer:
         self.frame_layout = layout(wgpu.BufferBindingType.uniform, vf)
         self.material_layout = layout(wgpu.BufferBindingType.uniform, vf)
         self.instance_layout = layout(wgpu.BufferBindingType.read_only_storage, wgpu.ShaderStage.VERTEX)
-        self.frame_buffer = device.create_buffer(size=112, usage=wgpu.BufferUsage.UNIFORM | wgpu.BufferUsage.COPY_DST)
+        self.frame_buffer = device.create_buffer(size=128, usage=wgpu.BufferUsage.UNIFORM | wgpu.BufferUsage.COPY_DST)
         self.frame_bg = device.create_bind_group(
             layout=self.frame_layout, entries=[{"binding": 0, "resource": {"buffer": self.frame_buffer}}])
 
@@ -299,7 +301,8 @@ class Renderer:
             self._targets = ((w, h), color, depth, bg)
         return self._targets[1:]
 
-    def render(self, surface_texture, viewport: tuple[int, int, int, int], scene, camera: OrbitCamera) -> None:
+    def render(self, surface_texture, viewport: tuple[int, int, int, int], scene, camera: OrbitCamera,
+               lighting: Lighting | None = None) -> None:
         """Draw ``scene`` into the ``viewport`` = (x, y, w, h) rectangle of ``surface_texture`` (framebuffer
         pixels, origin top-left); the rest of the texture is cleared to the window background.
 
@@ -312,13 +315,14 @@ class Renderer:
         self.device.queue.write_buffer(self.post_origin, 0, np.array([x, y, 0, 0], np.float32))
 
         view_proj, eye = camera.matrices(vw / h)
-        frame = np.zeros(28, np.float32)
+        lighting = lighting or Lighting()
+        frame = np.zeros(32, np.float32)
         frame[:16] = pack_mat4(view_proj).ravel()
         frame[16:19] = eye
         frame[20:23] = camera.forward()
         frame[23] = camera.projection == "perspective"
-        light = np.array([-0.4, -0.6, 0.7])
-        frame[24:27] = light / np.linalg.norm(light)
+        frame[24:27] = lighting.direction(camera)
+        frame[28:31] = lighting.radiance()
         self.device.queue.write_buffer(self.frame_buffer, 0, frame)
 
         batches = [b for b in scene.batches() if b[3] > 0]

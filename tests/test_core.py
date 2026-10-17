@@ -87,3 +87,28 @@ def test_switching_projection_keeps_the_target_plane_the_same_size():
     cam.zoom(2.0)
     cam.set_projection("perspective")
     assert cam.distance == pytest.approx(20.0)
+
+
+def test_headlight_follows_the_camera_and_fixed_light_does_not():
+    from valo.lighting import Lighting
+    from valo.render import OrbitCamera
+
+    cam = OrbitCamera()
+    head, fixed = Lighting("headlight", 0.0, 0.0), Lighting("fixed", 30.0, 40.0)
+    assert head.direction(cam) == pytest.approx(-cam.forward())  # azimuth 0, elevation 0: from the viewer
+    before = fixed.direction(cam)
+    cam.azimuth += 120
+    assert head.direction(cam) == pytest.approx(-cam.forward())
+    assert fixed.direction(cam) == pytest.approx(before)
+
+
+@pytest.mark.parametrize("start", ["headlight", "fixed"])
+def test_switching_light_mode_keeps_the_direction(start):
+    from valo.lighting import MODES, Lighting
+    from valo.render import OrbitCamera
+
+    cam = OrbitCamera(azimuth=37.0, elevation=-12.0)
+    light = Lighting(start, -50.0, 25.0)
+    d = light.direction(cam)
+    light.set_mode(next(m for m in MODES if m != start), cam)
+    assert light.direction(cam) == pytest.approx(d, abs=1e-9)

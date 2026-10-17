@@ -13,6 +13,7 @@ import wgpu
 from imgui_bundle import imgui
 from wgpu.utils.imgui import ImguiRenderer
 
+from .lighting import Lighting
 from .render import OrbitCamera, Renderer
 from .ui import Editor
 from .ui_style import apply_style, load_fonts
@@ -45,6 +46,7 @@ class Viewer:
 
         self.renderer = Renderer(self.device, surface_format)
         self.camera = OrbitCamera()
+        self.lighting = Lighting()
         self.imgui = ImguiRenderer(self.device, canvas)  # uses the format configured above
         io = imgui.get_io()  # of the context the renderer just made current
         io.config_flags |= imgui.ConfigFlags_.docking_enable
@@ -82,7 +84,7 @@ class Viewer:
             self.camera.azimuth = (self.camera.azimuth + 0.4) % 360
         for _ in range(3):  # the layout is known only after the ImGui frame: redraw if the scene rect moved
             self.viewport = self._scene_viewport(texture)
-            self.renderer.render(texture, self.viewport, self.scene, self.camera)
+            self.renderer.render(texture, self.viewport, self.scene, self.camera, self.lighting)
             if not ed:
                 return
             self.imgui.render()  # windows on top of the same texture

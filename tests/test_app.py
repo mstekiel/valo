@@ -380,3 +380,32 @@ def test_batches_carry_their_instances_and_matrices(viewer):
     b = cubes.batch()
     assert b.source is cubes and b[:4] == (m, cubes.mesh, cubes.bind_group, 2)
     assert np.array_equal(cubes.matrices, matrices) and cubes.label == "cubes" and cubes.info(1) == {"index": 1}
+
+
+def test_pick_finds_the_batch_and_instance_under_a_pixel(viewer):
+    from valo import OrbitCamera, instance_matrices, meshes
+
+    m = viewer.renderer.material("M", "lambert")
+    balls = viewer.renderer.spheres(m)
+    balls.set([[-1.5, 0, 0], [0, 0, 0], [1.5, 0, 0]], 0.5)
+    cubes = viewer.renderer.instances(meshes.cube(), m)
+    cubes.set(instance_matrices([[0, 0, 1.5]], 0.8))
+    scene = SimpleNamespace(batches=lambda: [balls.batch(), cubes.batch()])
+    viewer.show(scene)
+    viewer.camera = cam = OrbitCamera(azimuth=-90.0, elevation=0.0, distance=8.0)  # looking along +Y
+    viewer.snapshot()
+    x0, y0, w, h = viewer.viewport
+
+    def pixel(p):
+        clip = cam.matrices(w / h)[0] @ np.r_[p, 1.0]
+        return x0 + (clip[0] / clip[3] + 1) / 2 * w, y0 + (1 - clip[1] / clip[3]) / 2 * h
+
+    for point, batch, instance in (([1.5, 0, 0], 0, 2), ([-1.5, 0, 0], 0, 0), ([0, 0, 1.5], 1, 0)):
+        hit = viewer.renderer.pick(viewer.viewport, scene, cam, *pixel(point))
+        assert (hit.batch_index, hit.instance_index) == (batch, instance)
+        assert hit.source is (balls if batch == 0 else cubes)
+    hit = viewer.renderer.pick(viewer.viewport, scene, cam, *pixel([1.5, 0, 0]))
+    assert np.linalg.norm(hit.world_point - [1.5, 0, 0]) == pytest.approx(0.5, abs=0.02)  # on the sphere's surface
+    assert hit.world_point[1] < 0  # the near side, facing the camera at -Y
+    assert viewer.renderer.pick(viewer.viewport, scene, cam, *pixel([0, 0, -2.5])) is None  # background
+    assert viewer.renderer.pick(viewer.viewport, scene, cam, -5, -5) is None  # outside the viewport

@@ -63,6 +63,8 @@ class Viewer:
         self.scene, self.editor = EMPTY_SCENE, None
         self.viewport = (0, 0, 1, 1)  # (x, y, w, h) of the scene in framebuffer pixels
         self._drag = None
+        self.pointer = None  # last pointer position, logical px
+        self.hover = None  # Pick under the pointer (render.Pick) or None
         self._last_frame = time.perf_counter()
         canvas.add_event_handler(self.on_pointer, "pointer_down", "pointer_move", "pointer_up", "wheel")
         canvas.add_event_handler(self._on_close, "close")
@@ -95,11 +97,19 @@ class Viewer:
         for _ in range(3):  # the layout is known only after the ImGui frame: redraw if the scene rect moved
             self.viewport = self._scene_viewport(texture)
             self.renderer.render(texture, self.viewport, self.scene, self.camera, self.lighting)
+            self.hover = self._pick_under_pointer()
             if not ed:
                 return
             self.imgui.render()  # windows on top of the same texture
             if self._scene_viewport(texture) == self.viewport:
                 return
+
+    def _pick_under_pointer(self):
+        """The Pick under the mouse pointer, if picking is on and the pointer is over the scene."""
+        if not (rc.picking.enabled and self.pointer and self.editor):
+            return None
+        r = self.canvas.get_pixel_ratio()
+        return self.renderer.pick(self.viewport, self.scene, self.camera, self.pointer[0] * r, self.pointer[1] * r)
 
     def _scene_viewport(self, texture) -> tuple[int, int, int, int]:
         """The editor's central dock node in framebuffer pixels (the whole window before the first layout)."""
@@ -130,7 +140,10 @@ class Viewer:
     def on_pointer(self, event: dict) -> None:
         """Orbit with left-drag and zoom with the wheel, when the pointer is over the scene."""
         imgui.set_current_context(self.imgui.imgui_context)
+        if event["event_type"] == "pointer_move":
+            self.pointer = (event["x"], event["y"])
         if imgui.get_io().want_capture_mouse:  # a window or the menu has the mouse
+            self.pointer = None
             return
         rect = self.editor.scene_rect if self.editor else None
         if event["event_type"] in ("pointer_down", "wheel") and rect:

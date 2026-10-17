@@ -27,7 +27,7 @@ from .meshes.primitives import sphere
 DEPTH_FORMAT = "depth32float"
 SCENE_FORMAT = "rgba16float"  # linear HDR scene colour; encoded to sRGB in POST_WGSL
 
-COMMON_WGSL = """
+VERTEX_WGSL = """
 const PI: f32 = 3.14159265;
 
 struct Frame {
@@ -41,21 +41,14 @@ struct Frame {
 };
 @group(0) @binding(0) var<uniform> frame: Frame;
 
-struct Material {
-    base_color: vec4f,   // rgb (linear)
-    specular: vec4f,     // rgb = specular colour, w = shininess
-    pbr: vec4f,          // x = metallic, y = roughness, z = ambient, w = toon bands
-    emissive: vec4f,     // rgb
-};
-@group(1) @binding(0) var<uniform> material: Material;
-
 // Per-instance model matrix (math convention, packed by pack_mat4). One draw call per batch.
 @group(2) @binding(0) var<storage, read> instances: array<mat4x4f>;
 
 struct VsOut {
-    @builtin(position) pos: vec4f,
+    @builtin(position) @invariant pos: vec4f,   // invariant: the highlight pass reproduces the exact depth
     @location(0) world: vec3f,
     @location(1) normal: vec3f,
+    @location(2) @interpolate(flat) instance: u32,
 };
 
 @vertex
@@ -71,8 +64,19 @@ fn vs_main(@location(0) position: vec3f, @location(1) normal: vec3f,
     let b = m[1].xyz;
     let c = m[2].xyz;
     out.normal = mat3x3f(cross(b, c), cross(c, a), cross(a, b)) * normal * sign(dot(a, cross(b, c)));
+    out.instance = i;
     return out;
 }
+"""
+
+SHADING_WGSL = """
+struct Material {
+    base_color: vec4f,   // rgb (linear)
+    specular: vec4f,     // rgb = specular colour, w = shininess
+    pbr: vec4f,          // x = metallic, y = roughness, z = ambient, w = toon bands
+    emissive: vec4f,     // rgb
+};
+@group(1) @binding(0) var<uniform> material: Material;
 
 fn environment(dir: vec3f) -> vec3f {   // the scene's sky/ground hemisphere, for reflections
     return mix(frame.ground.rgb, frame.sky.rgb, clamp(dir.z * 0.5 + 0.5, 0.0, 1.0));
@@ -89,6 +93,27 @@ fn surface(in: VsOut) -> Surface {
     return Surface(normalize(in.normal), v, frame.light_dir.xyz);
 }
 """
+COMMON_WGSL = VERTEX_WGSL + SHADING_WGSL  # what every shading model's fragment shader is appended to
+
+PICK_WGSL = """
+struct PickId { batch: vec4u };   // x = batch index + 1 (0 = nothing)
+@group(1) @binding(0) var<uniform> pick: PickId;
+
+@fragment
+fn fs_main(in: VsOut) -> @location(0) vec4u {
+    return vec4u(pick.batch.x, in.instance, bitcast<u32>(in.pos.z), 1u);
+}
+"""
+PICK_FORMAT = "rgba32uint"  # (batch + 1, instance, depth bits, 1)
+
+
+class Pick(NamedTuple):
+    """What is under a pixel: the batch (index into ``scene.batches()``), the instance, and the world point hit."""
+
+    batch_index: int
+    instance_index: int
+    source: object  # the Instances (or None for a plain tuple batch)
+    world_point: np.ndarray
 
 POST_WGSL = """
 @group(0) @binding(0) var scene_tex: texture_2d<f32>;
@@ -346,6 +371,80 @@ class Renderer:
     def spheres(self, material: Material, label: str | None = None, info=None) -> Spheres:
         """New instanced batch of unit spheres with ``material`` (call ``.set(centers, radii)``)."""
         return Spheres(self.device, self.instance_layout, self.sphere, material, label, info)
+
+    def _pick_setup(self):
+        """The picking pipeline and its layouts, made on first use."""
+        if getattr(self, "_pick_pipeline", None) is None:
+            d = self.device
+            self._pick_layout = d.create_bind_group_layout(entries=[{
+                "binding": 0, "visibility": wgpu.ShaderStage.FRAGMENT, "buffer": {"type": "uniform"}}])
+            module = d.create_shader_module(code=VERTEX_WGSL + PICK_WGSL)
+            self._pick_pipeline = d.create_render_pipeline(
+                layout=d.create_pipeline_layout(
+                    bind_group_layouts=[self.frame_layout, self._pick_layout, self.instance_layout]),
+                vertex={"module": module, "entry_point": "vs_main", "buffers": [VERTEX_LAYOUT]},
+                primitive={"topology": "triangle-list", "cull_mode": "back"},
+                depth_stencil={"format": DEPTH_FORMAT, "depth_write_enabled": True, "depth_compare": "greater"},
+                fragment={"module": module, "entry_point": "fs_main", "targets": [{"format": PICK_FORMAT}]},
+            )
+            self._pick_ids: list = []  # bind group per batch index, holding that index + 1
+            self._pick_targets = None
+
+    def _pick_id(self, i: int):
+        while len(self._pick_ids) <= i:
+            n = len(self._pick_ids)
+            buf = self.device.create_buffer_with_data(data=np.array([n + 1, 0, 0, 0], np.uint32),
+                                                      usage=wgpu.BufferUsage.UNIFORM)
+            self._pick_ids.append(self.device.create_bind_group(
+                layout=self._pick_layout, entries=[{"binding": 0, "resource": {"buffer": buf}}]))
+        return self._pick_ids[i]
+
+    def pick(self, viewport: tuple[int, int, int, int], scene, camera: OrbitCamera, x: int, y: int) -> Pick | None:
+        """What ``scene`` shows at framebuffer pixel (x, y) inside ``viewport``, or None for the background.
+
+        Renders object ids into a 1-pixel scissor (cheap: vertex work only) and reads that pixel back.
+        Call after ``render`` with the same viewport and camera (it reuses the frame uniform).
+        """
+        vx, vy, vw, vh = viewport
+        px, py = int(x) - vx, int(y) - vy
+        if not (0 <= px < vw and 0 <= py < vh):
+            return None
+        self._pick_setup()
+        if self._pick_targets is None or self._pick_targets[0] != (vw, vh):
+            usage = wgpu.TextureUsage.RENDER_ATTACHMENT
+            ids = self.device.create_texture(size=(vw, vh, 1), format=PICK_FORMAT,
+                                             usage=usage | wgpu.TextureUsage.COPY_SRC)
+            depth = self.device.create_texture(size=(vw, vh, 1), format=DEPTH_FORMAT, usage=usage)
+            self._pick_targets = ((vw, vh), ids, depth)
+        _, ids, depth = self._pick_targets
+        batches = list(scene.batches())
+        encoder = self.device.create_command_encoder()
+        rpass = encoder.begin_render_pass(
+            color_attachments=[{"view": ids.create_view(), "clear_value": (0, 0, 0, 0),
+                                "load_op": "clear", "store_op": "store"}],
+            depth_stencil_attachment={"view": depth.create_view(), "depth_clear_value": 0.0,
+                                      "depth_load_op": "clear", "depth_store_op": "store"},
+        )
+        rpass.set_scissor_rect(px, py, 1, 1)
+        rpass.set_pipeline(self._pick_pipeline)
+        rpass.set_bind_group(0, self.frame_bg)
+        for i, b in enumerate(batches):
+            if b[3] > 0:
+                rpass.set_bind_group(1, self._pick_id(i))
+                rpass.set_bind_group(2, b[2])
+                b[1].draw(rpass, instances=b[3])
+        rpass.end()
+        self.device.queue.submit([encoder.finish()])
+        data = self.device.queue.read_texture({"texture": ids, "origin": (px, py, 0)},
+                                              {"bytes_per_row": 16}, (1, 1, 1))
+        batch1, instance, depth_bits, _ = np.frombuffer(data, np.uint32)[:4]
+        if batch1 == 0:
+            return None
+        z = float(np.array([depth_bits], np.uint32).view(np.float32)[0])
+        ndc = np.array([(px + 0.5) / vw * 2 - 1, 1 - (py + 0.5) / vh * 2, z, 1.0])
+        world = np.linalg.inv(camera.matrices(vw / vh)[0]) @ ndc
+        b = batches[batch1 - 1]
+        return Pick(int(batch1) - 1, int(instance), getattr(b, "source", None), world[:3] / world[3])
 
     def _scene_targets(self, w: int, h: int):
         if self._targets is None or self._targets[0] != (w, h):

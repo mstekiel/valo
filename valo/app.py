@@ -1,8 +1,11 @@
 """The Viewer: a rendercanvas canvas (glfw window, or offscreen for tests) + device + Renderer + camera
-+ Dear ImGui, with mouse navigation. Apps hand it a scene (anything with ``batches()``) and an Editor."""
++ Dear ImGui with docking, and mouse navigation. Apps hand it a scene (anything with ``batches()``) and an
+Editor; the scene is drawn into the editor's empty central dock node."""
 
 from __future__ import annotations
 
+import re
+from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
@@ -11,7 +14,7 @@ from imgui_bundle import imgui
 from wgpu.utils.imgui import ImguiRenderer
 
 from .render import OrbitCamera, Renderer
-from .ui import PANEL_W, Editor
+from .ui import Editor
 from .ui_style import apply_style, load_fonts
 
 EMPTY_SCENE = SimpleNamespace(batches=list)
@@ -23,7 +26,12 @@ def get_device() -> tuple[wgpu.GPUAdapter, wgpu.GPUDevice]:
 
 
 class Viewer:
-    def __init__(self, canvas=None, title: str = "valo", size: tuple[int, int] = (1360, 800)):
+    def __init__(self, canvas=None, title: str = "valo", size: tuple[int, int] = (1360, 800), layout_file="auto"):
+        """``layout_file``: where the dock layout is saved; "auto" = ``~/.valo/<title>.ini`` for a window and
+        nothing for a canvas passed in (tests, embedding); None = never saved."""
+        if layout_file == "auto":
+            slug = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-") or "valo"
+            layout_file = Path.home() / ".valo" / f"{slug}.ini" if canvas is None else None
         if canvas is None:
             from rendercanvas.glfw import RenderCanvas
 
@@ -38,7 +46,13 @@ class Viewer:
         self.renderer = Renderer(self.device, surface_format)
         self.camera = OrbitCamera()
         self.imgui = ImguiRenderer(self.device, canvas)  # uses the format configured above
-        load_fonts()  # into the ImGui context the renderer just made current
+        io = imgui.get_io()  # of the context the renderer just made current
+        io.config_flags |= imgui.ConfigFlags_.docking_enable
+        if layout_file:
+            Path(layout_file).parent.mkdir(parents=True, exist_ok=True)
+        self.layout_file = Path(layout_file) if layout_file else None
+        io.set_ini_filename(str(layout_file) if layout_file else None)  # (don't read it back: NULL crashes)
+        load_fonts()
         apply_style()
         self.scene, self.editor = EMPTY_SCENE, None
         self.viewport = (0, 0, 1, 1)  # (x, y, w, h) of the scene in framebuffer pixels
@@ -47,7 +61,7 @@ class Viewer:
         canvas.request_draw(self.draw)
 
     def show(self, scene, editor: Editor | None = None) -> None:
-        """Draw ``scene`` from now on, with ``editor``'s panel (if any) on the right."""
+        """Draw ``scene`` from now on, with ``editor``'s windows (if any) docked around it."""
         self.scene, self.editor = scene, editor
         if editor:
             self.imgui.set_gui(editor.gui)
@@ -65,12 +79,23 @@ class Viewer:
         ed = self.editor
         if ed and ed.auto_rotate:
             self.camera.azimuth = (self.camera.azimuth + 0.4) % 360
-        panel_px = int(PANEL_W * self.canvas.get_pixel_ratio()) if ed and ed.docked else 0
+        for _ in range(3):  # the layout is known only after the ImGui frame: redraw if the scene rect moved
+            self.viewport = self._scene_viewport(texture)
+            self.renderer.render(texture, self.viewport, self.scene, self.camera)
+            if not ed:
+                return
+            self.imgui.render()  # windows on top of the same texture
+            if self._scene_viewport(texture) == self.viewport:
+                return
+
+    def _scene_viewport(self, texture) -> tuple[int, int, int, int]:
+        """The editor's central dock node in framebuffer pixels (the whole window before the first layout)."""
         w, h = texture.size[:2]
-        self.viewport = (0, 0, max(w - panel_px, 1), h)
-        self.renderer.render(texture, self.viewport, self.scene, self.camera)
-        if ed:
-            self.imgui.render()  # panel on top of the same texture
+        if not (self.editor and self.editor.scene_rect):
+            return 0, 0, w, h
+        r = self.canvas.get_pixel_ratio()
+        x, y, rw, rh = (int(round(c * r)) for c in self.editor.scene_rect)
+        return x, y, max(rw, 1), max(rh, 1)
 
     @property
     def viewport_width(self) -> int:
@@ -82,8 +107,14 @@ class Viewer:
         return image[y : y + h, x : x + w]
 
     def on_pointer(self, event: dict) -> None:
-        if imgui.get_io().want_capture_mouse:  # the panel has the mouse
+        imgui.set_current_context(self.imgui.imgui_context)
+        if imgui.get_io().want_capture_mouse:  # a window or the menu has the mouse
             return
+        rect = self.editor.scene_rect if self.editor else None
+        if event["event_type"] in ("pointer_down", "wheel") and rect:
+            x, y, w, h = rect
+            if not (x <= event["x"] < x + w and y <= event["y"] < y + h):
+                return
         cam, kind = self.camera, event["event_type"]
         if kind == "pointer_down" and event.get("button") == 1:
             self._drag = (event["x"], event["y"], cam.azimuth, cam.elevation)

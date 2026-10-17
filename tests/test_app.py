@@ -114,3 +114,23 @@ def test_scene_renders_into_an_offset_viewport_rect(viewer):
     inside[50:200, 100:300] = True
     assert img[inside].min() > 150  # the bright sphere covers the rect
     assert img[~inside].max() < 60  # the window background everywhere else
+
+
+def test_scene_fills_the_central_dock_node_and_windows_dock_around_it(viewer):
+    from imgui_bundle import imgui
+
+    from valo import Editor
+
+    class Two(Editor):
+        def windows(self):
+            return {"A": lambda: imgui.text("a"), "B": lambda: imgui.text("b")}
+
+    editor = Two()
+    viewer.show(SimpleNamespace(batches=list), editor)
+    snap(viewer)
+    x, y, w, h = viewer.viewport
+    assert x == 0 and 0 < y < 60  # below the menu bar
+    assert 0.6 < w / viewer.canvas.get_physical_size()[0] < 0.8  # right column takes the rest
+    assert y + h == viewer.canvas.get_physical_size()[1]
+    assert set(editor.visible) == {"A", "B", "History"} and all(editor.visible.values())
+    assert viewer.layout_file is None  # offscreen canvas: never writes a layout file

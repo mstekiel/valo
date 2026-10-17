@@ -18,7 +18,7 @@ SHAPES = [
     ("sphere", meshes.sphere(), "pbr", {"base_color": (0.85, 0.62, 0.12), "roughness": 0.35}),
     ("icosphere", meshes.icosphere(), "blinn_phong", {"base_color": (0.12, 0.55, 0.12), "shininess": 64.0}),
     ("cube", meshes.cube(), "pbr", {"base_color": (1.0, 0.71, 0.29), "metallic": 1.0, "roughness": 0.3}),
-    ("cylinder", meshes.cylinder(), "lambert", {"base_color": (0.7, 0.2, 0.2), "ambient": 0.2}),
+    ("cylinder", meshes.cylinder(), "lambert", {"base_color": (0.7, 0.2, 0.2)}),
     ("cone", meshes.cone(), "toon", {"base_color": (0.08, 0.25, 0.75), "bands": 3}),
     ("torus", meshes.torus(), "pbr", {"base_color": (0.9, 0.9, 0.92), "metallic": 1.0, "roughness": 0.15}),
     ("capsule", meshes.capsule(), "blinn_phong", {"base_color": (0.6, 0.3, 0.7), "shininess": 32.0}),

@@ -55,7 +55,7 @@ class Crystal:
             sodium, chlorine,
             new("Gold", "pbr", base_color=(1.0, 0.71, 0.29), metallic=1.0, roughness=0.3),
             new("Toon blue", "toon", base_color=(0.08, 0.25, 0.75), bands=3),
-            new("Matte white", "lambert", base_color=(0.8, 0.8, 0.8), ambient=0.25),
+            new("Matte white", "lambert", base_color=(0.8, 0.8, 0.8)),
         ]
         self.species = [Species("A (Na)", 0.30, renderer.spheres(sodium)),
                         Species("B (Cl)", 0.42, renderer.spheres(chlorine))]

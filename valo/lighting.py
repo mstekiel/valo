@@ -13,9 +13,11 @@ Angles say where the light comes FROM, in degrees:
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
+
+from .config import rc
 
 MODES = ("headlight", "fixed")
 
@@ -31,14 +33,15 @@ def _camera_basis(camera) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
 @dataclass
 class Lighting:
     """The scene's directional light (headlight or fixed) and its global hemisphere ambient."""
-    mode: str = "headlight"
-    azimuth: float = -30.0
-    elevation: float = 30.0
-    color: tuple = (1.0, 1.0, 1.0)  # linear RGB
-    intensity: float = 1.0
-    sky: tuple = (0.55, 0.62, 0.72)  # hemisphere ambient: colour from above (linear), also the reflected sky
-    ground: tuple = (0.10, 0.09, 0.08)  # ...and from below
-    ambient: float = 0.3  # ambient intensity; each material scales it by its own `ambient`
+    # Defaults come from rc.lighting at construction time.
+    mode: str = field(default_factory=lambda: rc.lighting.mode)
+    azimuth: float = field(default_factory=lambda: rc.lighting.azimuth)
+    elevation: float = field(default_factory=lambda: rc.lighting.elevation)
+    color: tuple = field(default_factory=lambda: rc.lighting.color)  # linear RGB
+    intensity: float = field(default_factory=lambda: rc.lighting.intensity)
+    sky: tuple = field(default_factory=lambda: rc.lighting.sky)  # ambient from above (linear), also the reflected sky
+    ground: tuple = field(default_factory=lambda: rc.lighting.ground)  # ...and from below
+    ambient: float = field(default_factory=lambda: rc.lighting.ambient)  # each material scales it by its `ambient`
 
     def direction(self, camera) -> np.ndarray:
         """Unit world vector pointing toward the light."""

@@ -20,6 +20,7 @@ import numpy as np
 from imgui_bundle import imgui
 
 from .. import meshes
+from ..config import rc
 from ..geometry import instance_matrices
 from ..meshes import library
 from ..meshes.sculpt import IDENTITY, Sculpt
@@ -28,8 +29,6 @@ from ..ui import Editor
 from ..ui_style import ICON, mono_font
 from ..undo import Command
 
-POLL_S = 0.3  # how often the sculpt file's mtime is checked
-MAX_NORMAL_ARROWS = 2000
 ERROR_COLOR = imgui.ImVec4(1.0, 0.45, 0.4, 1.0)
 
 
@@ -53,11 +52,11 @@ class SculptScene:
         self.update_normals()
 
     def update_normals(self) -> None:
-        """Rebuild the normals overlay arrows (at most MAX_NORMAL_ARROWS) at the current length."""
+        """Rebuild the normals overlay arrows (at most ``rc.sculptor.max_normal_arrows``) at the current length."""
         if self.data is None:
             return
         p, n = self.data.positions, self.data.normals
-        pick = np.linspace(0, len(p) - 1, min(len(p), MAX_NORMAL_ARROWS)).astype(int)
+        pick = np.linspace(0, len(p) - 1, min(len(p), rc.sculptor.max_normal_arrows)).astype(int)
         length = self.normal_length
         w = np.full(len(pick), 0.12 * length)
         self.arrows.set(instance_matrices(p[pick], np.c_[w, w, np.full(len(pick), length)], z_axis=n[pick]))
@@ -130,7 +129,7 @@ class SculptorEditor(Editor):
     def poll(self) -> None:
         """Hot reload: re-read the file when its modification time changes."""
         now = time.monotonic()
-        if now - self._polled < POLL_S:
+        if now - self._polled < rc.sculptor.poll_s:
             return
         self._polled = now
         try:

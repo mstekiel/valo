@@ -15,7 +15,8 @@ from collections.abc import Callable
 from imgui_bundle import imgui
 from imgui_bundle.imgui import internal
 
-from .lighting import MODES, Lighting
+from .config import rc
+from .lighting import MODES
 from .materials import SCHEMA, SHADINGS, Material, linear_to_srgb, srgb_to_linear
 from .render import PROJECTIONS, VIEWS
 from .ui_style import ICON, apply_style
@@ -28,16 +29,16 @@ SHARED_WINDOWS = ("Camera", "Lighting", "History")  # added by the base class, d
 class Editor:
     """Base class for an app's editor: undoable actions, dockable windows and the shared UI."""
     title = "valo"
-    right_column = 0.3  # share of the window width for the right dock column
+    right_column: float | None = None  # share of the window width for the right dock column (None: rc.ui)
     dock_bottom: tuple[str, ...] = ()  # app windows docked under the right column, before the shared ones
-    bottom_share = 0.42  # height share of that lower part (Camera, Lighting, History live there)
+    bottom_share: float | None = None  # height share of that lower part (None: rc.ui)
 
     def __init__(self):
         self.undo_stack = UndoStack()
         self.auto_rotate = False
         self.viewer = None  # set by Viewer.show(): camera, lighting and scene
         self._ground_before_flat: tuple | None = None  # restored when Flat ambient is switched off
-        self.ui_scale = 1.0
+        self.ui_scale = rc.ui.scale
         self.visible: dict[str, bool] = {}
         self.scene_rect: tuple[float, float, float, float] | None = None  # central dock node, logical pixels
         self._focus: list[str] = []  # windows to focus next frame (the first tab of each dock node)
@@ -180,7 +181,7 @@ class Editor:
             self._ground_before_flat = tuple(light.ground)
             self.set_flat_ambient(light.sky)
         else:
-            ground = self._ground_before_flat or Lighting.ground
+            ground = self._ground_before_flat or rc.lighting.ground
             if tuple(ground) == tuple(light.sky):  # e.g. it started flat: any distinct ground will do
                 ground = tuple(0.2 * c for c in light.sky)
             self.set_light("ground", ground)
@@ -334,8 +335,9 @@ class Editor:
             dock_id, imgui.DockNodeFlags_.passthru_central_node | internal.DockNodeFlagsPrivate_.dock_space)
         viewport = imgui.get_main_viewport()
         internal.dock_builder_set_node_size(dock_id, viewport.work_size)
-        _, right, _ = internal.dock_builder_split_node_py(dock_id, imgui.Dir.right, self.right_column)
-        _, bottom, top = internal.dock_builder_split_node_py(right, imgui.Dir.down, self.bottom_share)
+        column, lower = self.right_column or rc.ui.right_column, self.bottom_share or rc.ui.bottom_share
+        _, right, _ = internal.dock_builder_split_node_py(dock_id, imgui.Dir.right, column)
+        _, bottom, top = internal.dock_builder_split_node_py(right, imgui.Dir.down, lower)
         for name in names:
             internal.dock_builder_dock_window(name, bottom if self._in_bottom(name) else top)
         internal.dock_builder_finish(dock_id)

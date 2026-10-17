@@ -190,3 +190,12 @@ def test_rc_context_restores_everything():
         assert rc.camera.fov == 60.0 and rc.highlight.strength == 1.0
         rc.ui.scale = 2.0
     assert dict(rc.items()) == before
+
+
+def test_lighting_defaults_come_from_rc():
+    from valo import Lighting, rc_context
+
+    with rc_context({"lighting.mode": "fixed", "lighting.ambient": 0.7}):
+        light = Lighting()
+    assert (light.mode, light.ambient) == ("fixed", 0.7)
+    assert Lighting().mode == "headlight"

@@ -14,17 +14,19 @@ import imgui_bundle
 from imgui_bundle import icons_fontawesome_6 as fa
 from imgui_bundle import imgui
 
+from .config import rc
+
 FONT_DIR = Path(imgui_bundle.__file__).parent / "assets" / "fonts"
 UI_FONT = FONT_DIR / "Roboto" / "Roboto-Regular.ttf"
 ICON_FONT = FONT_DIR / "Font_Awesome_6_Free-Solid-900.otf"
 MONO_FONT = FONT_DIR / "Inconsolata-Medium.ttf"
-FONT_SIZE = 16.0  # logical pixels
 
 # ICON.FLOPPY_DISK == fa.ICON_FA_FLOPPY_DISK, etc.
 ICON = SimpleNamespace(**{k.removeprefix("ICON_FA_"): v for k, v in vars(fa).items() if k.startswith("ICON_FA_")})
 
-def load_fonts(size: float = FONT_SIZE) -> None:
+def load_fonts(size: float | None = None) -> None:
     """Into the current ImGui context: Roboto with Font Awesome icons merged in (the default) + Inconsolata."""
+    size = size or rc.ui.font_size
     io = imgui.get_io()
     ui = io.fonts.add_font_from_file_ttf(str(UI_FONT), size)
     icons = imgui.ImFontConfig()
@@ -43,22 +45,24 @@ def mono_font() -> imgui.ImFont:
 
 
 # Theme: neutral greys, one blue accent. sRGB 0–255; alpha 0–1.
-ACCENT = (66, 133, 244)
-PALETTE = {
-    "text": (225, 227, 230), "text_disabled": (128, 132, 138),
-    "window_bg": (30, 31, 34), "child_bg": (30, 31, 34), "popup_bg": (36, 37, 41),
-    "menu_bar_bg": (24, 25, 27), "title_bg": (24, 25, 27), "title_bg_active": (24, 25, 27),
-    "title_bg_collapsed": (24, 25, 27), "border": (52, 54, 58), "separator": (52, 54, 58),
-    "frame_bg": (44, 46, 50), "frame_bg_hovered": (54, 57, 62), "frame_bg_active": (62, 66, 72),
-    "button": (50, 53, 58), "button_hovered": (62, 66, 72), "button_active": ACCENT,
-    "header": (50, 53, 58), "header_hovered": (62, 66, 72), "header_active": ACCENT,
-    "check_mark": ACCENT, "slider_grab": ACCENT, "slider_grab_active": (110, 160, 250),
-    "tab": (30, 31, 34), "tab_hovered": (62, 66, 72), "tab_selected": (44, 46, 50),
-    "tab_selected_overline": ACCENT, "tab_dimmed": (30, 31, 34), "tab_dimmed_selected": (40, 41, 45),
-    "scrollbar_bg": (30, 31, 34), "scrollbar_grab": (58, 61, 66), "scrollbar_grab_hovered": (74, 78, 84),
-    "scrollbar_grab_active": (90, 94, 100), "resize_grip": (0, 0, 0, 0), "docking_preview": (*ACCENT, 0.5),
-    "docking_empty_bg": (0, 0, 0, 0), "text_selected_bg": (*ACCENT, 0.35), "nav_cursor": ACCENT,
-}
+def _palette(accent) -> dict:
+    """The theme's colours, with ``accent`` (sRGB 0-255) for highlights."""
+    a = tuple(accent)
+    return {
+        "text": (225, 227, 230), "text_disabled": (128, 132, 138),
+        "window_bg": (30, 31, 34), "child_bg": (30, 31, 34), "popup_bg": (36, 37, 41),
+        "menu_bar_bg": (24, 25, 27), "title_bg": (24, 25, 27), "title_bg_active": (24, 25, 27),
+        "title_bg_collapsed": (24, 25, 27), "border": (52, 54, 58), "separator": (52, 54, 58),
+        "frame_bg": (44, 46, 50), "frame_bg_hovered": (54, 57, 62), "frame_bg_active": (62, 66, 72),
+        "button": (50, 53, 58), "button_hovered": (62, 66, 72), "button_active": a,
+        "header": (50, 53, 58), "header_hovered": (62, 66, 72), "header_active": a,
+        "check_mark": a, "slider_grab": a, "slider_grab_active": (110, 160, 250),
+        "tab": (30, 31, 34), "tab_hovered": (62, 66, 72), "tab_selected": (44, 46, 50),
+        "tab_selected_overline": a, "tab_dimmed": (30, 31, 34), "tab_dimmed_selected": (40, 41, 45),
+        "scrollbar_bg": (30, 31, 34), "scrollbar_grab": (58, 61, 66), "scrollbar_grab_hovered": (74, 78, 84),
+        "scrollbar_grab_active": (90, 94, 100), "resize_grip": (0, 0, 0, 0), "docking_preview": (*a, 0.5),
+        "docking_empty_bg": (0, 0, 0, 0), "text_selected_bg": (*a, 0.35), "nav_cursor": a,
+    }
 
 
 def apply_style(scale: float = 1.0) -> None:
@@ -68,7 +72,7 @@ def apply_style(scale: float = 1.0) -> None:
     call it again to change the scale.
     """
     style = imgui.get_style()
-    for key, rgba in PALETTE.items():
+    for key, rgba in _palette(rc.ui.accent).items():
         r, g, b, *a = rgba
         style.set_color_(getattr(imgui.Col_, key), imgui.ImVec4(r / 255, g / 255, b / 255, a[0] if a else 1.0))
 

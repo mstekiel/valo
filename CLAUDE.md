@@ -59,11 +59,27 @@ Apps built on it live in `examples/`. Design and extension points: `ARCHITECTURE
    Ruff's `D1` rules enforce it; tests and saved library entries are exempt. Private helpers (`_name`) get one
    when the code isn't obvious.
 
+## Testing (enough to trust a change, no more)
+
+1. Test behaviour through the public entry point: the function, or the `Editor` action the UI calls. Assert a
+   result, not just that the code ran.
+2. A bug fix comes with a test that fails without the fix. Check it once by reverting the fix.
+3. Every new `Editor` action gets a row in an undo table (`EDITOR_ACTIONS` in `tests/test_app.py` for shared
+   actions, the app's own test otherwise). It must change state, undo exactly (state and image) and redo.
+4. Where tests go:
+   - pure engine code → `tests/test_core.py`, meshes and sculpts → `tests/test_meshes.py`;
+   - offscreen GPU → `tests/test_app.py` and `tests/test_sculptor.py` (share the module-scoped `viewer`, use
+     `viewer.snapshot()`);
+   - apps → `examples/<name>/test_*.py`.
+5. Prefer `parametrize` or a table over copied tests. No tests of ImGui widget layout, and no golden images
+   (GPU drivers differ): compare images only with each other (changed / restored exactly).
+6. Keep the whole suite under ~30 s. Every public function should be called by some test; `main()` / `run()`
+   (they need a real window) are the exceptions.
+
 ## Workflow for a feature request
 
 1. For anything touching more than one module, use plan mode first and show the plan.
-2. Write or extend a test: engine → `tests/test_core.py` (pure) or `tests/test_app.py` (offscreen);
-   app → `examples/<name>/test_*.py`.
+2. Write or extend a test (see Testing).
 3. Implement. Run `uv run ruff check --fix . && uv run pytest` until green.
 4. If the change is visual, render offscreen and look at the image before saying it's done.
 5. Commit with a short conventional message (`feat:`, `fix:`, `refactor:`, `test:`, `docs:`). Never push.

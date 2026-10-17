@@ -9,6 +9,7 @@ RANGES = {"amplitude": (0.0, 0.5), "frequency": (0.5, 20.0), "resolution": (8, 2
 
 
 def mesh(amplitude: float = 0.12, frequency: float = 9.0, damping: float = 2.0, resolution: int = 96):
+    """A damped circular ripple on a 2 × 2 sheet."""
     def z(x, y):
         r = np.hypot(x, y)
         return amplitude * np.cos(frequency * r) * np.exp(-damping * r)

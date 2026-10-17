@@ -56,13 +56,16 @@ class Gallery:
         self.items.append(("floor", floor))
 
     def batches(self):
+        """One batch per item: each shape, the ring of arrows and the floor."""
         return [inst.batch() for _, inst in self.items]
 
     def bounding_radius(self) -> float:
+        """Radius that fits the whole gallery."""
         return 4.8
 
 
 class GalleryEditor(Editor):
+    """Shape picker plus a material editor for the picked shape."""
     title = "Mesh gallery"
     dock_bottom = ("Material",)  # under the shape list, with Camera, Lighting and History
     bottom_share = 0.6
@@ -75,9 +78,11 @@ class GalleryEditor(Editor):
             self.watch(inst.material)
 
     def windows(self):
+        """Shapes and Material windows."""
         return {"Shapes": self.shapes_window, "Material": self.material_window}
 
     def shapes_window(self) -> None:
+        """Selectable list of the gallery's items with instance and triangle counts."""
         for i, (name, inst) in enumerate(self.gallery.items):
             if imgui.selectable(name, i == self.selected)[0]:
                 self.selected = i
@@ -85,11 +90,13 @@ class GalleryEditor(Editor):
             imgui.text_disabled(f"{inst.count} x {inst.mesh.count // 3} tris")
 
     def material_window(self) -> None:
+        """Material editor for the selected item."""
         name, inst = self.gallery.items[self.selected]
         imgui.text(name)
         self.material_section(inst.material)
 
 def build(viewer: Viewer) -> GalleryEditor:
+    """Build the gallery and its editor and show them in ``viewer``; returns the editor."""
     gallery = Gallery(viewer.renderer)
     editor = GalleryEditor(gallery)
     viewer.show(gallery, editor)
@@ -98,6 +105,7 @@ def build(viewer: Viewer) -> GalleryEditor:
 
 
 def main() -> None:
+    """Run the mesh gallery in a window."""
     viewer = Viewer(title="Mesh gallery")
     build(viewer)
     viewer.run()

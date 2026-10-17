@@ -22,11 +22,13 @@ EMPTY_SCENE = SimpleNamespace(batches=list)
 
 
 def get_device() -> tuple[wgpu.GPUAdapter, wgpu.GPUDevice]:
+    """The high-performance GPU adapter and a device on it."""
     adapter = wgpu.gpu.request_adapter_sync(power_preference="high-performance")
     return adapter, adapter.request_device_sync()
 
 
 class Viewer:
+    """A window (or offscreen canvas) that renders a scene with an Editor's dockable windows around it."""
     def __init__(self, canvas=None, title: str = "valo", size: tuple[int, int] = (1360, 800), layout_file="auto"):
         """``layout_file``: where the dock layout is saved; "auto" = ``~/.valo/<title>.ini`` for a window and
         nothing for a canvas passed in (tests, embedding); None = never saved."""
@@ -73,12 +75,14 @@ class Viewer:
             self.camera.fit(scene.bounding_radius())
 
     def run(self) -> None:
+        """Open the window and run the event loop until it is closed."""
         from rendercanvas.glfw import loop
 
         print(f"adapter: {self.adapter.info['device']} ({self.adapter.info['backend_type']})")
         loop.run()
 
     def draw(self) -> None:
+        """Render one frame: the scene into the central dock node, then the ImGui windows on top."""
         texture = self.context.get_current_texture()
         ed = self.editor
         if ed and ed.auto_rotate:
@@ -103,6 +107,7 @@ class Viewer:
 
     @property
     def viewport_width(self) -> int:
+        """Width of the scene viewport in framebuffer pixels."""
         return self.viewport[2]
 
     def crop(self, image):
@@ -117,6 +122,7 @@ class Viewer:
             imgui.save_ini_settings_to_disk(str(self.layout_file))
 
     def on_pointer(self, event: dict) -> None:
+        """Orbit with left-drag and zoom with the wheel, when the pointer is over the scene."""
         imgui.set_current_context(self.imgui.imgui_context)
         if imgui.get_io().want_capture_mouse:  # a window or the menu has the mouse
             return

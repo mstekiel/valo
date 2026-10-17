@@ -121,12 +121,14 @@ VERTEX_LAYOUT = {
 
 
 class GpuMesh:
+    """A MeshData uploaded to vertex and index buffers."""
     def __init__(self, device, data: MeshData):
         self.vb = device.create_buffer_with_data(data=data.vertices, usage=wgpu.BufferUsage.VERTEX)
         self.ib = device.create_buffer_with_data(data=data.indices, usage=wgpu.BufferUsage.INDEX)
         self.count = len(data.indices)
 
     def draw(self, rpass, instances: int = 1):
+        """Draw the mesh ``instances`` times in the current render pass."""
         rpass.set_vertex_buffer(0, self.vb)
         rpass.set_index_buffer(self.ib, wgpu.IndexFormat.uint32)
         rpass.draw_indexed(self.count, instances)
@@ -141,6 +143,7 @@ VIEWS = {  # name → (azimuth, elevation): looking from that side toward the ta
 
 @dataclass
 class OrbitCamera:
+    """A camera orbiting ``target`` at ``distance``, with a perspective or orthographic projection."""
     azimuth: float = -55.0
     elevation: float = 25.0
     distance: float = 14.0
@@ -150,6 +153,7 @@ class OrbitCamera:
     ortho_height: float = 10.0  # world units visible vertically in orthographic mode
 
     def eye(self) -> np.ndarray:
+        """Camera position in world space."""
         az, el = math.radians(self.azimuth), math.radians(self.elevation)
         return np.asarray(self.target, float) + self.distance * np.array(
             [math.cos(el) * math.cos(az), math.cos(el) * math.sin(az), math.sin(el)])
@@ -160,11 +164,13 @@ class OrbitCamera:
         return f / np.linalg.norm(f)
 
     def projection_matrix(self, aspect: float) -> np.ndarray:
+        """Projection matrix for the current projection mode (reversed-Z)."""
         if self.projection == "orthographic":  # the whole scene, even behind the eye, fits in depth
             return orthographic_reversed_z(self.ortho_height, aspect, -3 * self.distance, 5 * self.distance)
         return perspective_reversed_z(self.fovy, aspect)
 
     def matrices(self, aspect: float):
+        """(view-projection matrix, eye position) for a viewport of the given aspect ratio."""
         eye = self.eye()
         return self.projection_matrix(aspect) @ look_at(eye, self.target), eye
 
@@ -223,6 +229,7 @@ class Instances:
         self.device.queue.write_buffer(self.buffer, 0, data)
 
     def batch(self):
+        """The (material, mesh, bind group, count) tuple a scene's ``batches()`` returns for these instances."""
         return self.material, self.mesh, self.bind_group, self.count
 
 
@@ -290,9 +297,11 @@ class Renderer:
         return self._meshes[data]
 
     def instances(self, mesh: MeshData, material: Material) -> Instances:
+        """New instanced batch of ``mesh`` with ``material`` (call ``.set(matrices)`` to place them)."""
         return Instances(self.device, self.instance_layout, self.mesh(mesh), material)
 
     def spheres(self, material: Material) -> Spheres:
+        """New instanced batch of unit spheres with ``material`` (call ``.set(centers, radii)``)."""
         return Spheres(self.device, self.instance_layout, self.sphere, material)
 
     def _scene_targets(self, w: int, h: int):

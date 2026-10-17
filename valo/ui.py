@@ -26,6 +26,7 @@ SHARED_WINDOWS = ("Camera", "Lighting", "History")  # added by the base class, d
 
 
 class Editor:
+    """Base class for an app's editor: undoable actions, dockable windows and the shared UI."""
     title = "valo"
     right_column = 0.3  # share of the window width for the right dock column
     dock_bottom: tuple[str, ...] = ()  # app windows docked under the right column, before the shared ones
@@ -51,9 +52,11 @@ class Editor:
                                      merge_key=(id(m), key)))
 
     def set_param(self, m: Material, key, value) -> None:
+        """Set material parameter ``key`` (undoable once the material is watched)."""
         m.set(key, value)
 
     def reset(self, m: Material) -> None:
+        """Reset every parameter of ``m``'s shading model to its default."""
         for s in SCHEMA[m.shading]:
             self.set_param(m, s.key, s.default)
 
@@ -71,6 +74,7 @@ class Editor:
 
     # -- shared widgets
     def material_section(self, m: Material) -> None:
+        """Shading picker and schema-driven parameter widgets for material ``m``."""
         changed, si = imgui.combo("Shading", SHADINGS.index(m.shading), SHADINGS)
         if changed:
             self.set_param(m, "shading", SHADINGS[si])
@@ -112,11 +116,13 @@ class Editor:
         self.undo_stack.push(Command(label, restore(old), restore(new), merge_key=merge_key))
 
     def set_projection(self, projection: str) -> None:
+        """Switch the camera between perspective and orthographic (undoable)."""
         cam = self.viewer.camera
         self._record(f"camera: {projection}", cam, ("projection", "distance", "ortho_height"),
                      lambda: cam.set_projection(projection))
 
     def set_fov(self, degrees: float) -> None:
+        """Set the perspective field of view in degrees (undoable)."""
         cam = self.viewer.camera
         self._record("camera: field of view", cam, ("fovy",), lambda: setattr(cam, "fovy", float(degrees)),
                      merge_key=("camera", "fovy"))
@@ -131,6 +137,7 @@ class Editor:
         self._record(f"camera: view {name}", cam, ("azimuth", "elevation"), look)
 
     def fit_view(self) -> None:
+        """Move the camera so the whole scene fits (undoable)."""
         cam, scene = self.viewer.camera, self.viewer.scene
         if hasattr(scene, "bounding_radius"):
             self._record("camera: fit", cam, ("distance", "ortho_height"), lambda: cam.fit(scene.bounding_radius()))
@@ -142,6 +149,7 @@ class Editor:
         self._record(f"light: {key}", light, (key,), lambda: setattr(light, key, value), merge_key=("light", key))
 
     def set_light_mode(self, mode: str) -> None:
+        """Switch the light between headlight and fixed without moving it (undoable)."""
         light, cam = self.viewer.lighting, self.viewer.camera
         self._record(f"light: {mode}", light, ("mode", "azimuth", "elevation"), lambda: light.set_mode(mode, cam))
 
@@ -156,6 +164,7 @@ class Editor:
 
     # -- shared windows
     def camera_window(self) -> None:
+        """Projection, field of view, view presets, fit and auto-rotate."""
         cam = self.viewer.camera
         for p in PROJECTIONS:
             if imgui.radio_button(p.capitalize(), cam.projection == p):
@@ -183,6 +192,7 @@ class Editor:
         return changed, [srgb_to_linear(c) for c in col]
 
     def lighting_window(self) -> None:
+        """Light mode, direction, colour and intensity, and the global ambient."""
         light = self.viewer.lighting
         for m in MODES:
             if imgui.radio_button(m.capitalize(), light.mode == m):
@@ -223,6 +233,7 @@ class Editor:
             self.set_light("ambient", v)
 
     def history_window(self) -> None:
+        """Undo / redo buttons and the list of recorded edits."""
         stack = self.undo_stack
         imgui.begin_disabled(not stack.done)
         if imgui.button(f"{ICON.ROTATE_LEFT} Undo"):
@@ -242,6 +253,7 @@ class Editor:
 
     # -- frame
     def all_windows(self) -> dict[str, Callable[[], None]]:
+        """The app's windows plus the shared Camera, Lighting and History windows."""
         shared = {"Camera": self.camera_window, "Lighting": self.lighting_window} if self.viewer else {}
         return {**self.windows(), **shared, "History": self.history_window}
 
@@ -296,6 +308,7 @@ class Editor:
         internal.dock_builder_finish(dock_id)
 
     def reset_layout(self) -> None:
+        """Restore the default dock layout and show every window again."""
         self.visible.clear()
         self._layout = "force"
 
@@ -332,5 +345,6 @@ class Editor:
         imgui.end_main_menu_bar()
 
     def set_ui_scale(self, scale: float) -> None:
+        """Scale text and spacing of the whole UI."""
         self.ui_scale = scale
         apply_style(scale)

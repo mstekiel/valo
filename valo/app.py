@@ -5,6 +5,7 @@ Editor; the scene is drawn into the editor's empty central dock node."""
 from __future__ import annotations
 
 import re
+import time
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -13,6 +14,7 @@ import wgpu
 from imgui_bundle import imgui
 from wgpu.utils.imgui import ImguiRenderer
 
+from .config import rc
 from .lighting import Lighting
 from .render import OrbitCamera, Renderer
 from .ui import Editor
@@ -47,7 +49,7 @@ class Viewer:
         self.context.configure(device=self.device, format=surface_format)
 
         self.renderer = Renderer(self.device, surface_format)
-        self.camera = OrbitCamera()
+        self.camera = OrbitCamera(fovy=rc.camera.fov)
         self.lighting = Lighting()
         self.imgui = ImguiRenderer(self.device, canvas)  # uses the format configured above
         io = imgui.get_io()  # of the context the renderer just made current
@@ -57,10 +59,11 @@ class Viewer:
         self.layout_file = Path(layout_file) if layout_file else None
         io.set_ini_filename(str(layout_file) if layout_file else None)  # (don't read it back: NULL crashes)
         load_fonts()
-        apply_style()
+        apply_style(rc.ui.scale)
         self.scene, self.editor = EMPTY_SCENE, None
         self.viewport = (0, 0, 1, 1)  # (x, y, w, h) of the scene in framebuffer pixels
         self._drag = None
+        self._last_frame = time.perf_counter()
         canvas.add_event_handler(self.on_pointer, "pointer_down", "pointer_move", "pointer_up", "wheel")
         canvas.add_event_handler(self._on_close, "close")
         canvas.request_draw(self.draw)
@@ -85,8 +88,10 @@ class Viewer:
         """Render one frame: the scene into the central dock node, then the ImGui windows on top."""
         texture = self.context.get_current_texture()
         ed = self.editor
+        now = time.perf_counter()
+        dt, self._last_frame = min(now - self._last_frame, 0.1), now  # seconds, capped after a stall
         if ed and ed.auto_rotate:
-            self.camera.azimuth = (self.camera.azimuth + 0.4) % 360
+            self.camera.azimuth = (self.camera.azimuth + rc.camera.auto_rotate_speed * dt) % 360
         for _ in range(3):  # the layout is known only after the ImGui frame: redraw if the scene rect moved
             self.viewport = self._scene_viewport(texture)
             self.renderer.render(texture, self.viewport, self.scene, self.camera, self.lighting)
@@ -139,7 +144,8 @@ class Viewer:
             self._drag = None
         elif kind == "pointer_move" and self._drag:
             x0, y0, az0, el0 = self._drag
-            cam.azimuth = az0 - 0.4 * (event["x"] - x0)
-            cam.elevation = float(np.clip(el0 + 0.3 * (event["y"] - y0), -85, 85))
+            speed = rc.camera.orbit_speed
+            cam.azimuth = az0 - speed * (event["x"] - x0)
+            cam.elevation = float(np.clip(el0 + speed * (event["y"] - y0), -85, 85))
         elif kind == "wheel":
-            cam.zoom(1.0015 ** event["dy"])
+            cam.zoom(1.0015 ** (event["dy"] * rc.camera.zoom_speed))

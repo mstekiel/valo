@@ -277,7 +277,7 @@ def test_mouse_orbits_and_zooms_only_over_the_scene(viewer):
     viewer.on_pointer({"event_type": "wheel", "dy": 100, "x": outside[0], "y": outside[1]})
     assert (cam.azimuth, cam.elevation, cam.distance) == (az, el, dist)
     drag(inside, 50)
-    assert cam.azimuth == pytest.approx(az - 20) and cam.elevation == pytest.approx(el + 3)
+    assert cam.azimuth == pytest.approx(az - 20) and cam.elevation == pytest.approx(el + 4)  # 0.4 deg/px
     viewer.on_pointer({"event_type": "wheel", "dy": 100, "x": inside[0], "y": inside[1]})
     assert cam.distance > dist
     cam.set_projection("orthographic")
@@ -335,3 +335,18 @@ def test_flat_ambient_can_be_switched_off_again(viewer):
     editor.set_ambient_flat(False)
     assert light.ground != light.sky
     viewer.lighting = Lighting()
+
+
+def test_orbit_speed_comes_from_rc(viewer):
+    from valo import Editor, OrbitCamera, rc_context
+
+    viewer.camera = cam = OrbitCamera()
+    viewer.show(SimpleNamespace(batches=list), Editor())
+    viewer.snapshot()
+    x, y, w, h = viewer.editor.scene_rect
+    with rc_context({"camera.orbit_speed": 1.0}):
+        az = cam.azimuth
+        viewer.on_pointer({"event_type": "pointer_down", "button": 1, "x": x + w / 2, "y": y + h / 2})
+        viewer.on_pointer({"event_type": "pointer_move", "x": x + w / 2 + 30, "y": y + h / 2})
+        viewer.on_pointer({"event_type": "pointer_up", "x": x + w / 2 + 30, "y": y + h / 2})
+    assert cam.azimuth == pytest.approx(az - 30)

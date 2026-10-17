@@ -58,6 +58,7 @@ class Viewer:
         self.viewport = (0, 0, 1, 1)  # (x, y, w, h) of the scene in framebuffer pixels
         self._drag = None
         canvas.add_event_handler(self.on_pointer, "pointer_down", "pointer_move", "pointer_up", "wheel")
+        canvas.add_event_handler(self._on_close, "close")
         canvas.request_draw(self.draw)
 
     def show(self, scene, editor: Editor | None = None) -> None:
@@ -105,6 +106,12 @@ class Viewer:
         """The scene part of a full-window ``image`` (e.g. from an offscreen ``canvas.draw()``)."""
         x, y, w, h = self.viewport
         return image[y : y + h, x : x + w]
+
+    def _on_close(self, event: dict) -> None:
+        """ImGui saves the layout only every few seconds: save it once more on close."""
+        if self.layout_file:
+            imgui.set_current_context(self.imgui.imgui_context)
+            imgui.save_ini_settings_to_disk(str(self.layout_file))
 
     def on_pointer(self, event: dict) -> None:
         imgui.set_current_context(self.imgui.imgui_context)

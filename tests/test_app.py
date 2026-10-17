@@ -134,3 +134,17 @@ def test_scene_fills_the_central_dock_node_and_windows_dock_around_it(viewer):
     assert y + h == viewer.canvas.get_physical_size()[1]
     assert set(editor.visible) == {"A", "B", "History"} and all(editor.visible.values())
     assert viewer.layout_file is None  # offscreen canvas: never writes a layout file
+
+
+def test_layout_is_saved_on_close(tmp_path):
+    from rendercanvas.offscreen import RenderCanvas
+
+    from valo import Editor, Viewer
+
+    ini = tmp_path / "sub" / "layout.ini"
+    v = Viewer(RenderCanvas(size=(400, 300), pixel_ratio=1), layout_file=ini)
+    v.show(SimpleNamespace(batches=list), Editor())
+    v.canvas.draw()
+    assert not ini.exists()  # ImGui itself waits a few seconds before saving
+    v.canvas.close()
+    assert "[Window][History]" in ini.read_text()

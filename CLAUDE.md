@@ -29,7 +29,8 @@ Apps built on it live in `examples/`. Design and extension points: `ARCHITECTURE
 | `meshes/library/` | saved sculpts, one `<name>.py` each; `names()`, `mesh(name, **params)`, `material(renderer, name)` | no |
 | `tools/sculptor.py` | MeshSculptor app (`valo-sculpt`): `SculptScene`, `SculptorEditor` with hot reload, diagnostics, save | yes |
 | `materials.py` | shading models (WGSL), parameter schema, observable `Material`, colour conversion | buffer only |
-| `render.py` | shared WGSL, pipelines, render targets, `OrbitCamera` (perspective/orthographic, `VIEWS`), `Instances` (mat4 per instance), `Spheres`, scene pass → post pass | yes |
+| `render.py` | shared WGSL, pipelines, render targets, `OrbitCamera` (projections, `VIEWS`, pan, `center_on`), `Instances` / `Batch` / `Spheres`, scene pass → highlight → post pass, `pick` | yes |
+| `config.py` | `rc`: typed config sections (camera, lighting, highlight, picking, ui, keys, sculptor), TOML files, `rc_context`, `valo-config` | no |
 | `lighting.py` | `Lighting`: headlight or fixed directional light, global hemisphere ambient (sky, ground, intensity) | no |
 | `undo.py` | undo/redo stack | no |
 | `ui.py` | `Editor` base: undo, `windows()` / `menus()`, dockspace + default layout, menu bar, History, material widgets | no |
@@ -58,6 +59,9 @@ Apps built on it live in `examples/`. Design and extension points: `ARCHITECTURE
    returns, with units and conventions where they matter (degrees, linear vs sRGB, logical vs framebuffer pixels).
    Ruff's `D1` rules enforce it; tests and saved library entries are exempt. Private helpers (`_name`) get one
    when the code isn't obvious.
+7. Tunables (speeds, sizes, colours, default settings, key bindings) live in `valo.rc` (`config.py`), never as
+   module constants or literals in code. A new one gets a field with label, range, unit and help, which also
+   gives it a Preferences widget. `rc` holds defaults; live state stays on objects (camera, lighting).
 
 ## Testing (enough to trust a change, no more)
 

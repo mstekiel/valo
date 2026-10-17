@@ -416,7 +416,7 @@ class Editor:
             if imgui.menu_item(f"{ICON.GEAR} Preferences", "", self.show_preferences)[0]:
                 self.show_preferences = not self.show_preferences
             imgui.end_menu()
-        imgui.text_disabled("   Left-drag: orbit   Wheel: zoom")
+        imgui.text_disabled("   Drag: orbit   Middle/Shift-drag: pan   Wheel: zoom   Click: select   F: frame")
         imgui.end_main_menu_bar()
 
     # -- preferences (configuration, not scene editing: not undoable)

@@ -73,6 +73,39 @@ Look: `valo/ui_style.py` loads Roboto with Font Awesome icons merged in (`ICON.F
 Inconsolata (`mono_font()`), and applies the theme (`apply_style(scale)`). ImGui 1.92 rasterises them at the
 real pixel density, so text is crisp at any DPI.
 
+## Configuration: `valo.rc`
+
+`valo/config.py` holds every tunable as typed sections with defaults in code: camera, lighting, highlight,
+picking, ui, keys, sculptor. Read them as `rc.camera.orbit_speed` or `rc["camera.orbit_speed"]`; every set is
+validated (type, range, choices; typos get a "did you mean"). Files override the defaults, in this order:
+`~/.valo/valorc.toml` → `./valorc.toml` → `$VALO_RC`. `valo-config --write-defaults` writes a commented file of
+every key. View → Preferences edits `rc` live (generated from the schema) and saves the changed keys.
+`rc_context({...})` changes keys temporarily (tests). `rc` holds **defaults and preferences**; live state stays on
+the objects, so `Lighting()` starts from `rc.lighting`, but the Lighting window edits `viewer.lighting`.
+
+## Picking, Info and navigation
+
+- **Picking:** `Renderer.pick(viewport, scene, camera, x, y)` draws (batch + 1, instance, depth) into an
+  `rgba32uint` target inside a 1-pixel scissor and reads that pixel back. It returns a `Pick` (batch_index,
+  instance_index, source, world_point), or None for the background. The Viewer picks under the pointer every
+  frame (`viewer.hover`); a click sets `viewer.selection`.
+- **Batches:** `Instances.batch()` returns a `Batch` NamedTuple `(material, mesh, bind_group, count, source)`.
+  Plain 4-tuples still draw, but can't be described. `Instances` keep `matrices` (CPU copy), `label` and
+  `info(i) -> dict`.
+- **Info window:** `ui.pick_info(pick, scene)` gives:
+  - object, material, instance, mesh size;
+  - translation / rotation / scale from `geometry.decompose`;
+  - the point hit;
+  - then `scene.describe(pick)` or `source.info(i)`.
+- **Highlight:** the hovered and selected instances are drawn again over the scene, with an additive tint + rim
+  pipeline at the same depth (`@invariant` position, `greater-equal`). Colour and strength come from `rc.highlight`.
+- **Navigation** (`Viewer.on_pointer` / `on_key`, keys in `rc.keys`):
+  - mouse: left-drag orbit, middle- or Shift-drag pan, wheel zoom, click select, double-click centre on the point;
+  - keys: F frame selection, Home fit all, 1/3/7 (+Ctrl) views, 5 projection, arrows orbit (Shift pan), Esc deselect.
+
+  `OrbitCamera.center_on` animates over `rc.camera.center_duration`. Selection and navigation are view state
+  (not undoable); view presets and projection go through the Editor (undoable).
+
 ## One frame
 
 ```
@@ -81,9 +114,11 @@ Viewer.draw()
  │    ├─ write frame uniform (camera, light, ambient)              group 0
  │    ├─ flush dirty materials (64-byte uniform each)              group 1
  │    ├─ scene pass → rgba16float texture, one instanced draw per batch
- │    │     batch = (material, gpu mesh, instance bind group, count)   group 2 = mat4x4f model per instance
+ │    │     batch = Batch(material, gpu mesh, instance bind group, count, source)   group 2 = mat4x4f per instance
  │    │     (vs_main: world = M·p, normal = cofactor(M)·n, so non-uniform scale shades correctly)
+ │    ├─ highlight: hovered / selected instance drawn again, additive tint + rim, same depth
  │    └─ post pass → encode linear → sRGB into the viewport region of the window
+ ├─ Renderer.pick(...) under the pointer → viewer.hover (1-pixel id pass, read back)
  └─ ImguiRenderer.render()  → editor.gui(): menu bar, dockspace, windows on top (skipped without an editor)
     (if that frame moved the central node, scene + UI are drawn once more, so the scene never lags the layout)
 ```
@@ -113,7 +148,8 @@ apps:    examples/crystal_studio: studio → crystal → valo
 | Bonds, vector fields | app: `renderer.instances(meshes.cylinder() / arrow(), m)` + `instance_matrices(..., z_axis=...)`. |
 | Polyhedra, isosurfaces (per-scene meshes) | app: build a `MeshData` and draw it with one identity instance. |
 | Animation (vibrations, precession) | engine: time in the frame uniform; per-instance amplitudes; displacement in `vs_main`. |
-| Picking | engine: extra pass writing (batch, instance_index) to an `rg32uint` texture; `Viewer` reads the pixel under the mouse. |
+| Object properties in Info | app: `renderer.instances(..., label=, info=lambda i: {...})`, or `scene.describe(pick)`. |
+| A new tunable | add a field to a section in `valo/config.py` (default, label, range, unit, help); read `rc.<section>.<key>`. |
 | Image / video export | engine: render to an offscreen canvas at the requested size (the tests already do this). |
 | New panel or window | app: an action method on its `Editor` subclass (with undo) + an entry in `windows()`. |
 | New crystal structure (CIF, POSCAR, other lattice), more species | `examples/crystal_studio/crystal.py`: centres + species per site; keep `batches()`. |

@@ -221,6 +221,11 @@ class Editor:
         if imgui.button(f"{ICON.EXPAND} Fit"):
             self.fit_view()
         imgui.same_line()
+        imgui.begin_disabled(self.viewer.selection is None)
+        if imgui.button(f"{ICON.CROSSHAIRS} Frame selection"):
+            self.viewer.frame_selection()
+        imgui.end_disabled()
+        imgui.same_line()
         _, self.auto_rotate = imgui.checkbox("Auto-rotate", self.auto_rotate)
 
     def _color(self, label: str, rgb) -> tuple[bool, list[float]]:

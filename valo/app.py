@@ -16,7 +16,7 @@ from wgpu.utils.imgui import ImguiRenderer
 
 from .config import rc
 from .lighting import Lighting
-from .render import OrbitCamera, Renderer
+from .render import VIEWS, OrbitCamera, Renderer
 from .ui import Editor
 from .ui_style import apply_style, load_fonts
 
@@ -65,9 +65,12 @@ class Viewer:
         self._drag = None
         self.pointer = None  # last pointer position, logical px
         self.hover = None  # Pick under the pointer (render.Pick) or None
+        self.selection = None  # Pick chosen by a click, or None
+        self._last_click = None  # (time, x, y) of the last click, for double-click
         self._last_frame = time.perf_counter()
         canvas.add_event_handler(self.on_pointer, "pointer_down", "pointer_move", "pointer_up", "wheel")
         canvas.add_event_handler(self._on_close, "close")
+        canvas.add_event_handler(self.on_key, "key_down")
         canvas.request_draw(self.draw)
 
     def show(self, scene, editor: Editor | None = None) -> None:
@@ -92,6 +95,7 @@ class Viewer:
         ed = self.editor
         now = time.perf_counter()
         dt, self._last_frame = min(now - self._last_frame, 0.1), now  # seconds, capped after a stall
+        self.camera.step(dt)
         if ed and ed.auto_rotate:
             self.camera.azimuth = (self.camera.azimuth + rc.camera.auto_rotate_speed * dt) % 360
         for _ in range(3):  # the layout is known only after the ImGui frame: redraw if the scene rect moved
@@ -105,11 +109,16 @@ class Viewer:
                 return
 
     def _highlights(self) -> list:
-        """(batch, instance, rgb) tints for the renderer: the hovered object (last frame's pick)."""
+        """(batch, instance, rgb) tints for the renderer: the selection, and the hovered object (last frame's pick)."""
         h = rc.highlight
-        if not (h.enabled and self.hover):
+        if not h.enabled:
             return []
-        return [(self.hover.batch_index, self.hover.instance_index, tuple(c * h.strength for c in h.color))]
+        out = []
+        for pick, strength in ((self.selection, h.selected_strength), (self.hover, h.strength)):
+            key = pick and (pick.batch_index, pick.instance_index)
+            if pick is not None and key not in [o[:2] for o in out]:
+                out.append((*key, tuple(c * strength for c in h.color)))
+        return out
 
     def _pick_under_pointer(self):
         """The Pick under the mouse pointer, if picking is on and the pointer is over the scene."""
@@ -145,27 +154,113 @@ class Viewer:
             imgui.save_ini_settings_to_disk(str(self.layout_file))
 
     def on_pointer(self, event: dict) -> None:
-        """Orbit with left-drag and zoom with the wheel, when the pointer is over the scene."""
+        """Orbit (left-drag), pan (middle-drag or Shift+left-drag), zoom (wheel), select (click), centre
+        (double-click), when the pointer is over the scene."""
         imgui.set_current_context(self.imgui.imgui_context)
-        if event["event_type"] == "pointer_move":
+        kind = event["event_type"]
+        if kind == "pointer_move":
             self.pointer = (event["x"], event["y"])
-        if imgui.get_io().want_capture_mouse:  # a window or the menu has the mouse
+        if imgui.get_io().want_capture_mouse and not self._drag:  # a window or the menu has the mouse
             self.pointer = None
             return
         rect = self.editor.scene_rect if self.editor else None
-        if event["event_type"] in ("pointer_down", "wheel") and rect:
+        if kind in ("pointer_down", "wheel") and rect:
             x, y, w, h = rect
             if not (x <= event["x"] < x + w and y <= event["y"] < y + h):
                 return
-        cam, kind = self.camera, event["event_type"]
-        if kind == "pointer_down" and event.get("button") == 1:
-            self._drag = (event["x"], event["y"], cam.azimuth, cam.elevation)
-        elif kind == "pointer_up":
+        cam = self.camera
+        if kind == "pointer_down" and event.get("button") in (1, 3):
+            pan = event.get("button") == 3 or "Shift" in event.get("modifiers", ())
+            self._drag = ("pan" if pan else "orbit", event["x"], event["y"], cam.azimuth, cam.elevation, cam.target)
+        elif kind == "pointer_up" and self._drag:
+            mode, x0, y0, *_ = self._drag
             self._drag = None
+            if mode == "orbit" and abs(event["x"] - x0) + abs(event["y"] - y0) < 4:
+                self._click(event["x"], event["y"])
         elif kind == "pointer_move" and self._drag:
-            x0, y0, az0, el0 = self._drag
-            speed = rc.camera.orbit_speed
-            cam.azimuth = az0 - speed * (event["x"] - x0)
-            cam.elevation = float(np.clip(el0 + speed * (event["y"] - y0), -85, 85))
+            mode, x0, y0, az0, el0, target0 = self._drag
+            dx, dy = event["x"] - x0, event["y"] - y0
+            if mode == "orbit":
+                speed = rc.camera.orbit_speed
+                cam.azimuth = az0 - speed * dx
+                cam.elevation = float(np.clip(el0 + speed * dy, -85, 85))
+            else:
+                r = self.canvas.get_pixel_ratio()
+                upp = cam.world_per_pixel(self.viewport[3]) * r * rc.camera.pan_speed
+                cam.target = target0
+                cam.pan(dx * upp, dy * upp)
         elif kind == "wheel":
             cam.zoom(1.0015 ** (event["dy"] * rc.camera.zoom_speed))
+
+    def _click(self, x: float, y: float) -> None:
+        """Select what is under the pointer (or deselect on the background); a second click soon after centres."""
+        now = time.perf_counter()
+        hit = self.hover
+        last, self._last_click = self._last_click, (now, x, y)
+        if last and (now - last[0]) * 1000 < rc.picking.double_click_ms and abs(x - last[1]) + abs(y - last[2]) < 6:
+            if hit is not None:
+                self.camera.center_on(hit.world_point)
+            self._last_click = None
+            return
+        self.selection = hit
+
+    def on_key(self, event: dict) -> None:
+        """Keyboard navigation (``rc.keys``): frame, fit, view presets, projection, orbit/pan steps, deselect."""
+        imgui.set_current_context(self.imgui.imgui_context)
+        if imgui.get_io().want_capture_keyboard:  # typing into a widget
+            return
+        key, mods = event.get("key", ""), event.get("modifiers", ())
+        k = rc.keys
+
+        def pressed(binding: str) -> bool:
+            return key.lower() == binding.lower()
+
+        cam, ctrl, shift = self.camera, "Control" in mods, "Shift" in mods
+        if pressed(k.frame_selection):
+            self.frame_selection()
+        elif pressed(k.fit_all):
+            self.fit_all()
+        elif pressed(k.view_front):
+            self._view("+Y" if ctrl else "-Y")
+        elif pressed(k.view_right):
+            self._view("-X" if ctrl else "+X")
+        elif pressed(k.view_top):
+            self._view("-Z" if ctrl else "+Z")
+        elif pressed(k.toggle_ortho):
+            other = "perspective" if cam.projection == "orthographic" else "orthographic"
+            self.editor.set_projection(other) if self.editor else cam.set_projection(other)
+        elif pressed(k.deselect):
+            self.selection = None
+        else:
+            steps = {k.orbit_left: (-1, 0), k.orbit_right: (1, 0), k.orbit_up: (0, 1), k.orbit_down: (0, -1)}
+            for binding, (sx, sy) in steps.items():
+                if pressed(binding):
+                    if shift:  # pan by a tenth of the view
+                        step = cam.world_per_pixel(self.viewport[3]) * self.viewport[3] / 10
+                        cam.pan(-sx * step, sy * step)
+                    else:
+                        cam.azimuth = (cam.azimuth + sx * rc.camera.orbit_step) % 360
+                        cam.elevation = float(np.clip(cam.elevation + sy * rc.camera.orbit_step, -89.99, 89.99))
+                    break
+
+    def _view(self, name: str) -> None:
+        if self.editor:
+            self.editor.set_view(name)
+        else:
+            self.camera.azimuth, self.camera.elevation = VIEWS[name]
+
+    def frame_selection(self) -> None:
+        """Centre on the selected instance and zoom so it fits (animated); without a selection, fit everything."""
+        sel = self.selection
+        if sel is None or sel.source is None:
+            return self.fit_all()
+        m = sel.source.matrices[sel.instance_index]
+        radius = sel.source.mesh.radius * float(np.abs(np.linalg.norm(m[:3, :3], axis=0)).max())
+        self.camera.center_on(m[:3, 3], radius=max(radius, 1e-3))
+
+    def fit_all(self) -> None:
+        """Centre on the scene and zoom so all of it fits (animated)."""
+        scene = self.scene
+        center = scene.center() if hasattr(scene, "center") else (0.0, 0.0, 0.0)
+        radius = scene.bounding_radius() if hasattr(scene, "bounding_radius") else None
+        self.camera.center_on(center, radius=radius)

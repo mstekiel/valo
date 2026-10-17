@@ -234,3 +234,27 @@ def test_decompose_returns_what_instance_matrices_built():
 
     tm = transform_matrix({"rotate_deg": [10.0, -25.0, 140.0]})
     assert euler_xyz(decompose(tm)[1]) == pytest.approx([10, -25, 140])
+
+
+def test_pan_moves_the_target_in_the_view_plane():
+    from valo.render import OrbitCamera
+
+    cam = OrbitCamera(azimuth=-90.0, elevation=0.0)  # looking along +Y: right = +X, up = +Z
+    cam.pan(1.0, 2.0)
+    assert cam.target == pytest.approx((-1.0, 0.0, 2.0))  # the scene follows the cursor
+    assert cam.world_per_pixel(500) == pytest.approx(cam._height_at_target() / 500)
+
+
+def test_center_on_animates_to_the_goal_and_ends_exactly():
+    from valo.render import OrbitCamera
+
+    cam = OrbitCamera(distance=10.0)
+    cam.center_on((1.0, 2.0, 3.0), radius=1.0, duration=0.5)
+    assert cam.animating and cam.target == (0.0, 0.0, 0.0)
+    cam.step(0.25)
+    assert 0 < cam.target[0] < 1.0 and cam.fit_distance(1.0) < cam.distance < 10.0
+    cam.step(0.3)
+    assert not cam.animating
+    assert cam.target == pytest.approx((1, 2, 3)) and cam.distance == pytest.approx(cam.fit_distance(1.0))
+    cam.center_on((0.0, 0.0, 0.0), duration=0)  # 0 jumps
+    assert cam.target == (0.0, 0.0, 0.0) and not cam.animating

@@ -12,12 +12,13 @@ from __future__ import annotations
 import math
 import weakref
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import NamedTuple
 
 import numpy as np
 import wgpu
 
+from .config import rc
 from .geometry import instance_matrices, look_at, orthographic_reversed_z, pack_mat4, perspective_reversed_z
 from .lighting import Lighting
 from .materials import FRAGMENT_WGSL, Material
@@ -165,6 +166,7 @@ class GpuMesh:
         self.vb = device.create_buffer_with_data(data=data.vertices, usage=wgpu.BufferUsage.VERTEX)
         self.ib = device.create_buffer_with_data(data=data.indices, usage=wgpu.BufferUsage.INDEX)
         self.count = len(data.indices)
+        self.radius = float(np.linalg.norm(data.positions, axis=1).max()) if len(data.positions) else 0.0
 
     def draw(self, rpass, instances: int = 1, first_instance: int = 0):
         """Draw instances ``first_instance`` .. ``first_instance + instances - 1`` in the current render pass."""
@@ -190,6 +192,7 @@ class OrbitCamera:
     fovy: float = 35.0
     projection: str = "perspective"  # or "orthographic"
     ortho_height: float = 10.0  # world units visible vertically in orthographic mode
+    _anim: tuple | None = field(default=None, repr=False, compare=False)  # running center_on animation
 
     def eye(self) -> np.ndarray:
         """Camera position in world space."""
@@ -264,8 +267,56 @@ class OrbitCamera:
 
     def fit(self, radius: float) -> None:
         """Move back far enough that a sphere of ``radius`` around the target fits vertically (both projections)."""
-        self.distance = max(3.0, radius / math.sin(math.radians(self.fovy / 2)) * 0.95)
+        self.distance = self.fit_distance(radius)
         self.ortho_height = self._height_at_target()
+
+    def fit_distance(self, radius: float) -> float:
+        """The distance at which a sphere of ``radius`` fits the view vertically."""
+        return max(0.5, radius / math.sin(math.radians(self.fovy / 2)) * 0.95)
+
+    def right_up(self) -> tuple[np.ndarray, np.ndarray]:
+        """Unit right and up vectors of the view (Z-up)."""
+        f = self.forward()
+        right = np.cross(f, (0.0, 0.0, 1.0))
+        right /= np.linalg.norm(right)
+        return right, np.cross(right, f)
+
+    def world_per_pixel(self, viewport_height: int) -> float:
+        """World units per framebuffer pixel on the plane through the target."""
+        height = self.ortho_height if self.projection == "orthographic" else self._height_at_target()
+        return height / max(viewport_height, 1)
+
+    def pan(self, dx: float, dy: float) -> None:
+        """Slide the view by (dx, dy) world units on the target plane; the scene follows (screen y points down)."""
+        right, up = self.right_up()
+        self.target = tuple(float(c) for c in np.asarray(self.target, float) - right * dx + up * dy)
+
+    def center_on(self, target, radius: float | None = None, duration: float | None = None) -> None:
+        """Move the target to ``target`` (and, given ``radius``, zoom so that sphere fits), animated over
+        ``duration`` seconds (default ``rc.camera.center_duration``; 0 jumps). ``step(dt)`` advances it."""
+        distance = self.fit_distance(radius) if radius else self.distance
+        height = 2 * distance * math.tan(math.radians(self.fovy / 2)) if radius else self.ortho_height
+        duration = rc.camera.center_duration if duration is None else duration
+        self._anim = (np.asarray(self.target, float), np.asarray(target, float), self.distance, distance,
+                      self.ortho_height, height, 0.0, max(duration, 0.0))
+        self.step(0.0)
+
+    @property
+    def animating(self) -> bool:
+        """True while a ``center_on`` animation is running."""
+        return self._anim is not None
+
+    def step(self, dt: float) -> None:
+        """Advance a running ``center_on`` animation by ``dt`` seconds (smooth ease in and out)."""
+        if self._anim is None:
+            return
+        t0, t1, d0, d1, h0, h1, elapsed, duration = self._anim
+        elapsed += dt
+        u = 1.0 if duration == 0 or elapsed >= duration else elapsed / duration
+        e = u * u * (3 - 2 * u)  # smoothstep
+        self.target = tuple(float(c) for c in t0 + (t1 - t0) * e)
+        self.distance, self.ortho_height = d0 + (d1 - d0) * e, h0 + (h1 - h0) * e
+        self._anim = None if u >= 1.0 else (t0, t1, d0, d1, h0, h1, elapsed, duration)
 
 
 class Batch(NamedTuple):

@@ -451,3 +451,55 @@ def test_info_rows_show_how_the_instance_was_placed(viewer):
     assert rows["vector"] == "1"
     described = SimpleNamespace(batches=list, describe=lambda pick: {"site": "(0, 0, 0)"})
     assert pick_info(Pick(0, 0, arrows, np.zeros(3)), described)["site"] == "(0, 0, 0)"
+
+
+def test_click_selects_keys_navigate_and_double_click_centres(viewer):
+    from valo import Editor, OrbitCamera, rc_context
+
+    m = viewer.renderer.material("M", "lambert")
+    balls = viewer.renderer.spheres(m)
+    balls.set([[-1.5, 0, 0], [1.5, 0, 0]], 0.5)
+    viewer.show(SimpleNamespace(batches=lambda: [balls.batch()], bounding_radius=lambda: 2.0), Editor())
+    viewer.camera = cam = OrbitCamera(azimuth=-90.0, elevation=0.0, distance=8.0)
+    viewer.snapshot()
+    x0, y0, w, h = viewer.viewport
+    r = viewer.canvas.get_pixel_ratio()
+    clip = cam.matrices(w / h)[0] @ np.array([1.5, 0, 0, 1.0])
+    at = ((x0 + (clip[0] / clip[3] + 1) / 2 * w) / r, (y0 + (1 - clip[1] / clip[3]) / 2 * h) / r)
+
+    def key(name, *mods):
+        viewer.on_key({"event_type": "key_down", "key": name, "modifiers": mods})
+
+    def click():
+        viewer.on_pointer({"event_type": "pointer_move", "x": at[0], "y": at[1]})
+        viewer.snapshot()  # picks what is under the pointer
+        viewer.on_pointer({"event_type": "pointer_down", "button": 1, "x": at[0], "y": at[1], "modifiers": ()})
+        viewer.on_pointer({"event_type": "pointer_up", "button": 1, "x": at[0], "y": at[1], "modifiers": ()})
+
+    with rc_context({"camera.center_duration": 0.0}):
+        click()
+        assert viewer.selection.instance_index == 1
+        key("f")  # frame the selection: centre on that sphere, zoomed to fit it
+        assert cam.target == pytest.approx((1.5, 0.0, 0.0)) and cam.distance < 8.0
+        key("Home")  # fit everything again
+        assert cam.target == pytest.approx((0.0, 0.0, 0.0))
+        key("Escape")
+        assert viewer.selection is None
+        key("7")
+        assert cam.elevation == pytest.approx(89.99)  # top view (undoable through the editor)
+        key("5")
+        assert cam.projection == "orthographic"
+        az = cam.azimuth
+        key("ArrowLeft")
+        assert cam.azimuth == pytest.approx((az - 15) % 360)
+        target = cam.target
+        key("ArrowUp", "Shift")
+        assert cam.target != target  # Shift+arrow pans
+        assert len(viewer.editor.undo_stack.done) == 2  # view preset and projection; navigation is not recorded
+
+    viewer.camera = cam = OrbitCamera(azimuth=-90.0, elevation=0.0, distance=8.0)
+    with rc_context({"camera.center_duration": 0.0}):
+        click()
+        click()  # a double-click centres on the point under the pointer
+        assert cam.target[0] == pytest.approx(1.5, abs=0.1) and cam.target[1] < 0  # front of the sphere
+    viewer.selection = None

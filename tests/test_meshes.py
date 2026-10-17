@@ -1,5 +1,8 @@
 """Mesh tests (pure numpy): primitives, builders, check(), sculpt files and the library."""
 
+from pathlib import Path
+from types import SimpleNamespace
+
 import numpy as np
 import pytest
 
@@ -180,3 +183,29 @@ def test_merge_offsets_indices():
     assert m.indices[len(a.indices):].min() == len(a.vertices)
 
 
+
+
+@pytest.mark.parametrize("path", sorted((Path(__file__).parents[1] / "examples" / "sculpts").glob("*.py")),
+                         ids=lambda p: p.stem)
+def test_starter_sculpts_build_clean_meshes(path):
+    from valo.meshes import Sculpt
+
+    report = meshes.check(Sculpt.load(path).build())
+    assert report.ok and report.triangles > 0, report.lines()
+
+
+def test_library_material_comes_from_the_saved_preset(tmp_path, monkeypatch):
+    from valo.meshes import library
+
+    monkeypatch.setattr(library, "LIBRARY_DIR", tmp_path)
+    (tmp_path / "blob.py").write_text(SCULPT.replace('RANGES = {"height": (0.1, 4.0)}',
+                                                     'MATERIAL = {"shading": "toon", "bands": 5.0}'), encoding="utf-8")
+    (tmp_path / "plain.py").write_text(SCULPT, encoding="utf-8")
+    made = []
+    renderer = SimpleNamespace(material=lambda name, shading, **params: made.append((name, shading, params)))
+    library.material(renderer, "blob")
+    library.material(renderer, "plain")
+    assert made == [("blob", "toon", {"bands": 5.0}), ("plain", "pbr", {})]
+    assert library.names() == ["blob", "plain"]
+    with pytest.raises(KeyError):
+        library.load("missing")

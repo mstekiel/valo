@@ -43,6 +43,7 @@ def test_edits_change_the_image_and_undo_restores_it_exactly(studio):
     ed.set_count(0, 9)
     ed.set_count(1, 5)
     ed.set_count(2, 3)
+    ed.set_spacing(1.4)
     assert [s.count for s in crystal.species] == [68, 67]
     ed.selected = 0
     ed.set_radius(0.22)

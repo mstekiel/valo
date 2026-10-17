@@ -79,3 +79,17 @@ def test_vector_fonts_with_icons_are_loaded(viewer):
     assert len(io.fonts.fonts) == 2 and io.font_default is io.fonts.fonts[0]
     assert io.font_default.is_glyph_in_font(ord(ICON.FLOPPY_DISK))  # icons merged into the UI font
     assert mono_font() is io.fonts.fonts[1]
+
+
+def test_style_scale_is_absolute_not_compounding(viewer):
+    from imgui_bundle import imgui
+
+    from valo.ui_style import apply_style
+
+    imgui.set_current_context(viewer.imgui.imgui_context)
+    style = imgui.get_style()
+    apply_style(1.5)
+    apply_style(1.5)
+    assert (style.frame_padding.x, style.font_scale_main) == (12.0, 1.5)
+    apply_style()
+    assert style.frame_padding.x == 8.0

@@ -42,7 +42,47 @@ def mono_font() -> imgui.ImFont:
     return imgui.get_io().fonts.fonts[1]  # [0] Roboto (+ merged icons), [1] Inconsolata
 
 
-def set_scale(scale: float) -> None:
-    """UI scale on top of the monitor's pixel density (1.0 = 16 px text): text and spacing together."""
+# Theme: neutral greys, one blue accent. sRGB 0–255; alpha 0–1.
+ACCENT = (66, 133, 244)
+PALETTE = {
+    "text": (225, 227, 230), "text_disabled": (128, 132, 138),
+    "window_bg": (30, 31, 34), "child_bg": (30, 31, 34), "popup_bg": (36, 37, 41),
+    "menu_bar_bg": (24, 25, 27), "title_bg": (24, 25, 27), "title_bg_active": (24, 25, 27),
+    "title_bg_collapsed": (24, 25, 27), "border": (52, 54, 58), "separator": (52, 54, 58),
+    "frame_bg": (44, 46, 50), "frame_bg_hovered": (54, 57, 62), "frame_bg_active": (62, 66, 72),
+    "button": (50, 53, 58), "button_hovered": (62, 66, 72), "button_active": ACCENT,
+    "header": (50, 53, 58), "header_hovered": (62, 66, 72), "header_active": ACCENT,
+    "check_mark": ACCENT, "slider_grab": ACCENT, "slider_grab_active": (110, 160, 250),
+    "tab": (30, 31, 34), "tab_hovered": (62, 66, 72), "tab_selected": (44, 46, 50),
+    "tab_selected_overline": ACCENT, "tab_dimmed": (30, 31, 34), "tab_dimmed_selected": (40, 41, 45),
+    "scrollbar_bg": (30, 31, 34), "scrollbar_grab": (58, 61, 66), "scrollbar_grab_hovered": (74, 78, 84),
+    "scrollbar_grab_active": (90, 94, 100), "resize_grip": (0, 0, 0, 0), "docking_preview": (*ACCENT, 0.5),
+    "docking_empty_bg": (0, 0, 0, 0), "text_selected_bg": (*ACCENT, 0.35), "nav_cursor": ACCENT,
+}
+
+
+def apply_style(scale: float = 1.0) -> None:
+    """valo's theme for the current context: rounded, roomy, dark neutral greys with one accent colour.
+
+    ``scale`` multiplies text and spacing together (1.0 = 16 px text, on top of the monitor's pixel density);
+    call it again to change the scale.
+    """
     style = imgui.get_style()
+    for key, rgba in PALETTE.items():
+        r, g, b, *a = rgba
+        style.set_color_(getattr(imgui.Col_, key), imgui.ImVec4(r / 255, g / 255, b / 255, a[0] if a else 1.0))
+
+    def v(x, y):
+        return imgui.ImVec2(x * scale, y * scale)
+
+    style.window_padding, style.frame_padding, style.cell_padding = v(10, 10), v(8, 5), v(6, 4)
+    style.item_spacing, style.item_inner_spacing = v(8, 6), v(6, 4)
+    style.separator_text_padding, style.window_min_size = v(0, 4), v(64, 48)
+    style.window_rounding = style.child_rounding = style.popup_rounding = 6.0 * scale
+    style.frame_rounding = style.tab_rounding = 4.0 * scale
+    style.grab_rounding, style.scrollbar_rounding = 3.0 * scale, 6.0 * scale
+    style.scrollbar_size, style.grab_min_size, style.indent_spacing = 12.0 * scale, 10.0 * scale, 18.0 * scale
+    style.window_border_size, style.frame_border_size, style.popup_border_size = 1.0, 0.0, 1.0
+    style.separator_text_border_size = 1.0
+    style.window_title_align = imgui.ImVec2(0.0, 0.5)
     style.font_scale_main = scale

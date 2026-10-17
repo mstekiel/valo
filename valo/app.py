@@ -12,7 +12,7 @@ from wgpu.utils.imgui import ImguiRenderer
 
 from .render import OrbitCamera, Renderer
 from .ui import PANEL_W, Editor
-from .ui_style import load_fonts
+from .ui_style import apply_style, load_fonts
 
 EMPTY_SCENE = SimpleNamespace(batches=list)
 
@@ -39,6 +39,7 @@ class Viewer:
         self.camera = OrbitCamera()
         self.imgui = ImguiRenderer(self.device, canvas)  # uses the format configured above
         load_fonts()  # into the ImGui context the renderer just made current
+        apply_style()
         self.scene, self.editor = EMPTY_SCENE, None
         self.viewport_width = 1
         self._drag = None

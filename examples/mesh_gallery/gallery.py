@@ -64,7 +64,7 @@ class Gallery:
 
 class GalleryEditor(Editor):
     title = "Mesh gallery"
-    dock_bottom = ("Material",)  # under the shape list; History is a tab next to Shapes
+    dock_bottom = ("Material", "History")  # under the shape list
     bottom_share = 0.6
 
     def __init__(self, gallery: Gallery):

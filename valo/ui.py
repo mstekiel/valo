@@ -33,7 +33,7 @@ class Editor:
         self.ui_scale = 1.0
         self.visible: dict[str, bool] = {}
         self.scene_rect: tuple[float, float, float, float] | None = None  # central dock node, logical pixels
-        self._focus: str | None = None  # window to focus next frame
+        self._focus: list[str] = []  # windows to focus next frame (the first tab of each dock node)
         self._layout = "auto"  # next frame: "auto" = default layout unless a saved one was restored, "force"
 
     # -- material actions (material edits reach the undo stack through watch())
@@ -123,12 +123,13 @@ class Editor:
         wins = self.all_windows()
         self._menu_bar(wins)
         dock_id = imgui.dock_space_over_viewport(0, None, imgui.DockNodeFlags_.passthru_central_node)
-        focus, self._focus = self._focus, None  # requested by last frame's layout build
+        focus, self._focus = self._focus, []  # requested by last frame's layout build
         if self._layout:
             node = internal.dock_builder_get_node(dock_id)
             if self._layout == "force" or node is None or not node.is_split_node():  # nothing restored from file
                 self.build_layout(dock_id, list(wins))
-                self._focus = next(iter(wins))  # new windows grab focus: give it to the app's first, next frame
+                bottom = [n for n in wins if n in self.dock_bottom]  # new windows grab focus in submission
+                self._focus = [n for n in wins if n not in self.dock_bottom][:1] + bottom[:1]  # order: fix next frame
             self._layout = None
         central = internal.dock_builder_get_central_node(dock_id)
         self.scene_rect = (central.pos.x, central.pos.y, central.size.x, central.size.y)
@@ -136,7 +137,7 @@ class Editor:
         for name, draw in wins.items():
             if not self.visible.setdefault(name, True):
                 continue
-            if name == focus:
+            if name in focus:
                 imgui.set_next_window_focus()
             expanded, still_open = imgui.begin(name, True)
             if expanded:

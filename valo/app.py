@@ -41,7 +41,7 @@ class Viewer:
         load_fonts()  # into the ImGui context the renderer just made current
         apply_style()
         self.scene, self.editor = EMPTY_SCENE, None
-        self.viewport_width = 1
+        self.viewport = (0, 0, 1, 1)  # (x, y, w, h) of the scene in framebuffer pixels
         self._drag = None
         canvas.add_event_handler(self.on_pointer, "pointer_down", "pointer_move", "pointer_up", "wheel")
         canvas.request_draw(self.draw)
@@ -66,10 +66,20 @@ class Viewer:
         if ed and ed.auto_rotate:
             self.camera.azimuth = (self.camera.azimuth + 0.4) % 360
         panel_px = int(PANEL_W * self.canvas.get_pixel_ratio()) if ed and ed.docked else 0
-        self.viewport_width = max(texture.size[0] - panel_px, 1)
-        self.renderer.render(texture, self.viewport_width, self.scene, self.camera)
+        w, h = texture.size[:2]
+        self.viewport = (0, 0, max(w - panel_px, 1), h)
+        self.renderer.render(texture, self.viewport, self.scene, self.camera)
         if ed:
             self.imgui.render()  # panel on top of the same texture
+
+    @property
+    def viewport_width(self) -> int:
+        return self.viewport[2]
+
+    def crop(self, image):
+        """The scene part of a full-window ``image`` (e.g. from an offscreen ``canvas.draw()``)."""
+        x, y, w, h = self.viewport
+        return image[y : y + h, x : x + w]
 
     def on_pointer(self, event: dict) -> None:
         if imgui.get_io().want_capture_mouse:  # the panel has the mouse

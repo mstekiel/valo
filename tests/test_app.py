@@ -24,7 +24,7 @@ def viewer():
 def snap(viewer) -> np.ndarray:
     for _ in range(2):  # ImGui lays out on the first frame, settles on the second
         img = np.asarray(viewer.canvas.draw())[:, :, :3].copy()
-    return img[:, : viewer.viewport_width]  # scene region only
+    return viewer.crop(img)  # scene region only
 
 
 def test_empty_viewer_draws_the_background(viewer):
@@ -93,3 +93,24 @@ def test_style_scale_is_absolute_not_compounding(viewer):
     assert (style.frame_padding.x, style.font_scale_main) == (12.0, 1.5)
     apply_style()
     assert style.frame_padding.x == 8.0
+
+
+def test_scene_renders_into_an_offset_viewport_rect(viewer):
+    import wgpu
+
+    from valo import OrbitCamera
+
+    m = viewer.renderer.material("Matte", "lambert", base_color=(0.9, 0.9, 0.9), ambient=1.0)
+    ball = viewer.renderer.spheres(m)
+    ball.set([[0, 0, 0]], 1.6)  # seen from distance 3, it fills the whole viewport
+    scene = SimpleNamespace(batches=lambda: [ball.batch()])
+    fmt = viewer.context._config["format"]
+    tex = viewer.device.create_texture(size=(400, 300, 1), format=fmt,
+                                       usage=wgpu.TextureUsage.RENDER_ATTACHMENT | wgpu.TextureUsage.COPY_SRC)
+    viewer.renderer.render(tex, (100, 50, 200, 150), scene, OrbitCamera(distance=3.0))
+    data = viewer.device.queue.read_texture({"texture": tex}, {"bytes_per_row": 400 * 4}, (400, 300, 1))
+    img = np.frombuffer(data, np.uint8).reshape(300, 400, 4)[:, :, :3]
+    inside = np.zeros((300, 400), bool)
+    inside[50:200, 100:300] = True
+    assert img[inside].min() > 150  # the bright sphere covers the rect
+    assert img[~inside].max() < 60  # the window background everywhere else

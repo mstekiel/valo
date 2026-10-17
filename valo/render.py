@@ -75,6 +75,7 @@ fn surface(in: VsOut) -> Surface {
 
 POST_WGSL = """
 @group(0) @binding(0) var scene_tex: texture_2d<f32>;
+@group(0) @binding(1) var<uniform> origin: vec4f;   // xy = viewport origin in framebuffer pixels
 
 @vertex
 fn vs_main(@builtin(vertex_index) i: u32) -> @builtin(position) vec4f {
@@ -90,8 +91,8 @@ fn linear_to_srgb(c: vec3f) -> vec3f {
 
 @fragment
 fn fs_main(@builtin(position) p: vec4f) -> @location(0) vec4f {
-    // Framebuffer coords → scene texel; the scene texture is exactly viewport-sized at origin (0,0).
-    let c = textureLoad(scene_tex, vec2i(p.xy), 0).rgb;
+    // Framebuffer coords → scene texel; the scene texture is exactly viewport-sized.
+    let c = textureLoad(scene_tex, vec2i(p.xy - origin.xy), 0).rgb;
     return vec4f(linear_to_srgb(clamp(c, vec3f(0.0), vec3f(1.0))), 1.0);
 }
 """
@@ -213,6 +214,7 @@ class Renderer:
             primitive={"topology": "triangle-list"},
             fragment={"module": post, "entry_point": "fs_main", "targets": [{"format": surface_format}]},
         )
+        self.post_origin = device.create_buffer(size=16, usage=wgpu.BufferUsage.UNIFORM | wgpu.BufferUsage.COPY_DST)
         self._meshes: weakref.WeakKeyDictionary[MeshData, GpuMesh] = weakref.WeakKeyDictionary()
         self.sphere = self.mesh(sphere(20, 40))  # unit diameter; scaled per instance
         self._targets = None
@@ -240,18 +242,22 @@ class Renderer:
                                                usage=usage | wgpu.TextureUsage.TEXTURE_BINDING)
             depth = self.device.create_texture(size=(w, h, 1), format=DEPTH_FORMAT, usage=usage)
             bg = self.device.create_bind_group(layout=self.post_pipeline.get_bind_group_layout(0),
-                                               entries=[{"binding": 0, "resource": color.create_view()}])
+                                               entries=[{"binding": 0, "resource": color.create_view()},
+                                                        {"binding": 1, "resource": {"buffer": self.post_origin}}])
             self._targets = ((w, h), color, depth, bg)
         return self._targets[1:]
 
-    def render(self, surface_texture, viewport_width: int, scene, camera: OrbitCamera) -> None:
-        """Draw ``scene`` into the left ``viewport_width`` pixels of ``surface_texture``.
+    def render(self, surface_texture, viewport: tuple[int, int, int, int], scene, camera: OrbitCamera) -> None:
+        """Draw ``scene`` into the ``viewport`` = (x, y, w, h) rectangle of ``surface_texture`` (framebuffer
+        pixels, origin top-left); the rest of the texture is cleared to the window background.
 
         ``scene.batches()`` yields (material, gpu_mesh, instance_bind_group, instance_count) tuples.
         """
-        h = surface_texture.size[1]
-        vw = max(1, viewport_width)
+        tw, th = surface_texture.size[:2]
+        x, y = (int(np.clip(c, 0, lim - 1)) for c, lim in zip(viewport[:2], (tw, th), strict=True))
+        vw, h = (max(1, min(int(c), lim - o)) for c, lim, o in zip(viewport[2:], (tw, th), (x, y), strict=True))
         color, depth, post_bg = self._scene_targets(vw, h)
+        self.device.queue.write_buffer(self.post_origin, 0, np.array([x, y, 0, 0], np.float32))
 
         view_proj, eye = camera.matrices(vw / h)
         frame = np.zeros(24, np.float32)
@@ -283,7 +289,7 @@ class Renderer:
         rpass = encoder.begin_render_pass(color_attachments=[{
             "view": surface_texture.create_view(), "clear_value": (0.12, 0.12, 0.13, 1),
             "load_op": "clear", "store_op": "store"}])
-        rpass.set_viewport(0, 0, vw, h, 0.0, 1.0)
+        rpass.set_viewport(x, y, vw, h, 0.0, 1.0)
         rpass.set_pipeline(self.post_pipeline)
         rpass.set_bind_group(0, post_bg)
         rpass.draw(3)

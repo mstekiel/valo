@@ -16,6 +16,7 @@ See ``examples/`` for complete apps.
 
 from . import meshes
 from .app import Viewer
+from .config import rc, rc_context
 from .geometry import instance_matrices
 from .lighting import Lighting
 from .materials import SCHEMA, SHADINGS, Material
@@ -27,4 +28,4 @@ from .undo import Command, UndoStack
 
 __all__ = ["ICON", "SCHEMA", "SHADINGS", "Command", "Editor", "Instances", "Lighting", "Material", "MeshData",
            "OrbitCamera", "Renderer", "Sculpt", "Spheres", "UndoStack", "Viewer", "instance_matrices", "library",
-           "meshes", "mono_font"]
+           "meshes", "mono_font", "rc", "rc_context"]

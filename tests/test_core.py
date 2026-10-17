@@ -133,3 +133,60 @@ def test_camera_changes_keep_the_scene_size():
         assert outline_share(cam) == pytest.approx(share)
     cam.set_fov(35, radius)
     assert cam.distance == pytest.approx(15.0)  # back to the start: same distance
+
+
+# -- config
+
+
+def test_rc_validates_types_ranges_choices_and_names():
+    from valo.config import RC
+
+    rc = RC()
+    rc["camera.fov"] = 40
+    assert rc.camera.fov == 40.0 and isinstance(rc.camera.fov, float)
+    for key, bad in (("camera.fov", 200), ("camera.fov", "wide"), ("lighting.mode", "spot"),
+                     ("highlight.color", (1, 1)), ("highlight.enabled", 1), ("picking.double_click_ms", 2.5)):
+        with pytest.raises(ValueError, match=key.split(".")[1]):
+            rc[key] = bad
+    with pytest.raises(KeyError, match="did you mean 'fov'"):
+        rc["camera.fovv"] = 1
+    with pytest.raises(AttributeError):
+        rc.camera = None
+
+
+def test_rc_files_load_in_order_and_round_trip(tmp_path, monkeypatch):
+    from valo import config
+
+    user, project, env = tmp_path / "user.toml", tmp_path / "valorc.toml", tmp_path / "env.toml"
+    user.write_text('[camera]\nfov = 40\norbit_speed = 0.5\n', encoding="utf-8")
+    project.write_text('[camera]\nfov = 45\n[keys]\nfit_all = "h"\n', encoding="utf-8")
+    env.write_text("[highlight]\nstrength = 0.1\n", encoding="utf-8")
+    monkeypatch.setattr(config, "USER_FILE", user)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("VALO_RC", str(env))
+    rc = config.RC()
+    assert rc.load_files() == [user, project, env]
+    assert (rc.camera.fov, rc.camera.orbit_speed, rc.keys.fit_all, rc.highlight.strength) == (45.0, 0.5, "h", 0.1)
+
+    saved = config.RC()
+    saved.load(rc.save(tmp_path / "out.toml"))  # only the changed keys are written
+    assert dict(saved.items()) == dict(rc.items())
+    full = tmp_path / "full.toml"
+    full.write_text(config.RC().to_toml(), encoding="utf-8")  # the commented file with every key
+    loaded = config.RC()
+    loaded.load(full)
+    assert dict(loaded.items()) == dict(config.RC().items())
+
+    (tmp_path / "bad.toml").write_text("[camera]\nzoom = 2\n", encoding="utf-8")
+    with pytest.raises(ValueError, match=r"bad\.toml.*did you mean 'zoom_speed'"):
+        config.RC().load(tmp_path / "bad.toml")
+
+
+def test_rc_context_restores_everything():
+    from valo import rc, rc_context
+
+    before = dict(rc.items())
+    with rc_context({"camera.fov": 60, "highlight": {"strength": 1.0}}):
+        assert rc.camera.fov == 60.0 and rc.highlight.strength == 1.0
+        rc.ui.scale = 2.0
+    assert dict(rc.items()) == before

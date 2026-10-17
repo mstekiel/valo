@@ -126,7 +126,7 @@ def test_scene_fills_the_central_dock_node_and_windows_dock_around_it(viewer):
     assert x == 0 and 0 < y < 60  # below the menu bar
     assert 0.6 < w / viewer.canvas.get_physical_size()[0] < 0.8  # right column takes the rest
     assert y + h == viewer.canvas.get_physical_size()[1]
-    assert set(editor.visible) == {"A", "B", "Camera", "Lighting", "History"} and all(editor.visible.values())
+    assert set(editor.visible) == {"A", "B", "Info", "Camera", "Lighting", "History"} and all(editor.visible.values())
     assert viewer.layout_file is None  # offscreen canvas: never writes a layout file
 
 
@@ -433,3 +433,21 @@ def test_hovered_object_is_highlighted_and_nothing_else(viewer):
     assert changed.sum() > 200
     assert not changed[:, w // 2 :].any()  # the other sphere (right half) and the background stay as they were
     viewer.pointer = None
+
+
+def test_info_rows_show_how_the_instance_was_placed(viewer):
+    from valo import instance_matrices, meshes
+    from valo.render import Pick
+    from valo.ui import pick_info
+
+    m = viewer.renderer.material("Steel", "pbr")
+    arrows = viewer.renderer.instances(meshes.arrow(), m, label="arrows", info=lambda i: {"vector": i})
+    arrows.set(instance_matrices([[0, 0, 0], [1.0, 2.0, 3.0]], [[1, 1, 1], [0.5, 0.5, 2.0]],
+                                 z_axis=[[0, 0, 1], [1, 0, 0]]))
+    rows = pick_info(Pick(0, 1, arrows, np.array([1.0, 2.0, 4.0])), SimpleNamespace(batches=list))
+    assert rows["Object"] == "arrows" and rows["Material"] == "Steel (pbr)" and rows["Instance"] == "2 of 2"
+    assert rows["Translation"] == "(1.000, 2.000, 3.000)" and rows["Scale"] == "(0.500, 0.500, 2.000)"
+    assert rows["Rotation"] == "90.0 deg about (0.00, 1.00, 0.00)"  # +Z turned onto +X
+    assert rows["vector"] == "1"
+    described = SimpleNamespace(batches=list, describe=lambda pick: {"site": "(0, 0, 0)"})
+    assert pick_info(Pick(0, 0, arrows, np.zeros(3)), described)["site"] == "(0, 0, 0)"

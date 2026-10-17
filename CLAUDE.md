@@ -1,6 +1,6 @@
 # valo — instructions for Claude Code
 
-Interactive scientific 3D rendering engine: wgpu (rendering) + glfw (window) + Dear ImGui (panel), Python only.
+Interactive scientific 3D rendering engine: wgpu (rendering) + glfw (window) + Dear ImGui (docking UI), Python only.
 Apps built on it live in `examples/`. Design and extension points: `ARCHITECTURE.md`. Keep both files short and current.
 
 ## Commands (uv only — never pip, venv, conda, poetry)
@@ -31,7 +31,8 @@ Apps built on it live in `examples/`. Design and extension points: `ARCHITECTURE
 | `materials.py` | shading models (WGSL), parameter schema, observable `Material`, colour conversion | buffer only |
 | `render.py` | shared WGSL, pipelines, render targets, `OrbitCamera`, `Instances` (mat4 per instance), `Spheres`, scene pass → post pass | yes |
 | `undo.py` | undo/redo stack | no |
-| `ui.py` | `Editor` base: undo, docked panel, material widgets, View/History sections | no |
+| `ui.py` | `Editor` base: undo, `windows()` / `menus()`, dockspace + default layout, menu bar, History, material widgets | no |
+| `ui_style.py` | fonts (Roboto + Font Awesome `ICON`, `mono_font()`), theme `apply_style(scale)` | no |
 | `app.py` | `Viewer`: canvas, device, renderer, camera, ImGui, mouse; `show(scene, editor)`, `run()` | yes |
 
 ## Example apps (`examples/<name>/`)
@@ -45,8 +46,8 @@ Apps built on it live in `examples/`. Design and extension points: `ARCHITECTURE
 
 1. Matrices are math convention (`p' = M @ p`), Z-up. `geometry.pack_mat4` is the only place that transposes for WGSL.
 2. Depth is reversed-Z (clear 0, compare `greater`). Colour is linear everywhere; sRGB encoding happens only in the post pass.
-3. Every user-facing change is a method on the app's `Editor` subclass that pushes a `Command` for undo. The panel only
-   calls these methods, so tests and scripts can do everything the UI can.
+3. Every user-facing change is a method on the app's `Editor` subclass that pushes a `Command` for undo. The windows only
+   call these methods, so tests and scripts can do everything the UI can.
 4. The renderer draws whatever `scene.batches()` returns: `(material, gpu_mesh, instance_bind_group, count)`
    tuples, made by `Instances.batch()`. Meshes are CCW-outward (back faces are culled). `valo/` never imports from `examples/` and knows no domain
    (crystals, molecules, …); apps use only the public API in `valo/__init__.py`.

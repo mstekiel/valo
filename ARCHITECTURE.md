@@ -45,22 +45,31 @@ all have defaults (`float`, `int`, `bool`), optionally `RANGES`, `MATERIAL`, `TR
 drives the Diagnostics panel and the tests, which run it on every library entry. Preview and library share
 `Sculpt.build`, so what you see is what's saved. Starter sculpts: `examples/sculpts/`.
 
-A real app subclasses `Editor`: its actions are methods that push `Command`s, and `panel()` draws its
-widgets (`material_section(m)` gives the schema-driven material editor). The base class draws the
-docked window, Ctrl+Z/Y, History and View. A scene with `bounding_radius()` gets the camera fitted on `show`.
+A real app subclasses `Editor`: its actions are methods that push `Command`s, and `windows()` returns its
+dockable windows as `{title: draw_function}`; `material_section(m)` gives the schema-driven material editor.
+Optional: `menus()` adds menus (e.g. File) before Edit and View; `dock_bottom` / `bottom_share` / `right_column`
+shape the default layout. The base class draws the menu bar (Edit: undo/redo, View: window toggles, auto-rotate,
+UI scale, Reset layout), the History window and the dockspace; the scene shows through the empty **central dock
+node**. The layout is saved to `~/.valo/<title>.ini` (real windows only, also on close). A scene with
+`bounding_radius()` gets the camera fitted on `show`.
+
+Look: `valo/ui_style.py` loads Roboto with Font Awesome icons merged in (`ICON.FLOPPY_DISK` etc.) and
+Inconsolata (`mono_font()`), and applies the theme (`apply_style(scale)`). ImGui 1.92 rasterises them at the
+real pixel density, so text is crisp at any DPI.
 
 ## One frame
 
 ```
 Viewer.draw()
- ├─ Renderer.render(surface_texture, viewport_width, scene, camera)
+ ├─ Renderer.render(surface_texture, viewport=(x, y, w, h), scene, camera)   rect = editor's central dock node
  │    ├─ write frame uniform (camera, light)                       group 0
  │    ├─ flush dirty materials (64-byte uniform each)              group 1
  │    ├─ scene pass → rgba16float texture, one instanced draw per batch
  │    │     batch = (material, gpu mesh, instance bind group, count)   group 2 = mat4x4f model per instance
  │    │     (vs_main: world = M·p, normal = cofactor(M)·n, so non-uniform scale shades correctly)
  │    └─ post pass → encode linear → sRGB into the viewport region of the window
- └─ ImguiRenderer.render()  → editor.gui() draws the panel on top (skipped without an editor)
+ └─ ImguiRenderer.render()  → editor.gui(): menu bar, dockspace, windows on top (skipped without an editor)
+    (if that frame moved the central node, scene + UI are drawn once more, so the scene never lags the layout)
 ```
 
 ## Dependencies
@@ -90,7 +99,7 @@ apps:    examples/crystal_studio: studio → crystal → valo
 | Animation (vibrations, precession) | engine: time in the frame uniform; per-instance amplitudes; displacement in `vs_main`. |
 | Picking | engine: extra pass writing (batch, instance_index) to an `rg32uint` texture; `Viewer` reads the pixel under the mouse. |
 | Image / video export | engine: render to an offscreen canvas at the requested size (the tests already do this). |
-| New panel section | app: an action method on its `Editor` subclass (with undo) + widgets in `panel()`. |
+| New panel or window | app: an action method on its `Editor` subclass (with undo) + an entry in `windows()`. |
 | New crystal structure (CIF, POSCAR, other lattice), more species | `examples/crystal_studio/crystal.py`: centres + species per site; keep `batches()`. |
 | A new app | `examples/<name>/` with a scene, an `Editor` subclass, a `main()` and a test. |
 

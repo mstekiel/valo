@@ -1,8 +1,8 @@
 # valo
 
 An interactive scientific 3D rendering engine in Python: wgpu for rendering, glfw for the window,
-Dear ImGui for the side panel. Apps hand the `Viewer` a scene of instanced, shaded geometry and an
-`Editor` panel with undo/redo.
+Dear ImGui for a docking UI. Apps hand the `Viewer` a scene of instanced, shaded geometry and an
+`Editor` whose windows dock around the 3D view, with undo/redo.
 
 ```powershell
 uv sync
@@ -15,6 +15,7 @@ uv run pytest                                     # engine + example tests (GPU 
 MeshSculptor hot-reloads the sculpt file whenever you save it in your editor. "Save to library" writes
 `valo/meshes/library/<name>.py`, and apps use it as `valo.library.mesh("<name>")`.
 
-Mouse: left-drag orbits, wheel zooms. Ctrl+Z / Ctrl+Y undo / redo.
+Mouse: left-drag orbits, wheel zooms. Ctrl+Z / Ctrl+Y undo / redo. Drag window tabs to re-dock them;
+View → Reset layout restores the default. Layouts are saved in `~/.valo/`.
 
 See `ARCHITECTURE.md` for how it fits together, how to write an app, and where new features go.

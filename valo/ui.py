@@ -15,7 +15,7 @@ from collections.abc import Callable
 from imgui_bundle import imgui
 from imgui_bundle.imgui import internal
 
-from .lighting import MODES
+from .lighting import MODES, Lighting
 from .materials import SCHEMA, SHADINGS, Material, linear_to_srgb, srgb_to_linear
 from .render import PROJECTIONS, VIEWS
 from .ui_style import ICON, apply_style
@@ -36,6 +36,7 @@ class Editor:
         self.undo_stack = UndoStack()
         self.auto_rotate = False
         self.viewer = None  # set by Viewer.show(): camera, lighting and scene
+        self._ground_before_flat: tuple | None = None  # restored when Flat ambient is switched off
         self.ui_scale = 1.0
         self.visible: dict[str, bool] = {}
         self.scene_rect: tuple[float, float, float, float] | None = None  # central dock node, logical pixels
@@ -132,14 +133,16 @@ class Editor:
 
     def set_projection(self, projection: str) -> None:
         """Switch the camera between perspective and orthographic (undoable)."""
-        cam = self.viewer.camera
+        cam, scene = self.viewer.camera, self.viewer.scene
+        radius = scene.bounding_radius() if hasattr(scene, "bounding_radius") else None
         self._record(f"camera: {projection}", cam, ("projection", "distance", "ortho_height"),
-                     lambda: cam.set_projection(projection))
+                     lambda: cam.set_projection(projection, radius))
 
     def set_fov(self, degrees: float) -> None:
-        """Set the perspective field of view in degrees (undoable)."""
-        cam = self.viewer.camera
-        self._record("camera: field of view", cam, ("fovy",), lambda: setattr(cam, "fovy", float(degrees)),
+        """Set the perspective field of view in degrees, keeping the target's size on screen (undoable)."""
+        cam, scene = self.viewer.camera, self.viewer.scene
+        radius = scene.bounding_radius() if hasattr(scene, "bounding_radius") else None
+        self._record("camera: field of view", cam, ("fovy", "distance"), lambda: cam.set_fov(degrees, radius),
                      merge_key=("camera", "fovy"))
 
     def set_view(self, name: str) -> None:
@@ -167,6 +170,20 @@ class Editor:
         """Switch the light between headlight and fixed without moving it (undoable)."""
         light, cam = self.viewer.lighting, self.viewer.camera
         self._record(f"light: {mode}", light, ("mode", "azimuth", "elevation"), lambda: light.set_mode(mode, cam))
+
+    def set_ambient_flat(self, flat: bool) -> None:
+        """Flat ambient on (ground = sky) or off (the ground colour from before comes back); undoable."""
+        light = self.viewer.lighting
+        if flat == (tuple(light.sky) == tuple(light.ground)):
+            return
+        if flat:
+            self._ground_before_flat = tuple(light.ground)
+            self.set_flat_ambient(light.sky)
+        else:
+            ground = self._ground_before_flat or Lighting.ground
+            if tuple(ground) == tuple(light.sky):  # e.g. it started flat: any distinct ground will do
+                ground = tuple(0.2 * c for c in light.sky)
+            self.set_light("ground", ground)
 
     def set_flat_ambient(self, rgb) -> None:
         """One ambient colour from every side (sky = ground)."""
@@ -241,8 +258,9 @@ class Editor:
             if changed:
                 self.set_light("ground", col)
         imgui.same_line()
-        if imgui.checkbox("Flat", flat)[0] and not flat:
-            self.set_flat_ambient(light.sky)
+        clicked, want_flat = imgui.checkbox("Flat", flat)
+        if clicked:
+            self.set_ambient_flat(want_flat)
         changed, v = imgui.slider_float("Ambient", light.ambient, 0.0, 1.5, "%.2f")
         if changed:
             self.set_light("ambient", v)

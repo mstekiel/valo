@@ -112,3 +112,24 @@ def test_switching_light_mode_keeps_the_direction(start):
     d = light.direction(cam)
     light.set_mode(next(m for m in MODES if m != start), cam)
     assert light.direction(cam) == pytest.approx(d, abs=1e-9)
+
+
+def test_camera_changes_keep_the_scene_size():
+    from valo.render import OrbitCamera
+
+    radius = 4.75
+
+    def outline_share(cam):  # visible height share of the bounding sphere's outline
+        if cam.projection == "orthographic":
+            return 2 * radius / cam.ortho_height
+        return np.tan(np.arcsin(radius / cam.distance)) / np.tan(np.radians(cam.fovy / 2))
+
+    cam = OrbitCamera(distance=15.0)
+    share = outline_share(cam)
+    for change in (lambda: cam.set_fov(60, radius), lambda: cam.set_fov(20, radius),
+                   lambda: cam.set_projection("orthographic", radius),
+                   lambda: cam.set_projection("perspective", radius)):
+        change()
+        assert outline_share(cam) == pytest.approx(share)
+    cam.set_fov(35, radius)
+    assert cam.distance == pytest.approx(15.0)  # back to the start: same distance

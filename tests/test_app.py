@@ -319,3 +319,19 @@ def test_material_parameters_clamp_round_and_rebuild_from_dict(viewer):
     d = m.to_dict()
     copy = viewer.renderer.material("copy", d.pop("shading"), **d)
     assert np.allclose(copy.data, m.data, atol=1e-4)
+
+
+def test_flat_ambient_can_be_switched_off_again(viewer):
+    from valo import Editor, Lighting
+
+    viewer.lighting = light = Lighting(ground=(0.3, 0.1, 0.0))
+    editor = Editor()
+    viewer.show(SimpleNamespace(batches=list), editor)
+    editor.set_ambient_flat(True)
+    assert light.ground == light.sky
+    editor.set_ambient_flat(False)
+    assert light.ground == (0.3, 0.1, 0.0)  # the ground colour from before Flat comes back
+    viewer.lighting = light = Lighting(sky=(0.5, 0.5, 0.5), ground=(0.5, 0.5, 0.5))  # started flat
+    editor.set_ambient_flat(False)
+    assert light.ground != light.sky
+    viewer.lighting = Lighting()

@@ -177,17 +177,44 @@ class OrbitCamera:
     def _height_at_target(self) -> float:
         return 2 * self.distance * math.tan(math.radians(self.fovy / 2))
 
-    def set_projection(self, projection: str) -> None:
-        """Switch projection keeping the target the same size on screen."""
+    def set_projection(self, projection: str, radius: float | None = None) -> None:
+        """Switch projection without an apparent zoom.
+
+        With the scene's bounding ``radius`` the outline of that sphere keeps its size on screen (perspective
+        enlarges the near half, so matching only the target's depth looks like zooming out); without it, the
+        plane through the target keeps its size.
+        """
         if projection not in PROJECTIONS:
             raise ValueError(f"unknown projection {projection!r}")
         if projection == self.projection:
             return
+        t = math.tan(math.radians(self.fovy / 2))
+        use_sphere = radius is not None and 0 < radius < self.distance
         if projection == "orthographic":
-            self.ortho_height = self._height_at_target()
+            self.ortho_height = 2 * radius * t / self._outline(radius) if use_sphere else self._height_at_target()
+        elif radius and radius > 0:  # the distance at which the sphere's outline fills the same share of the view
+            self.distance = radius / math.sin(math.atan(2 * radius / self.ortho_height * t))
         else:
-            self.distance = self.ortho_height / (2 * math.tan(math.radians(self.fovy / 2)))
+            self.distance = self.ortho_height / (2 * t)
         self.projection = projection
+
+    def _outline(self, radius: float) -> float:
+        """tan of the angle from the view axis to the outline of a sphere of ``radius`` around the target."""
+        return math.tan(math.asin(radius / self.distance))
+
+    def set_fov(self, degrees: float, radius: float | None = None) -> None:
+        """Change the perspective field of view and move the camera so the scene keeps its size (a dolly zoom).
+
+        With the scene's bounding ``radius`` its outline keeps its size; otherwise the plane through the target.
+        """
+        old = math.tan(math.radians(self.fovy / 2))
+        new = math.tan(math.radians(float(degrees) / 2))
+        if radius is not None and 0 < radius < self.distance:
+            share = self._outline(radius) / old  # outline height as a share of the view
+            self.distance = radius / math.sin(math.atan(share * new))
+        else:
+            self.distance *= old / new
+        self.fovy = float(degrees)
 
     def zoom(self, factor: float) -> None:
         """Zoom out by ``factor`` (> 1) or in (< 1)."""

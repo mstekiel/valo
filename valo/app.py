@@ -105,11 +105,6 @@ class Viewer:
         x, y, rw, rh = (int(round(c * r)) for c in self.editor.scene_rect)
         return x, y, max(rw, 1), max(rh, 1)
 
-    @property
-    def viewport_width(self) -> int:
-        """Width of the scene viewport in framebuffer pixels."""
-        return self.viewport[2]
-
     def snapshot(self) -> np.ndarray:
         """Draw two frames offscreen (ImGui lays out on the first) and return the scene region, (h, w, 3) uint8."""
         for _ in range(2):

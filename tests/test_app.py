@@ -350,3 +350,21 @@ def test_orbit_speed_comes_from_rc(viewer):
         viewer.on_pointer({"event_type": "pointer_move", "x": x + w / 2 + 30, "y": y + h / 2})
         viewer.on_pointer({"event_type": "pointer_up", "x": x + w / 2 + 30, "y": y + h / 2})
     assert cam.azimuth == pytest.approx(az - 30)
+
+
+def test_preferences_window_edits_rc_live(viewer):
+    from imgui_bundle import imgui
+
+    from valo import Editor, rc, rc_context
+
+    editor = Editor()
+    viewer.show(SimpleNamespace(batches=list), editor)
+    with rc_context():
+        editor.show_preferences = True
+        viewer.snapshot()  # the generated widgets for every key draw without errors
+        editor.set_preference("ui.scale", 1.25)
+        imgui.set_current_context(viewer.imgui.imgui_context)
+        assert rc.ui.scale == 1.25 and imgui.get_style().font_scale_main == 1.25
+        with pytest.raises(ValueError):
+            editor.set_preference("camera.fov", 500)
+    editor.set_ui_scale(rc.ui.scale)

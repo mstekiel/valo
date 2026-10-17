@@ -11,11 +11,12 @@ from __future__ import annotations
 
 import copy
 from collections.abc import Callable
+from dataclasses import fields
 
 from imgui_bundle import imgui
 from imgui_bundle.imgui import internal
 
-from .config import rc
+from .config import SECTIONS, USER_FILE, rc
 from .lighting import MODES
 from .materials import SCHEMA, SHADINGS, Material, linear_to_srgb, srgb_to_linear
 from .render import PROJECTIONS, VIEWS
@@ -39,6 +40,7 @@ class Editor:
         self.viewer = None  # set by Viewer.show(): camera, lighting and scene
         self._ground_before_flat: tuple | None = None  # restored when Flat ambient is switched off
         self.ui_scale = rc.ui.scale
+        self.show_preferences = False
         self.visible: dict[str, bool] = {}
         self.scene_rect: tuple[float, float, float, float] | None = None  # central dock node, logical pixels
         self._focus: list[str] = []  # windows to focus next frame (the first tab of each dock node)
@@ -327,6 +329,12 @@ class Editor:
                 draw()
             imgui.end()
             self.visible[name] = bool(still_open)
+        if self.show_preferences:  # a floating window, not part of the dock layout
+            imgui.set_next_window_size(imgui.ImVec2(460, 560), imgui.Cond_.first_use_ever)
+            expanded, self.show_preferences = imgui.begin("Preferences", True)
+            if expanded:
+                self.preferences_window()
+            imgui.end()
 
     def build_layout(self, dock_id: int, names: list[str]) -> None:
         """The default layout: a right column of tabbed app windows; ``dock_bottom`` and shared windows below."""
@@ -375,11 +383,67 @@ class Editor:
                 imgui.end_menu()
             if imgui.menu_item(f"{ICON.TABLE_COLUMNS} Reset layout")[0]:
                 self.reset_layout()
+            imgui.separator()
+            if imgui.menu_item(f"{ICON.GEAR} Preferences", "", self.show_preferences)[0]:
+                self.show_preferences = not self.show_preferences
             imgui.end_menu()
         imgui.text_disabled("   Left-drag: orbit   Wheel: zoom")
         imgui.end_main_menu_bar()
+
+    # -- preferences (configuration, not scene editing: not undoable)
+    def set_preference(self, key: str, value) -> None:
+        """Set config key ``key`` (e.g. "camera.orbit_speed") and apply it where it takes effect immediately."""
+        rc[key] = value
+        if key in ("ui.scale", "ui.accent"):
+            self.set_ui_scale(rc.ui.scale)
+
+    def preferences_window(self) -> None:
+        """Every ``rc`` key, with widgets generated from the config schema, plus Save and Reset."""
+        imgui.push_text_wrap_pos(0.0)
+        imgui.text_disabled("Defaults and preferences; changes apply now. Font size applies on restart.")
+        imgui.pop_text_wrap_pos()
+        if imgui.button(f"{ICON.FLOPPY_DISK} Save to {USER_FILE.name}"):
+            self.status_message = f"saved {rc.save()}"
+        imgui.same_line()
+        if imgui.button(f"{ICON.ARROW_ROTATE_LEFT} Reset all"):
+            rc.reset()
+            self.set_ui_scale(rc.ui.scale)
+        if getattr(self, "status_message", ""):
+            imgui.text_disabled(self.status_message)
+        for name in SECTIONS:
+            section = getattr(rc, name)
+            if not imgui.collapsing_header(f"{SECTIONS[name].__doc__.split(':')[0].rstrip('.')}  ##{name}"):
+                continue
+            for f in fields(section):
+                changed, value = _pref_widget(f, getattr(section, f.name))
+                if changed:
+                    self.set_preference(f"{name}.{f.name}", value)
+                if f.metadata["help"] and imgui.is_item_hovered():
+                    imgui.set_tooltip(f.metadata["help"])
 
     def set_ui_scale(self, scale: float) -> None:
         """Scale text and spacing of the whole UI."""
         self.ui_scale = scale
         apply_style(scale)
+
+
+def _pref_widget(f, value) -> tuple[bool, object]:
+    """One generated widget for a config field: checkbox, slider, colour, combo or text."""
+    m, label = f.metadata, f"{f.metadata['label']}##{f.name}"
+    unit = f" {m['unit']}" if m["unit"] and m["unit"] != "x" else ""
+    if isinstance(value, bool):
+        return imgui.checkbox(label, value)
+    if isinstance(value, int):
+        return imgui.slider_int(label, value, m["lo"], m["hi"], f"%d{unit}")
+    if isinstance(value, float):
+        return imgui.slider_float(label, value, m["lo"], m["hi"], f"%.3g{unit}")
+    if isinstance(value, tuple) and len(value) == 3:
+        if m["hi"] == 255:  # sRGB 0-255
+            changed, col = imgui.color_edit3(label, [c / 255 for c in value], imgui.ColorEditFlags_.no_inputs)
+            return changed, tuple(round(c * 255) for c in col)
+        changed, col = imgui.color_edit3(label, [linear_to_srgb(c) for c in value], imgui.ColorEditFlags_.no_inputs)
+        return changed, tuple(srgb_to_linear(c) for c in col)
+    if m["choices"]:
+        changed, i = imgui.combo(label, list(m["choices"]).index(value), list(m["choices"]))
+        return changed, m["choices"][i]
+    return imgui.input_text(label, value)

@@ -199,3 +199,17 @@ def test_lighting_defaults_come_from_rc():
         light = Lighting()
     assert (light.mode, light.ambient) == ("fixed", 0.7)
     assert Lighting().mode == "headlight"
+
+
+def test_valo_config_writes_a_commented_defaults_file(tmp_path):
+    from valo.config import RC, main
+
+    path = tmp_path / "valorc.toml"
+    main(["--write-defaults", str(path)])
+    text = path.read_text(encoding="utf-8")
+    assert "[camera]" in text and "orbit_speed = 0.4" in text and "deg/px" in text
+    loaded = RC()
+    loaded.load(path)
+    assert dict(loaded.items()) == dict(RC().items())
+    with pytest.raises(SystemExit):
+        main(["--write-defaults", str(path)])  # never overwrites

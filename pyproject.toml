@@ -17,6 +17,7 @@ build-backend = "hatchling.build"
 
 [project.scripts]
 valo-sculpt = "valo.tools.sculptor:main"
+valo-config = "valo.config:main"
 
 [tool.ruff]
 line-length = 120

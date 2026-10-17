@@ -53,6 +53,22 @@ UI scale, Reset layout), the History window and the dockspace; the scene shows t
 node**. The layout is saved to `~/.valo/<title>.ini` (real windows only, also on close). A scene with
 `bounding_radius()` gets the camera fitted on `show`.
 
+## Camera and lighting
+
+- **`OrbitCamera`** (`render.py`): azimuth/elevation/distance around a target; `projection` is "perspective" or
+  "orthographic" (`set_projection` keeps the target the same size on screen; `zoom` scales distance or
+  `ortho_height`); `VIEWS` has ±X/±Y/±Z/Iso presets.
+- **`Lighting`** (`lighting.py`, `viewer.lighting`): one directional light, a **headlight** (angles in the camera's
+  frame, so it moves with you) or **fixed** (world angles); `set_mode` converts so it never jumps. Plus a **global
+  hemisphere ambient**: sky colour, ground colour and an intensity shared by every object. The same sky/ground
+  is what PBR materials reflect. A material's `ambient` only scales that global ambient (0–1, default 1).
+- The Editor's shared **Camera** and **Lighting** windows change these through undoable actions; mouse orbit/zoom
+  is navigation and is not recorded.
+
+Frame uniform (group 0, 160 bytes): `view_proj` mat4 · `eye` · `view_dir` (w = 1 perspective, 0 orthographic:
+shading uses a constant view vector) · `light_dir` · `light_color` (× intensity) · `sky` (w = ambient intensity)
+· `ground`.
+
 Look: `valo/ui_style.py` loads Roboto with Font Awesome icons merged in (`ICON.FLOPPY_DISK` etc.) and
 Inconsolata (`mono_font()`), and applies the theme (`apply_style(scale)`). ImGui 1.92 rasterises them at the
 real pixel density, so text is crisp at any DPI.
@@ -62,7 +78,7 @@ real pixel density, so text is crisp at any DPI.
 ```
 Viewer.draw()
  ├─ Renderer.render(surface_texture, viewport=(x, y, w, h), scene, camera)   rect = editor's central dock node
- │    ├─ write frame uniform (camera, light)                       group 0
+ │    ├─ write frame uniform (camera, light, ambient)              group 0
  │    ├─ flush dirty materials (64-byte uniform each)              group 1
  │    ├─ scene pass → rgba16float texture, one instanced draw per batch
  │    │     batch = (material, gpu mesh, instance bind group, count)   group 2 = mat4x4f model per instance

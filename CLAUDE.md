@@ -29,7 +29,8 @@ Apps built on it live in `examples/`. Design and extension points: `ARCHITECTURE
 | `meshes/library/` | saved sculpts, one `<name>.py` each; `names()`, `mesh(name, **params)`, `material(renderer, name)` | no |
 | `tools/sculptor.py` | MeshSculptor app (`valo-sculpt`): `SculptScene`, `SculptorEditor` with hot reload, diagnostics, save | yes |
 | `materials.py` | shading models (WGSL), parameter schema, observable `Material`, colour conversion | buffer only |
-| `render.py` | shared WGSL, pipelines, render targets, `OrbitCamera`, `Instances` (mat4 per instance), `Spheres`, scene pass → post pass | yes |
+| `render.py` | shared WGSL, pipelines, render targets, `OrbitCamera` (perspective/orthographic, `VIEWS`), `Instances` (mat4 per instance), `Spheres`, scene pass → post pass | yes |
+| `lighting.py` | `Lighting`: headlight or fixed directional light, global hemisphere ambient (sky, ground, intensity) | no |
 | `undo.py` | undo/redo stack | no |
 | `ui.py` | `Editor` base: undo, `windows()` / `menus()`, dockspace + default layout, menu bar, History, material widgets | no |
 | `ui_style.py` | fonts (Roboto + Font Awesome `ICON`, `mono_font()`), theme `apply_style(scale)` | no |

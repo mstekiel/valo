@@ -57,13 +57,6 @@ def orthographic_reversed_z(height, aspect, near, far):
     return m
 
 
-def normal_matrix(model):
-    """4×4 matrix that transforms normals for ``model``: the inverse-transpose of its 3×3 part."""
-    n = np.eye(4, dtype=np.float32)
-    n[:3, :3] = np.linalg.inv(model[:3, :3]).T
-    return n
-
-
 def pack_mat4(m):
     """numpy row-major math matrix → WGSL column-major mat4x4f bytes (the ONLY transpose)."""
     return np.ascontiguousarray(np.swapaxes(np.asarray(m, np.float32), -1, -2))

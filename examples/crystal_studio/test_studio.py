@@ -108,3 +108,25 @@ def test_scripting_example_writes_a_transparent_png(studio, tmp_path, monkeypatc
     runpy.run_path(str(Path(__file__).with_name("crystal.py")), run_name="__main__")
     png = Image.open(tmp_path / "crystal.png")
     assert png.size == (2400, 1600) and png.mode == "RGBA"
+
+
+@pytest.mark.gpu
+def test_exported_script_renders_the_same_picture_as_the_studio(studio, tmp_path):
+    import runpy
+
+    from PIL import Image
+
+    viewer, ed = studio
+    ed.set_count(2, 3)
+    ed.set_projection("orthographic")
+    ed.set_light_mode("fixed")
+    ed.render_options.update(size=[320, 240], samples=2, transparent=True)
+    expected = np.asarray(Image.open(ed.render_image(tmp_path / "studio.png")))
+    script = ed.export_script(tmp_path / "again.py")
+    namespace = runpy.run_path(str(script))  # importable: SETTINGS without rendering
+    assert namespace["SETTINGS"]["scene"]["n"] == [6, 6, 3] and namespace["SETTINGS"]["image"]["size"] == [320, 240]
+    runpy.run_path(str(script), run_name="__main__")
+    assert np.array_equal(np.asarray(Image.open(tmp_path / "again.png")), expected)
+    while ed.undo_stack.done:
+        ed.undo_stack.undo()
+    viewer.lighting = type(viewer.lighting)()

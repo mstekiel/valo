@@ -578,3 +578,17 @@ def test_offline_render_matches_the_viewer_and_settings_round_trip(viewer, ball_
     with pytest.raises(KeyError, match="did you mean 'azimuth'"):
         OrbitCamera.from_settings({"azimut": 3})
     viewer.lighting = Lighting()
+
+
+def test_any_app_can_render_an_image_but_export_needs_scene_settings(viewer, ball_scene, tmp_path):
+    from valo import Editor
+
+    editor = Editor()
+    viewer.show(ball_scene, editor)
+    editor.show_render = True
+    viewer.snapshot()  # the Render window draws
+    editor.render_options.update(size=[64, 48], samples=1)
+    assert editor.render_image(tmp_path / "x.png").exists() and "saved" in editor.render_status
+    assert not editor.can_export()
+    with pytest.raises(ValueError):
+        editor.export_script(tmp_path / "x.py")

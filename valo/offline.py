@@ -12,6 +12,9 @@ camera fitted to the scene.
 
 from __future__ import annotations
 
+import json
+import sys
+import time
 from pathlib import Path
 
 import numpy as np
@@ -84,4 +87,72 @@ def save_png(img: np.ndarray, path) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     opaque = bool((img[..., 3] == 255).all())
     Image.fromarray(img[..., :3] if opaque else img, "RGB" if opaque else "RGBA").save(path)
+    return path
+
+
+def plain(data):
+    """``data`` as plain Python literals (lists, floats, ints, str, bool, None), e.g. for writing a script."""
+    return json.loads(json.dumps(data, default=float))
+
+
+def py_literal(value, indent: int = 0, width: int = 100) -> str:
+    """``value`` (plain data) as readable Python source: 4-space indents, short dicts and lists on one line."""
+    if isinstance(value, dict):
+        items = [f"{json.dumps(k)}: {py_literal(v, indent + 4, width)}" for k, v in value.items()]
+        open_, close = "{", "}"
+    elif isinstance(value, list):
+        items = [py_literal(v, indent + 4, width) for v in value]
+        open_, close = "[", "]"
+    else:
+        return json.dumps(value) if isinstance(value, str) else repr(value)
+    one_line = open_ + ", ".join(items) + close
+    if "\n" not in one_line and indent + len(one_line) <= width:
+        return one_line
+    pad = " " * (indent + 4)
+    return open_ + "\n" + "".join(f"{pad}{item},\n" for item in items) + " " * indent + close
+
+
+def export_script(path, scene, settings: dict) -> Path:
+    """Write a runnable render script: ``SETTINGS`` (scene, camera, lighting, image) and a main that rebuilds
+    the scene with ``type(scene).from_settings`` and renders ``<script>.png``. Returns the path.
+
+    The scene class must live in an importable module (not ``__main__``); its folder is put on ``sys.path``.
+    """
+    cls = type(scene)
+    module = sys.modules.get(cls.__module__)
+    if cls.__module__ == "__main__" or not getattr(module, "__file__", None):
+        raise ValueError(f"{cls.__name__} must be defined in an importable module to export a render script")
+    if not hasattr(cls, "from_settings"):
+        raise ValueError(f"{cls.__name__} has no from_settings(); it can't be rebuilt from a script")
+    path = Path(path)
+    folder = Path(module.__file__).resolve().parent
+    body = py_literal(plain(settings))
+    text = f'''"""Render script exported by valo on {time.strftime("%Y-%m-%d %H:%M")}.
+
+Run it:  uv run python {path.name}     (writes {path.with_suffix(".png").name} next to this file)
+Edit SETTINGS to change the picture:
+  scene     {cls.__name__}.settings() / from_settings() data
+  camera    OrbitCamera fields (azimuth, elevation in degrees, distance, target, fovy, projection, ortho_height)
+  lighting  Lighting fields (mode "headlight" or "fixed", angles in degrees, colours linear RGB)
+  image     size [width, height] px, samples 1-4 (supersampling), transparent, background (linear RGB or None)
+"""
+
+import sys
+from pathlib import Path
+
+sys.path.insert(0, {str(folder)!r})
+
+import valo  # noqa: E402
+from {cls.__module__} import {cls.__name__}  # noqa: E402
+
+SETTINGS = {body}
+
+if __name__ == "__main__":
+    scene = {cls.__name__}.from_settings(SETTINGS["scene"])
+    out = Path(__file__).with_suffix(".png")
+    img = valo.render(scene, SETTINGS, path=out)
+    print(f"wrote {{out}} ({{img.shape[1]}} x {{img.shape[0]}})")
+'''
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
     return path

@@ -278,3 +278,15 @@ def test_example_valorc_loads_with_and_without_its_commented_defaults(tmp_path):
     documented = set(re.findall(r"(?m)^\[(\w+)\]", text)), set(re.findall(r"(?m)^#? ?(\w+) = ", text))
     assert documented[0] == {k.split(".")[0] for k, _ in RC().items()}
     assert documented[1] == {k.split(".")[1] for k, _ in RC().items()}  # no key left undocumented
+
+
+def test_py_literal_writes_readable_valid_python():
+    import ast
+
+    from valo.offline import py_literal
+
+    data = {"scene": {"n": [6, 6, 6], "name": 'say "hi"', "materials": [{"name": "M", "rgb": [0.1, 0.2, 0.3]}] * 4},
+            "image": {"transparent": True, "background": None, "samples": 2}}
+    text = py_literal(data)
+    assert ast.literal_eval(text) == data
+    assert '"n": [6, 6, 6],' in text and '\n    "image": ' in text and max(map(len, text.splitlines())) <= 100

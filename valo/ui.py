@@ -10,8 +10,10 @@ History window, and the default layout (app windows tabbed in a right column, Hi
 from __future__ import annotations
 
 import copy
+import time
 from collections.abc import Callable
 from dataclasses import fields
+from pathlib import Path
 
 import numpy as np
 from imgui_bundle import imgui
@@ -21,6 +23,7 @@ from .config import SECTIONS, USER_FILE, rc
 from .geometry import axis_angle, decompose, euler_xyz
 from .lighting import MODES
 from .materials import SCHEMA, SHADINGS, Material, linear_to_srgb, srgb_to_linear
+from .offline import export_script, image_settings, plain, render
 from .render import PROJECTIONS, VIEWS
 from .ui_style import ICON, apply_style
 from .undo import Command, UndoStack
@@ -43,6 +46,10 @@ class Editor:
         self._ground_before_flat: tuple | None = None  # restored when Flat ambient is switched off
         self.ui_scale = rc.ui.scale
         self.show_preferences = False
+        self.show_render = False
+        self.render_options = {k: (list(v) if isinstance(v, tuple) else v)
+                               for k, v in image_settings(None).items()}  # from rc.render
+        self.render_status = ""
         self.visible: dict[str, bool] = {}
         self.scene_rect: tuple[float, float, float, float] | None = None  # central dock node, logical pixels
         self._focus: list[str] = []  # windows to focus next frame (the first tab of each dock node)
@@ -358,6 +365,12 @@ class Editor:
                 draw()
             imgui.end()
             self.visible[name] = bool(still_open)
+        if self.show_render:
+            imgui.set_next_window_size(imgui.ImVec2(420, 0), imgui.Cond_.first_use_ever)
+            expanded, self.show_render = imgui.begin("Render", True)
+            if expanded:
+                self.render_window()
+            imgui.end()
         if self.show_preferences:  # a floating window, not part of the dock layout
             imgui.set_next_window_size(imgui.ImVec2(460, 560), imgui.Cond_.first_use_ever)
             expanded, self.show_preferences = imgui.begin("Preferences", True)
@@ -387,7 +400,16 @@ class Editor:
     def _menu_bar(self, wins: dict) -> None:
         if not imgui.begin_main_menu_bar():
             return
-        for name, draw in self.menus().items():
+        menus = self.menus()
+        app_file = menus.pop("File", None)
+        if imgui.begin_menu("File"):  # the app's File items, then Render
+            if app_file:
+                app_file()
+                imgui.separator()
+            if imgui.menu_item(f"{ICON.IMAGE} Render image / export script...", "", self.show_render)[0]:
+                self.show_render = not self.show_render
+            imgui.end_menu()
+        for name, draw in menus.items():
             if imgui.begin_menu(name):
                 draw()
                 imgui.end_menu()
@@ -418,6 +440,66 @@ class Editor:
             imgui.end_menu()
         imgui.text_disabled("   Drag: orbit   Middle/Shift-drag: pan   Wheel: zoom   Click: select   F: frame")
         imgui.end_main_menu_bar()
+
+    # -- offline render and export (they read the scene; they don't edit it, so no undo)
+    def render_settings(self) -> dict:
+        """Camera, lighting and image options as plain data, plus the scene's ``settings()`` when it has them."""
+        viewer = self.viewer
+        out = {"camera": viewer.camera.settings(), "lighting": viewer.lighting.settings(),
+               "image": image_settings(None, **self.render_options)}
+        if hasattr(viewer.scene, "settings"):
+            out = {"scene": viewer.scene.settings(), **out}
+        return plain(out)
+
+    def _output(self, suffix: str) -> Path:
+        name = type(self.viewer.scene).__name__.lower()
+        return Path.cwd() / f"render_{name}_{time.strftime('%Y%m%d-%H%M%S')}{suffix}"
+
+    def render_image(self, path=None) -> Path:
+        """Render the scene offline as it is on screen (with the Render window's image options) and save a PNG."""
+        path = Path(path) if path else self._output(".png")
+        settings = self.render_settings()
+        render(self.viewer.scene, settings, path=path)
+        self.render_status = f"saved {path}"
+        return path
+
+    def export_script(self, path=None) -> Path:
+        """Write a runnable script that re-renders this picture offline (needs a scene with ``settings()``)."""
+        path = Path(path) if path else self._output(".py")
+        export_script(path, self.viewer.scene, self.render_settings())
+        self.render_status = f"exported {path}"
+        return path
+
+    def can_export(self) -> bool:
+        """True when the scene can describe itself (``settings()`` / ``from_settings()``)."""
+        scene = self.viewer.scene if self.viewer else None
+        return hasattr(scene, "settings") and hasattr(type(scene), "from_settings")
+
+    def render_window(self) -> None:
+        """Image options for offline rendering, and the Render / Export buttons."""
+        opt = self.render_options
+        changed, size = imgui.input_int2("Size (px)", list(opt["size"]))
+        if changed:
+            opt["size"] = [max(16, min(16384, int(c))) for c in size]
+        _, opt["samples"] = imgui.slider_int("Supersampling", int(opt["samples"]), 1, 4, "%dx")
+        _, opt["transparent"] = imgui.checkbox("Transparent background", bool(opt["transparent"]))
+        if not opt["transparent"]:
+            changed, col = imgui.color_edit3("Background", [linear_to_srgb(c) for c in opt["background"]],
+                                             imgui.ColorEditFlags_.no_inputs)
+            if changed:
+                opt["background"] = [srgb_to_linear(c) for c in col]
+        imgui.text_disabled("Camera and lighting: as in the 3D view")
+        if imgui.button(f"{ICON.IMAGE} Render PNG"):
+            self.render_image()
+        imgui.same_line()
+        imgui.begin_disabled(not self.can_export())
+        if imgui.button(f"{ICON.FILE_CODE} Export render script"):
+            self.export_script()
+        imgui.end_disabled()
+        if self.render_status:
+            imgui.push_text_wrap_pos(0.0)
+            imgui.text_disabled(self.render_status)
+            imgui.pop_text_wrap_pos()
 
     # -- preferences (configuration, not scene editing: not undoable)
     def set_preference(self, key: str, value) -> None:

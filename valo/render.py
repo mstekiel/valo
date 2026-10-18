@@ -13,13 +13,13 @@ import functools
 import math
 import weakref
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from typing import NamedTuple
 
 import numpy as np
 import wgpu
 
-from .config import rc
+from .config import _unknown, rc
 from .geometry import instance_matrices, look_at, orthographic_reversed_z, pack_mat4, perspective_reversed_z
 from .lighting import Lighting
 from .materials import FRAGMENT_WGSL, Material
@@ -131,7 +131,7 @@ class Pick(NamedTuple):
 
 POST_WGSL = """
 @group(0) @binding(0) var scene_tex: texture_2d<f32>;
-@group(0) @binding(1) var<uniform> origin: vec4f;   // xy = viewport origin in framebuffer pixels
+@group(0) @binding(1) var<uniform> origin: vec4f;   // xy = viewport origin in framebuffer pixels, z = samples
 
 @vertex
 fn vs_main(@builtin(vertex_index) i: u32) -> @builtin(position) vec4f {
@@ -147,9 +147,20 @@ fn linear_to_srgb(c: vec3f) -> vec3f {
 
 @fragment
 fn fs_main(@builtin(position) p: vec4f) -> @location(0) vec4f {
-    // Framebuffer coords → scene texel; the scene texture is exactly viewport-sized.
-    let c = textureLoad(scene_tex, vec2i(p.xy - origin.xy), 0).rgb;
-    return vec4f(linear_to_srgb(clamp(c, vec3f(0.0), vec3f(1.0))), 1.0);
+    // Framebuffer coords → a k×k block of scene texels (the scene texture is k times the viewport: supersampling).
+    // Colours are averaged premultiplied by alpha (alpha < 1 only on a transparent background), then encoded.
+    let k = i32(origin.z);
+    let base = vec2i(p.xy - origin.xy) * k;
+    var sum = vec4f(0.0);
+    for (var y = 0; y < k; y++) {
+        for (var x = 0; x < k; x++) {
+            let t = textureLoad(scene_tex, base + vec2i(x, y), 0);
+            sum += vec4f(t.rgb * t.a, t.a);
+        }
+    }
+    let a = sum.a / f32(k * k);
+    let c = select(vec3f(0.0), sum.rgb / max(sum.a, 1e-6), sum.a > 0.0);
+    return vec4f(linear_to_srgb(clamp(c, vec3f(0.0), vec3f(1.0))), a);
 }
 """
 
@@ -205,6 +216,20 @@ class OrbitCamera:
         """Unit view direction, from the eye toward the target."""
         f = np.asarray(self.target, float) - self.eye()
         return f / np.linalg.norm(f)
+
+    def settings(self) -> dict:
+        """The camera as plain data (for scripts and exported settings); ``from_settings`` rebuilds it."""
+        return {f.name: (list(v) if isinstance(v := getattr(self, f.name), tuple) else v)
+                for f in fields(self) if not f.name.startswith("_")}
+
+    @classmethod
+    def from_settings(cls, d: dict) -> OrbitCamera:
+        """A camera from ``settings()`` data; unknown keys are an error (with a "did you mean")."""
+        names = [f.name for f in fields(cls) if not f.name.startswith("_")]
+        for key in d:
+            if key not in names:
+                raise KeyError(_unknown(key, names, "camera settings"))
+        return cls(**{k: tuple(v) if isinstance(v, list) else v for k, v in d.items()})
 
     def projection_matrix(self, aspect: float) -> np.ndarray:
         """Projection matrix for the current projection mode (reversed-Z)."""
@@ -567,18 +592,22 @@ class Renderer:
         return self._targets[1:]
 
     def render(self, surface_texture, viewport: tuple[int, int, int, int], scene, camera: OrbitCamera,
-               lighting: Lighting | None = None, highlights=()) -> None:
+               lighting: Lighting | None = None, highlights=(), samples: int = 1, transparent: bool = False,
+               background=None) -> None:
         """Draw ``scene`` into the ``viewport`` = (x, y, w, h) rectangle of ``surface_texture`` (framebuffer
         pixels, origin top-left); the rest of the texture is cleared to the window background.
 
         ``scene.batches()`` yields Batch (material, gpu_mesh, instance_bind_group, instance_count, source)
         tuples. ``highlights``: up to two (batch_index, instance_index, rgb) tints drawn over those instances.
+        ``samples`` k renders the scene k×k larger and averages it down; ``transparent`` gives the background
+        alpha 0; ``background`` (linear RGB) overrides ``rc.render.background``.
         """
         tw, th = surface_texture.size[:2]
         x, y = (int(np.clip(c, 0, lim - 1)) for c, lim in zip(viewport[:2], (tw, th), strict=True))
         vw, h = (max(1, min(int(c), lim - o)) for c, lim, o in zip(viewport[2:], (tw, th), (x, y), strict=True))
-        color, depth, post_bg = self._scene_targets(vw, h)
-        self.device.queue.write_buffer(self.post_origin, 0, np.array([x, y, 0, 0], np.float32))
+        k = max(1, int(samples))
+        color, depth, post_bg = self._scene_targets(vw * k, h * k)
+        self.device.queue.write_buffer(self.post_origin, 0, np.array([x, y, k, 0], np.float32))
 
         view_proj, eye = camera.matrices(vw / h)
         lighting = lighting or Lighting()
@@ -599,7 +628,9 @@ class Renderer:
 
         encoder = self.device.create_command_encoder()
         rpass = encoder.begin_render_pass(
-            color_attachments=[{"view": color.create_view(), "clear_value": (*rc.render.background, 1),
+            color_attachments=[{"view": color.create_view(),
+                                "clear_value": (*(rc.render.background if background is None else background),
+                                                0.0 if transparent else 1.0),
                                 "load_op": "clear", "store_op": "store"}],
             depth_stencil_attachment={"view": depth.create_view(), "depth_clear_value": 0.0,
                                       "depth_load_op": "clear", "depth_store_op": "store"},

@@ -13,11 +13,11 @@ Angles say where the light comes FROM, in degrees:
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 
 import numpy as np
 
-from .config import rc
+from .config import _unknown, rc
 
 MODES = ("headlight", "fixed")
 
@@ -64,6 +64,19 @@ class Lighting:
         self.mode = mode
         self.azimuth = math.degrees(math.atan2(y, x))
         self.elevation = math.degrees(math.asin(float(np.clip(z, -1.0, 1.0))))
+
+    def settings(self) -> dict:
+        """The lighting as plain data (for scripts and exported settings); ``from_settings`` rebuilds it."""
+        return {f.name: (list(v) if isinstance(v := getattr(self, f.name), tuple) else v) for f in fields(self)}
+
+    @classmethod
+    def from_settings(cls, d: dict) -> Lighting:
+        """Lighting from ``settings()`` data (missing keys take the rc defaults; unknown keys are an error)."""
+        names = [f.name for f in fields(cls)]
+        for key in d:
+            if key not in names:
+                raise KeyError(_unknown(key, names, "lighting settings"))
+        return cls(**{k: tuple(v) if isinstance(v, list) else v for k, v in d.items()})
 
     def radiance(self) -> np.ndarray:
         """Light colour times intensity (linear RGB), as sent to the shaders."""

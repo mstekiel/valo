@@ -526,3 +526,55 @@ def test_background_colour_comes_from_rc(viewer):
     with rc_context({"render.background": (1.0, 0.0, 0.0)}):
         img = viewer.snapshot()
     assert (img[0, 0] == (255, 0, 0)).all()  # linear 1.0 → sRGB 255
+
+
+@pytest.fixture
+def ball_scene():
+    from valo import renderer
+
+    m = renderer().material("M", "lambert", base_color=(0.8, 0.8, 0.8))
+    ball = renderer().spheres(m)
+    ball.set([[0, 0, 0]], 1.0)
+    return SimpleNamespace(batches=lambda: [ball.batch()], bounding_radius=lambda: 1.0)
+
+
+def test_offline_render_size_alpha_background_and_png(ball_scene, tmp_path):
+    from PIL import Image
+
+    from valo import render
+
+    img = render(ball_scene, size=(320, 200), samples=1)
+    assert img.shape == (200, 320, 4) and (img[..., 3] == 255).all()
+    red = render(ball_scene, size=(320, 200), samples=1, background=(1.0, 0.0, 0.0))
+    assert (red[0, 0, :3] == (255, 0, 0)).all()
+    clear = render(ball_scene, {"image": {"size": [320, 200], "transparent": True}}, samples=1, path=tmp_path / "a.png")
+    assert clear[0, 0, 3] == 0 and clear[100, 160, 3] == 255  # background transparent, the ball opaque
+    assert Image.open(tmp_path / "a.png").mode == "RGBA"
+    with pytest.raises(KeyError, match="unknown image settings"):
+        render(ball_scene, {"image": {"resolution": [10, 10]}})
+
+
+def test_supersampling_smooths_the_outline(ball_scene):
+    from valo import render
+
+    def partial_alpha(samples):  # pixels on the outline that are neither background nor ball
+        a = render(ball_scene, size=(200, 200), samples=samples, transparent=True)[..., 3]
+        return int(((a > 0) & (a < 255)).sum())
+
+    assert partial_alpha(1) == 0 and partial_alpha(4) > 50
+
+
+def test_offline_render_matches_the_viewer_and_settings_round_trip(viewer, ball_scene):
+    from valo import Lighting, OrbitCamera, render
+
+    viewer.show(ball_scene)
+    viewer.camera, viewer.lighting = OrbitCamera(azimuth=30.0, distance=5.0), Lighting(mode="fixed")
+    shown = viewer.snapshot()
+    h, w = shown.shape[:2]
+    settings = {"camera": viewer.camera.settings(), "lighting": viewer.lighting.settings()}
+    img = render(ball_scene, settings, size=(w, h), samples=1)
+    assert np.array_equal(img[..., :3], shown)  # the same picture as on screen
+    assert OrbitCamera.from_settings(settings["camera"]) == viewer.camera
+    with pytest.raises(KeyError, match="did you mean 'azimuth'"):
+        OrbitCamera.from_settings({"azimut": 3})
+    viewer.lighting = Lighting()

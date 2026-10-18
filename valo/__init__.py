@@ -21,6 +21,7 @@ from .geometry import instance_matrices
 from .lighting import Lighting
 from .materials import SCHEMA, SHADINGS, Material
 from .meshes import MeshData, Sculpt, library
+from .offline import render, save_png
 from .render import Instances, OrbitCamera, Renderer, Spheres, renderer
 from .ui import Editor
 from .ui_style import ICON, mono_font
@@ -28,4 +29,4 @@ from .undo import Command, UndoStack
 
 __all__ = ["ICON", "SCHEMA", "SHADINGS", "Command", "Editor", "Instances", "Lighting", "Material", "MeshData",
            "OrbitCamera", "Renderer", "Sculpt", "Spheres", "UndoStack", "Viewer", "instance_matrices", "library",
-           "meshes", "mono_font", "rc", "rc_context", "renderer"]
+           "meshes", "mono_font", "rc", "rc_context", "render", "renderer", "save_png"]

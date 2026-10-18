@@ -599,7 +599,7 @@ class Renderer:
 
         encoder = self.device.create_command_encoder()
         rpass = encoder.begin_render_pass(
-            color_attachments=[{"view": color.create_view(), "clear_value": (0.02, 0.022, 0.026, 1),
+            color_attachments=[{"view": color.create_view(), "clear_value": (*rc.render.background, 1),
                                 "load_op": "clear", "store_op": "store"}],
             depth_stencil_attachment={"view": depth.create_view(), "depth_clear_value": 0.0,
                                       "depth_load_op": "clear", "depth_store_op": "store"},
@@ -621,7 +621,7 @@ class Renderer:
         rpass.end()
 
         rpass = encoder.begin_render_pass(color_attachments=[{
-            "view": surface_texture.create_view(), "clear_value": (0.12, 0.12, 0.13, 1),
+            "view": surface_texture.create_view(), "clear_value": (*rc.ui.window_background, 1),
             "load_op": "clear", "store_op": "store"}])
         rpass.set_viewport(x, y, vw, h, 0.0, 1.0)
         rpass.set_pipeline(self.post_pipeline(surface_texture.format))

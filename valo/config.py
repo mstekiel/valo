@@ -103,6 +103,17 @@ class LightingConfig(Section):
 
 
 @dataclass
+class RenderConfig(Section):
+    """Scene background and the defaults of offline rendering (valo.render, File > Render image)."""
+
+    NAME = "render"
+    background: tuple = opt((0.02, 0.022, 0.026), "Background", 0.0, 1.0, "linear RGB", help="behind the scene")
+    size: tuple = opt((1600, 1200), "Image size", 16, 16384, "px", help="offline render width, height")
+    samples: int = opt(2, "Supersampling", 1, 4, "x", help="render n times larger and downscale: smoother edges")
+    transparent: bool = opt(False, "Transparent background", help="offline PNGs get alpha 0 behind the scene")
+
+
+@dataclass
 class HighlightConfig(Section):
     """Tint of the hovered and selected object."""
 
@@ -132,6 +143,8 @@ class UIConfig(Section):
     accent: tuple = opt((66, 133, 244), "Accent colour", 0, 255, "sRGB 0-255")
     right_column: float = opt(0.3, "Right column width", 0.1, 0.7, "share")
     bottom_share: float = opt(0.42, "Lower dock height", 0.1, 0.9, "share")
+    window_background: tuple = opt((0.12, 0.12, 0.13), "Window background", 0.0, 1.0, "sRGB 0-1",
+                                   help="around the 3D view, behind the panels")
 
 
 @dataclass
@@ -161,8 +174,8 @@ class SculptorConfig(Section):
     max_normal_arrows: int = opt(2000, "Max normal arrows", 10, 100000)
 
 
-SECTIONS = {cls.NAME: cls for cls in (CameraConfig, LightingConfig, HighlightConfig, PickingConfig, UIConfig,
-                                      KeysConfig, SculptorConfig)}
+SECTIONS = {cls.NAME: cls for cls in (CameraConfig, LightingConfig, RenderConfig, HighlightConfig, PickingConfig,
+                                      UIConfig, KeysConfig, SculptorConfig)}
 
 
 class RC:

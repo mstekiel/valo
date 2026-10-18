@@ -53,6 +53,16 @@ color = [1.0, 0.92, 0.8]      # slightly warm white, linear RGB (default [1, 1, 
 ambient = 0.35                # ambient intensity (default 0.3; 0-5)
 
 
+[render]
+# The scene background, and the defaults for offline images (valo.render in scripts, File > Render image).
+# Each render call can override these.
+
+# background = [0.02, 0.022, 0.026]   # behind the scene, linear RGB (the app's 3D view and offline renders)
+# size = [1600, 1200]          # offline image width, height in pixels (16-16384)
+# samples = 2                  # supersampling: render 1-4 times larger and downscale, for smooth edges
+# transparent = false          # true: PNGs get alpha 0 behind the scene (for slides and papers)
+
+
 [highlight]
 # The tint drawn over the object under the mouse, and (stronger) over the clicked selection.
 
@@ -77,6 +87,7 @@ scale = 1.15                  # scales text and spacing together, like View > UI
 # accent = [66, 133, 244]     # highlight colour of buttons, sliders and tabs, sRGB 0-255
 # right_column = 0.3          # default layout: share of the window width for the right dock column (0.1-0.7)
 # bottom_share = 0.42         # default layout: height share of the lower dock (Info, Camera, Lighting, History)
+# window_background = [0.12, 0.12, 0.13]  # around the 3D view and behind the panels, sRGB 0-1
 # The two layout shares only apply when there is no saved layout yet, or after View > Reset layout.
 
 

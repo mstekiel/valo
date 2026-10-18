@@ -517,3 +517,12 @@ def test_viewers_share_one_renderer_so_scenes_move_between_them(viewer):
     assert other.renderer is viewer.renderer is renderer() and other.device is viewer.device
     other.show(SimpleNamespace(batches=lambda: [balls.batch()], bounding_radius=lambda: 1.0))
     assert other.snapshot().std() > 5
+
+
+def test_background_colour_comes_from_rc(viewer):
+    from valo import rc_context
+
+    viewer.show(SimpleNamespace(batches=list))
+    with rc_context({"render.background": (1.0, 0.0, 0.0)}):
+        img = viewer.snapshot()
+    assert (img[0, 0] == (255, 0, 0)).all()  # linear 1.0 → sRGB 255

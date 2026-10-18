@@ -106,6 +106,25 @@ the objects, so `Lighting()` starts from `rc.lighting`, but the Lighting window 
   `OrbitCamera.center_on` animates over `rc.camera.center_duration`. Selection and navigation are view state
   (not undoable); view presets and projection go through the Editor (undoable).
 
+## Scripting and offline rendering
+
+- **One GPU:** there is one GPU device and one `Renderer` per process (`valo.renderer()`); every `Viewer` uses it,
+  so a scene built in a script can be shown in a window and the reverse.
+- **`valo.render(scene, settings=None, *, size, samples, transparent, background, camera, lighting, path)`**
+  (`offline.py`) renders without a window into an `rgba8unorm` texture and returns (h, w, 4) uint8 sRGB.
+  Given a `path`, it saves a PNG.
+  - **Supersampling:** the scene target is `samples`× larger and the post pass averages each block, premultiplied
+    by alpha.
+  - **Transparency:** the scene clears to alpha 0, and the post pass passes alpha through.
+  - **Defaults:** missing options come from `rc.render` / `rc.lighting`, and the camera is fitted to the scene.
+- **`settings`** is plain data: `{"scene": ..., "camera": OrbitCamera.settings(), "lighting": Lighting.settings(),
+  "image": {"size", "samples", "transparent", "background"}}`.
+- **The scene settings protocol:** a scene that implements `settings() -> dict` and the classmethod
+  `from_settings(d, gpu=None)` can be rebuilt from data. The Editor's File → Render window then exports a
+  **runnable script**: `SETTINGS` written by `offline.py_literal`, plus a main that calls `from_settings` and
+  `valo.render`. Its picture is pixel-identical to the studio's Render PNG. Any app can Render PNG; Export needs
+  the protocol. `examples/crystal_studio/crystal.py`'s `__main__` shows scripting from scratch.
+
 ## One frame
 
 ```
@@ -150,7 +169,8 @@ apps:    examples/crystal_studio: studio → crystal → valo
 | Animation (vibrations, precession) | engine: time in the frame uniform; per-instance amplitudes; displacement in `vs_main`. |
 | Object properties in Info | app: `renderer.instances(..., label=, info=lambda i: {...})`, or `scene.describe(pick)`. |
 | A new tunable | add a field to a section in `valo/config.py` (default, label, range, unit, help); read `rc.<section>.<key>`. |
-| Image / video export | engine: render to an offscreen canvas at the requested size (the tests already do this). |
+| Image export | done: `valo.render` / File → Render. Video: render frames with `valo.render` in a loop. |
+| Scripting / export for an app's scene | app: `settings()` + `from_settings(d, gpu=None)` on the scene class (in an importable module). |
 | New panel or window | app: an action method on its `Editor` subclass (with undo) + an entry in `windows()`. |
 | New crystal structure (CIF, POSCAR, other lattice), more species | `examples/crystal_studio/crystal.py`: centres + species per site; keep `batches()`. |
 | A new app | `examples/<name>/` with a scene, an `Editor` subclass, a `main()` and a test. |

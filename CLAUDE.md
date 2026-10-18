@@ -31,11 +31,12 @@ Apps built on it live in `examples/`. Design and extension points: `ARCHITECTURE
 | `materials.py` | shading models (WGSL), parameter schema, observable `Material`, colour conversion | buffer only |
 | `render.py` | shared WGSL, pipelines, render targets, `OrbitCamera` (projections, `VIEWS`, pan, `center_on`), `Instances` / `Batch` / `Spheres`, scene pass → highlight → post pass, `pick` | yes |
 | `config.py` | `rc`: typed config sections (camera, lighting, highlight, picking, ui, keys, sculptor), TOML files, `rc_context`, `valo-config` | no |
+| `offline.py` | `valo.render` (offline images: size, supersampling, transparency, background), `export_script`, `py_literal` | yes |
 | `lighting.py` | `Lighting`: headlight or fixed directional light, global hemisphere ambient (sky, ground, intensity) | no |
 | `undo.py` | undo/redo stack | no |
 | `ui.py` | `Editor` base: undo, `windows()` / `menus()`, dockspace + default layout, menu bar, History, material widgets | no |
 | `ui_style.py` | fonts (Roboto + Font Awesome `ICON`, `mono_font()`), theme `apply_style(scale)` | no |
-| `app.py` | `Viewer`: canvas, device, renderer, camera, ImGui, mouse; `show(scene, editor)`, `run()` | yes |
+| `app.py` | `Viewer`: canvas, shared device/renderer, camera, ImGui, mouse; `show(scene, editor)`, `run()` | yes |
 
 ## Example apps (`examples/<name>/`)
 

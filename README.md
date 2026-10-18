@@ -29,4 +29,26 @@ Every speed, colour, default and key is in `valo.rc`: View → Preferences, or a
 `examples/valorc.toml` is an annotated example to copy to `~/.valo/valorc.toml`;
 `uv run valo-config --write-defaults` writes every key with its range.
 
+## Scripting
+
+Render pictures without opening a window; every option is plain Python:
+
+```python
+import valo
+from crystal import Crystal          # examples/crystal_studio
+
+crystal = Crystal()
+crystal.n = [8, 8, 4]
+crystal.rebuild()
+valo.render(crystal, {"camera": {"azimuth": -60.0, "projection": "orthographic"},
+                      "lighting": {"mode": "fixed"},
+                      "image": {"size": [2400, 1600], "samples": 2, "transparent": True}},
+            path="crystal.png")
+```
+
+Or set things up in the studio and use File → Render image / export script: Render PNG saves the picture, and
+Export writes a runnable `render_*.py` with every setting in an editable `SETTINGS` dict. Running it re-renders
+the same picture. A full example is at the bottom of `examples/crystal_studio/crystal.py`
+(`uv run python examples/crystal_studio/crystal.py`).
+
 See `ARCHITECTURE.md` for how it fits together, how to write an app, and where new features go.

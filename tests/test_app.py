@@ -503,3 +503,17 @@ def test_click_selects_keys_navigate_and_double_click_centres(viewer):
         click()  # a double-click centres on the point under the pointer
         assert cam.target[0] == pytest.approx(1.5, abs=0.1) and cam.target[1] < 0  # front of the sphere
     viewer.selection = None
+
+
+def test_viewers_share_one_renderer_so_scenes_move_between_them(viewer):
+    from rendercanvas.offscreen import RenderCanvas
+
+    from valo import Viewer, renderer
+
+    m = renderer().material("M", "lambert")
+    balls = renderer().spheres(m)  # built without any window
+    balls.set([[0, 0, 0]], 1.0)
+    other = Viewer(RenderCanvas(size=(300, 200), pixel_ratio=1))
+    assert other.renderer is viewer.renderer is renderer() and other.device is viewer.device
+    other.show(SimpleNamespace(batches=lambda: [balls.batch()], bounding_radius=lambda: 1.0))
+    assert other.snapshot().std() > 5

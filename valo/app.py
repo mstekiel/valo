@@ -10,23 +10,16 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
-import wgpu
 from imgui_bundle import imgui
 from wgpu.utils.imgui import ImguiRenderer
 
 from .config import rc
 from .lighting import Lighting
-from .render import VIEWS, OrbitCamera, Renderer
+from .render import VIEWS, OrbitCamera, get_device, renderer
 from .ui import Editor
 from .ui_style import apply_style, load_fonts
 
 EMPTY_SCENE = SimpleNamespace(batches=list)
-
-
-def get_device() -> tuple[wgpu.GPUAdapter, wgpu.GPUDevice]:
-    """The high-performance GPU adapter and a device on it."""
-    adapter = wgpu.gpu.request_adapter_sync(power_preference="high-performance")
-    return adapter, adapter.request_device_sync()
 
 
 class Viewer:
@@ -48,7 +41,7 @@ class Viewer:
         surface_format = self.context.get_preferred_format(self.adapter).removesuffix("-srgb")
         self.context.configure(device=self.device, format=surface_format)
 
-        self.renderer = Renderer(self.device, surface_format)
+        self.renderer = renderer()  # shared: scenes built for scripting can be shown here, and back
         self.camera = OrbitCamera(fovy=rc.camera.fov)
         self.lighting = Lighting()
         self.imgui = ImguiRenderer(self.device, canvas)  # uses the format configured above

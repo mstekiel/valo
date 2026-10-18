@@ -9,6 +9,7 @@ Bind groups: 0 = frame (camera, light), 1 = material, 2 = per-instance model mat
 
 from __future__ import annotations
 
+import functools
 import math
 import weakref
 from collections.abc import Callable
@@ -374,10 +375,25 @@ class Spheres(Instances):
         super().set(instance_matrices(centers, diameters))
 
 
+@functools.cache
+def get_device() -> tuple[wgpu.GPUAdapter, wgpu.GPUDevice]:
+    """The process-wide high-performance GPU adapter and device (created once, shared by every renderer)."""
+    adapter = wgpu.gpu.request_adapter_sync(power_preference="high-performance")
+    return adapter, adapter.request_device_sync()
+
+
+@functools.cache
+def renderer() -> Renderer:
+    """The shared Renderer on the shared device: build scenes with it, then show them in a Viewer or
+    render them offline with ``valo.render``."""
+    return Renderer(get_device()[1])
+
+
 class Renderer:
     """Owns pipelines, layouts and render targets. Knows how to draw anything with ``batches()``."""
 
-    def __init__(self, device: wgpu.GPUDevice, surface_format: str):
+    def __init__(self, device: wgpu.GPUDevice, surface_format: str | None = None):
+        """``surface_format`` is optional: the post pipeline for each output format is made on first use."""
         self.device = device
 
         def layout(binding_type, visibility):
@@ -405,13 +421,12 @@ class Renderer:
                 fragment={"module": module, "entry_point": "fs_main", "targets": [{"format": SCENE_FORMAT}]},
             )
 
-        post = device.create_shader_module(code=POST_WGSL)
-        self.post_pipeline = device.create_render_pipeline(
-            layout="auto",
-            vertex={"module": post, "entry_point": "vs_main"},
-            primitive={"topology": "triangle-list"},
-            fragment={"module": post, "entry_point": "fs_main", "targets": [{"format": surface_format}]},
-        )
+        self._post_module = device.create_shader_module(code=POST_WGSL)
+        self.post_layout = device.create_bind_group_layout(entries=[
+            {"binding": 0, "visibility": wgpu.ShaderStage.FRAGMENT, "texture": {"sample_type": "float"}},
+            {"binding": 1, "visibility": wgpu.ShaderStage.FRAGMENT, "buffer": {"type": "uniform"}},
+        ])
+        self._post_pipelines: dict[str, wgpu.GPURenderPipeline] = {}
         hl_layout = layout(wgpu.BufferBindingType.uniform, wgpu.ShaderStage.FRAGMENT)
         hl_module = device.create_shader_module(code=VERTEX_WGSL + HIGHLIGHT_WGSL)
         add = {"color": {"src_factor": "one", "dst_factor": "one", "operation": "add"},
@@ -527,13 +542,25 @@ class Renderer:
         b = batches[batch1 - 1]
         return Pick(int(batch1) - 1, int(instance), getattr(b, "source", None), world[:3] / world[3])
 
+    def post_pipeline(self, output_format: str):
+        """The post pass (linear scene → sRGB) writing to ``output_format`` (made on first use)."""
+        if output_format not in self._post_pipelines:
+            self._post_pipelines[output_format] = self.device.create_render_pipeline(
+                layout=self.device.create_pipeline_layout(bind_group_layouts=[self.post_layout]),
+                vertex={"module": self._post_module, "entry_point": "vs_main"},
+                primitive={"topology": "triangle-list"},
+                fragment={"module": self._post_module, "entry_point": "fs_main",
+                          "targets": [{"format": output_format}]},
+            )
+        return self._post_pipelines[output_format]
+
     def _scene_targets(self, w: int, h: int):
         if self._targets is None or self._targets[0] != (w, h):
             usage = wgpu.TextureUsage.RENDER_ATTACHMENT
             color = self.device.create_texture(size=(w, h, 1), format=SCENE_FORMAT,
                                                usage=usage | wgpu.TextureUsage.TEXTURE_BINDING)
             depth = self.device.create_texture(size=(w, h, 1), format=DEPTH_FORMAT, usage=usage)
-            bg = self.device.create_bind_group(layout=self.post_pipeline.get_bind_group_layout(0),
+            bg = self.device.create_bind_group(layout=self.post_layout,
                                                entries=[{"binding": 0, "resource": color.create_view()},
                                                         {"binding": 1, "resource": {"buffer": self.post_origin}}])
             self._targets = ((w, h), color, depth, bg)
@@ -597,7 +624,7 @@ class Renderer:
             "view": surface_texture.create_view(), "clear_value": (0.12, 0.12, 0.13, 1),
             "load_op": "clear", "store_op": "store"}])
         rpass.set_viewport(x, y, vw, h, 0.0, 1.0)
-        rpass.set_pipeline(self.post_pipeline)
+        rpass.set_pipeline(self.post_pipeline(surface_texture.format))
         rpass.set_bind_group(0, post_bg)
         rpass.draw(3)
         rpass.end()

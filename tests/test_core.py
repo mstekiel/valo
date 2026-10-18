@@ -258,3 +258,23 @@ def test_center_on_animates_to_the_goal_and_ends_exactly():
     assert cam.target == pytest.approx((1, 2, 3)) and cam.distance == pytest.approx(cam.fit_distance(1.0))
     cam.center_on((0.0, 0.0, 0.0), duration=0)  # 0 jumps
     assert cam.target == (0.0, 0.0, 0.0) and not cam.animating
+
+
+def test_example_valorc_loads_with_and_without_its_commented_defaults(tmp_path):
+    import re
+    from pathlib import Path
+
+    from valo.config import RC
+
+    example = Path(__file__).parents[1] / "examples" / "valorc.toml"
+    rc = RC()
+    rc.load(example)  # the active example values
+    assert rc.camera.orbit_speed == 0.25 and rc.lighting.mode == "fixed" and rc.keys.fit_all == "h"
+    text = example.read_text(encoding="utf-8")
+    everything = re.sub(r"(?m)^# (\w+ = )", r"\1", text)  # uncomment the "# key = value" default lines too
+    (tmp_path / "all.toml").write_text(everything, encoding="utf-8")
+    full = RC()
+    full.load(tmp_path / "all.toml")  # every documented key exists and its value is valid
+    documented = set(re.findall(r"(?m)^\[(\w+)\]", text)), set(re.findall(r"(?m)^#? ?(\w+) = ", text))
+    assert documented[0] == {k.split(".")[0] for k, _ in RC().items()}
+    assert documented[1] == {k.split(".")[1] for k, _ in RC().items()}  # no key left undocumented

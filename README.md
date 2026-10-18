@@ -25,7 +25,8 @@ MeshSculptor hot-reloads the sculpt file whenever you save it in your editor. "S
 | Ctrl+Z / Ctrl+Y | undo / redo |
 
 Drag window tabs to re-dock them; View → Reset layout restores the default (layouts are saved in `~/.valo/`).
-Every speed, colour, default and key is in `valo.rc`: View → Preferences, or `uv run valo-config --write-defaults`
-for a commented `~/.valo/valorc.toml`.
+Every speed, colour, default and key is in `valo.rc`: View → Preferences, or a TOML file.
+`examples/valorc.toml` is an annotated example to copy to `~/.valo/valorc.toml`;
+`uv run valo-config --write-defaults` writes every key with its range.
 
 See `ARCHITECTURE.md` for how it fits together, how to write an app, and where new features go.

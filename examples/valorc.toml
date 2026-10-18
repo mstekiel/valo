@@ -1,0 +1,107 @@
+# Example valo configuration (valorc.toml)
+# =========================================
+#
+# Copy this file to one of the places valo reads at start-up. Later files override earlier ones:
+#   1. ~/.valo/valorc.toml          your personal preferences (View > Preferences > Save writes here)
+#   2. ./valorc.toml                per project: the folder you start the app from
+#   3. the file named in $VALO_RC   e.g. for one experiment:  $env:VALO_RC = "C:\data\talk.toml"
+#
+# Only keys you set override the built-in defaults; delete or comment out the rest. Commented-out
+# lines below ("# key = value") show the default, so uncomment one and change its value.
+# Every value is checked when the file loads: a wrong type, an out-of-range number or a misspelt key
+# stops start-up with a message naming this file and the key ("did you mean ...?").
+#
+# Colours: lists of three numbers. Light and highlight colours are LINEAR RGB (0-1, what the
+# shaders use); only ui.accent is sRGB 0-255 (what colour pickers show). Angles are in degrees.
+#
+# The active (uncommented) values in this file are an example "presentation" setup:
+# calmer navigation, a warmer fixed light, a cyan highlight and a larger UI for a projector.
+# Full list with ranges at any time:  uv run valo-config --write-defaults <path>
+
+
+[camera]
+# Mouse/keyboard navigation and the camera an app starts with.
+# Mouse: left-drag orbits, middle-drag (or Shift+left-drag) pans, the wheel zooms.
+
+orbit_speed = 0.25            # degrees of rotation per pixel dragged (default 0.4; 0.02-3)
+# pan_speed = 1.0             # 1 = the plane through the target follows the cursor exactly (0.1-5)
+zoom_speed = 0.7              # wheel zoom per notch, relative: <1 finer, >1 faster (default 1.0; 0.1-5)
+# fov = 35.0                  # starting perspective field of view in degrees (10-90); orthographic ignores it
+# orbit_step = 15.0           # degrees per arrow-key press (1-90)
+auto_rotate_speed = 12.0      # Camera > Auto-rotate, degrees per second (default 24; 1-360)
+center_duration = 0.4         # seconds the camera takes to glide when framing / centring; 0 = jump (default 0.25)
+
+
+[lighting]
+# The light a scene starts with; the Lighting window then changes the live light, not this file.
+#   mode = "headlight": the light moves with the camera, so the side you look at is always lit.
+#   mode = "fixed":     the light stays put in the world, so shading changes as you orbit (reads shape well).
+# Angles say where the light comes FROM. Headlight: in the camera frame (azimuth 0 is from the viewer,
+# a negative azimuth from the left, a positive elevation from above). Fixed: azimuth from +X toward +Y, Z-up.
+
+mode = "fixed"
+azimuth = -120.0              # (-180..180)
+elevation = 45.0              # (-90..90)
+color = [1.0, 0.92, 0.8]      # slightly warm white, linear RGB (default [1, 1, 1])
+# intensity = 1.0             # multiplies the colour (0-10)
+
+# Global ambient, shared by every object: a sky colour from above and a ground colour from below
+# (set them equal for flat ambient). Shiny materials also reflect this sky. Each material's own
+# "ambient" parameter only scales it (0-1).
+# sky = [0.55, 0.62, 0.72]
+# ground = [0.1, 0.09, 0.08]
+ambient = 0.35                # ambient intensity (default 0.3; 0-5)
+
+
+[highlight]
+# The tint drawn over the object under the mouse, and (stronger) over the clicked selection.
+
+# enabled = true
+color = [0.2, 0.85, 1.0]      # cyan instead of the default warm yellow [1.0, 0.8, 0.25], linear RGB
+# strength = 0.35             # hover tint strength (0 = invisible, 0-2)
+selected_strength = 0.8       # selection tint strength (default 0.6; 0-2)
+
+
+[picking]
+# Finding the object under the mouse (it feeds the highlight, the Info window and selection).
+
+# enabled = true              # false: no hover highlight, no Info on hover, no click selection
+# double_click_ms = 300       # max time between two clicks of a double-click (100-1000 ms)
+
+
+[ui]
+# Look and layout of the panels.
+
+font_size = 18.0              # text size in logical pixels; takes effect on the next start (default 16; 10-32)
+scale = 1.15                  # scales text and spacing together, like View > UI scale (default 1.0; 0.5-3)
+# accent = [66, 133, 244]     # highlight colour of buttons, sliders and tabs, sRGB 0-255
+# right_column = 0.3          # default layout: share of the window width for the right dock column (0.1-0.7)
+# bottom_share = 0.42         # default layout: height share of the lower dock (Info, Camera, Lighting, History)
+# The two layout shares only apply when there is no saved layout yet, or after View > Reset layout.
+
+
+[keys]
+# Keyboard shortcuts in the 3D view (ignored while you type into a text field).
+# Names: a letter or digit ("f", "5"), or one of Home, End, Escape, Enter, Tab, Delete, Insert,
+# PageUp, PageDown, ArrowLeft, ArrowRight, ArrowUp, ArrowDown, F1 ... F12.
+# Letters are case-insensitive. Numpad keys can't be bound (the window system doesn't report them),
+# so the view presets use the number row, like Blender's "emulate numpad".
+
+frame_selection = "f"         # centre on the selected object and zoom to fit it
+fit_all = "h"                 # fit the whole scene (default "Home")
+# view_front = "1"            # look from -Y; with Ctrl: from +Y (back)
+# view_right = "3"            # look from +X; with Ctrl: from -X (left)
+# view_top = "7"              # look from +Z; with Ctrl: from -Z (bottom)
+# toggle_ortho = "5"          # switch perspective / orthographic
+# deselect = "Escape"
+# orbit_left = "ArrowLeft"    # orbit by camera.orbit_step; with Shift: pan
+# orbit_right = "ArrowRight"
+# orbit_up = "ArrowUp"
+# orbit_down = "ArrowDown"
+
+
+[sculptor]
+# MeshSculptor (uv run valo-sculpt <file.py>).
+
+# poll_s = 0.3                # how often the sculpt file is checked for changes (hot reload), seconds
+# max_normal_arrows = 2000    # Diagnostics > Show normals draws at most this many arrows

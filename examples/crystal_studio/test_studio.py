@@ -1,5 +1,7 @@
 """Crystal studio tests: the rock-salt lattice (pure), and the full app rendered offscreen (GPU)."""
 
+from pathlib import Path
+
 import numpy as np
 import pytest
 from crystal import rock_salt
@@ -71,3 +73,38 @@ def test_hovered_atom_shows_its_species_and_lattice_site(studio):
     assert sp.spheres.label == sp.name and info["Species"] == sp.name
     i, j, k = info["Lattice site"]
     assert all(0 <= c < n for c, n in zip((i, j, k), ed.crystal.n, strict=True)) and (i + j + k) % 2 == 1  # B sites
+
+
+@pytest.mark.gpu
+def test_crystal_settings_rebuild_the_same_picture(studio):
+    from crystal import Crystal
+
+    import valo
+
+    viewer, ed = studio
+    ed.set_count(0, 4)
+    ed.set_spacing(1.2)
+    ed.selected = 1
+    ed.duplicate()
+    ed.set_param(ed.species.material, "base_color", (0.9, 0.1, 0.1))
+    s = ed.crystal.settings()
+    copy = Crystal.from_settings(s)
+    assert copy.settings() == s and copy.species[1].material is not ed.crystal.species[1].material
+    options = {"camera": viewer.camera.settings(), "image": {"size": [200, 150], "samples": 1}}
+    assert np.array_equal(valo.render(copy, options), valo.render(ed.crystal, options))
+    while ed.undo_stack.done:
+        ed.undo_stack.undo()
+    with pytest.raises(KeyError):
+        Crystal.from_settings({"size": 3})
+
+
+@pytest.mark.gpu
+def test_scripting_example_writes_a_transparent_png(studio, tmp_path, monkeypatch):
+    import runpy
+
+    from PIL import Image
+
+    monkeypatch.chdir(tmp_path)
+    runpy.run_path(str(Path(__file__).with_name("crystal.py")), run_name="__main__")
+    png = Image.open(tmp_path / "crystal.png")
+    assert png.size == (2400, 1600) and png.mode == "RGBA"

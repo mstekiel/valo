@@ -7,6 +7,7 @@ dependencies = [
     "glfw>=2.11.0",
     "imgui-bundle>=1.92,<1.92.900",
     "numpy>=2.0",
+    "pillow>=12.3.0",
     "rendercanvas>=2.7",
     "wgpu>=0.32,<0.33",
 ]
@@ -38,7 +39,6 @@ markers = ["gpu: needs a GPU adapter (renders offscreen)"]
 
 [dependency-groups]
 dev = [
-    "pillow>=12.3.0",
     "pytest>=9.1.1",
     "ruff>=0.17.1",
 ]

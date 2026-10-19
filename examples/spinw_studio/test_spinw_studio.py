@@ -83,3 +83,81 @@ def test_adapter_stubs_say_what_to_fill_and_the_contract_is_checked(monkeypatch)
     monkeypatch.setattr(adapter, "atom_moments_xyz", lambda sw: np.zeros((3, 3)))
     with pytest.raises(ValueError, match=r"atom_moments_xyz must return .* shape \(4, 3\)"):
         adapter.system_view(object())
+
+
+# -- the studio, offscreen (GPU) ------------------------------------------------------------------
+
+
+@pytest.fixture(scope="module")
+def viewer():
+    pytest.importorskip("wgpu")
+    from rendercanvas.offscreen import RenderCanvas
+
+    from valo import Viewer
+
+    try:
+        return Viewer(RenderCanvas(size=(900, 560), pixel_ratio=1))
+    except Exception as exc:  # no adapter on this machine
+        pytest.skip(f"no GPU adapter: {exc}")
+
+
+@pytest.fixture
+def studio(viewer):
+    from spinw_studio.editor import SpinwEditor
+    from spinw_studio.scene import SpinwScene
+
+    scene = SpinwScene(lfo_like(), {"atom_colors": {"Fe": "Orange"}})
+    editor = SpinwEditor(scene)
+    viewer.show(scene, editor)
+    viewer.camera.target = tuple(scene.center())
+    return viewer, scene, editor
+
+
+def test_scene_draws_atoms_moments_and_cell(studio):
+    viewer, scene, _ = studio
+    assert scene.atom_count == 12 and scene.spheres["Fe"].count == 12
+    assert scene.arrows["Fe"].count == 12 and scene.cell.count == 12
+    assert len(scene.batches()) == 3 and viewer.snapshot().std() > 5
+    m = scene.arrows["Fe"].matrices[0]
+    assert np.linalg.norm(m[:3, 2]) == pytest.approx(scene.moment_length)  # arrow length along its z axis
+
+
+SPINW_ACTIONS = {  # name → (action, changes the image)
+    "extent": (lambda ed: ed.set_bounds(0, -0.1, 2.1), True),
+    "radius": (lambda ed: ed.set_radius("Fe", 1.0), True),
+    "duplicate material": (lambda ed: ed.duplicate("Fe"), False),  # an identical copy is assigned
+    "material parameter": (lambda ed: ed.set_param(ed.scene.spheres["Fe"].material, "base_color", (0.1, 0.2, 0.9)),
+                           True),
+    "moment length": (lambda ed: ed.set_moments(length=3.0), True),
+    "hide moments": (lambda ed: ed.set_moments(show=False), True),
+    "cell": (lambda ed: ed.set_cell(radius=0.15), True),
+    "hide cell": (lambda ed: ed.set_cell(show=False), True),
+}
+
+
+@pytest.mark.parametrize("name", list(SPINW_ACTIONS))
+def test_studio_actions_undo_exactly(studio, name):
+    viewer, scene, editor = studio
+    action, visible = SPINW_ACTIONS[name]
+
+    def state():
+        return scene.options(), scene.spheres["Fe"].material
+
+    before, image = state(), viewer.snapshot()
+    action(editor)
+    assert len(editor.undo_stack.done) == 1 and state() != before
+    assert (np.abs(viewer.snapshot().astype(int) - image).max() > 10) == visible
+    editor.undo_stack.undo()
+    assert state() == before and np.array_equal(viewer.snapshot(), image)
+
+
+def test_info_rows_and_compass_axes(studio):
+    _, scene, editor = studio
+    k = int(np.flatnonzero((scene.expanded["Fe"].indices == 1) & (scene.expanded["Fe"].translations == 0).all(1))[0])
+    rows = scene.spheres["Fe"].info(k)
+    assert rows["Cell index"] == "1" and rows["uvw"] == "(0.500, 0.000, 0.000)"
+    assert rows["xyz (Å)"] == "(2.650, 0.000, 0.000)"
+    assert rows["m (xyz)"] == "(1.000, 0.000, -0.100)" and rows["S"] == "2.5"
+    assert scene.arrows["Fe"].info(k)["Cell index"] == "1"
+    axes = {label: d for label, d, *_ in editor.compass_axes()}
+    assert set(axes) == {"x", "y", "z", "a", "b", "c"} and axes["b"] == pytest.approx((0.0, 1.0, 0.0))

@@ -97,7 +97,7 @@ class Editor:
         """Contents of the default single window (override ``windows()`` instead for several)."""
 
     def compass_axes(self) -> list[tuple[str, tuple, tuple]]:
-        """Axes of the corner compass, (label, xyz direction, sRGB 0-1 colour); apps add their own (e.g. a, b, c)."""
+        """Axes of the corner compass, (label, xyz direction, sRGB 0-1 colour[, length share]); apps add their own."""
         return [("x", (1.0, 0.0, 0.0), (0.93, 0.33, 0.31)), ("y", (0.0, 1.0, 0.0), (0.45, 0.80, 0.35)),
                 ("z", (0.0, 0.0, 1.0), (0.35, 0.55, 0.95))]
 
@@ -618,16 +618,18 @@ def pick_info(pick, scene) -> dict[str, str]:
 def compass_layout(camera, axes, center, size: float) -> list[tuple]:
     """Where to draw each compass axis: (label, start, end, rgb, toward_viewer), back-to-front.
 
-    ``axes`` are (label, direction xyz, rgb) as from ``Editor.compass_axes``; ``center`` and ``size`` are in
-    logical pixels. A direction is projected onto the camera's right / up vectors (screen y points down), so the
-    gizmo turns with the view; axes pointing away from the viewer come first, so nearer ones are drawn on top.
+    ``axes`` are (label, direction xyz, rgb[, length share]) as from ``Editor.compass_axes``; the optional share
+    (default 1) draws an axis shorter, e.g. so crystal axes parallel to x, y, z stay readable. ``center`` and
+    ``size`` are in logical pixels. A direction is projected onto the camera's right / up vectors (screen y points
+    down), so the gizmo turns with the view; axes pointing away from the viewer come first, so nearer ones are drawn
+    on top.
     """
     right, up = camera.right_up()
     forward = camera.forward()
     out = []
-    for label, direction, rgb in axes:
+    for label, direction, rgb, *share in axes:
         d = np.asarray(direction, float)
-        d = d / (np.linalg.norm(d) or 1.0)
+        d = d / (np.linalg.norm(d) or 1.0) * (share[0] if share else 1.0)
         end = (center[0] + size * float(d @ right), center[1] - size * float(d @ up))
         out.append((label, tuple(center), end, tuple(rgb), float(d @ forward) < 0))
     return sorted(out, key=lambda a: a[4])

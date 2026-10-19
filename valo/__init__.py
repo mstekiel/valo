@@ -19,7 +19,7 @@ from .app import Viewer
 from .config import rc, rc_context
 from .geometry import instance_matrices
 from .lighting import Lighting
-from .materials import SCHEMA, SHADINGS, Material
+from .materials import SCHEMA, SHADINGS, Material, linear_to_srgb, srgb_to_linear
 from .meshes import MeshData, Sculpt, library
 from .offline import render, save_png
 from .render import Instances, OrbitCamera, Renderer, Spheres, renderer
@@ -29,4 +29,5 @@ from .undo import Command, UndoStack
 
 __all__ = ["ICON", "SCHEMA", "SHADINGS", "Command", "Editor", "Instances", "Lighting", "Material", "MeshData",
            "OrbitCamera", "Renderer", "Sculpt", "Spheres", "UndoStack", "Viewer", "instance_matrices", "library",
-           "meshes", "mono_font", "rc", "rc_context", "render", "renderer", "save_png"]
+           "linear_to_srgb", "meshes", "mono_font", "rc", "rc_context", "render", "renderer", "save_png",
+           "srgb_to_linear"]

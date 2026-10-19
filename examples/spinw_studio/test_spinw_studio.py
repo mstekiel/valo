@@ -161,3 +161,41 @@ def test_info_rows_and_compass_axes(studio):
     assert scene.arrows["Fe"].info(k)["Cell index"] == "1"
     axes = {label: d for label, d, *_ in editor.compass_axes()}
     assert set(axes) == {"x", "y", "z", "a", "b", "c"} and axes["b"] == pytest.approx((0.0, 1.0, 0.0))
+
+
+def test_plot_options_round_trip_and_export(studio, tmp_path):
+    import runpy
+
+    import spinw_studio
+
+    viewer, scene, editor = studio
+    editor.set_bounds(2, -0.1, 1.6)
+    editor.set_radius("Fe", 0.45)
+    editor.set_param(scene.spheres["Fe"].material, "roughness", 0.8)
+    editor.render_options.update(size=[240, 160], samples=1)
+    opts = editor.plot_options()
+    assert opts["boundaries"][2] == [-0.1, 1.6] and opts["atom_radii"] == {"Fe": 0.45}
+    assert opts["camera"]["azimuth"] == viewer.camera.azimuth and opts["image"]["size"] == [240, 160]
+    shown = valo_render_of(editor)
+    assert np.array_equal(spinw_studio.render(lfo_like(), opts), shown)  # the options rebuild the same picture
+    namespace = runpy.run_path(str(editor.export_plot_options(tmp_path / "opts.py")))
+    assert namespace["PLOT_OPTIONS"] == opts
+    while editor.undo_stack.done:
+        editor.undo_stack.undo()
+
+
+def valo_render_of(editor):
+    import valo
+
+    return valo.render(editor.scene, editor.render_settings())
+
+
+def test_plot_structure_blocks_then_returns_the_final_options(viewer, monkeypatch):
+    from spinw_studio import api
+
+    calls = []
+    monkeypatch.setattr(api, "_window", lambda title: calls.append(title) or viewer)
+    monkeypatch.setattr(viewer, "run", lambda: viewer.editor.set_radius("Fe", 0.9))  # "the user" edits, then closes
+    opts = api.plot_structure(lfo_like(), {"atom_colors": {"Fe": "Orange"}})
+    assert calls == ["SpinW studio: LFO-like"] and opts["atom_radii"] == {"Fe": 0.9}
+    monkeypatch.undo()

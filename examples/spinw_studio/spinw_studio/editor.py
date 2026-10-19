@@ -3,12 +3,14 @@ plus the Structure / Atoms / Moments windows that call them. The compass adds th
 
 from __future__ import annotations
 
+import time
 from collections.abc import Callable
+from pathlib import Path
 
 import numpy as np
 from imgui_bundle import imgui
 
-from valo import ICON, Command, Editor, Material
+from valo import ICON, Command, Editor, Material, plain, py_literal
 
 from .scene import SpinwScene
 
@@ -97,6 +99,42 @@ class SpinwEditor(Editor):
             sc.upload_cell()
 
         self._change("unit cell", lambda: (sc.show_cell, sc.cell_radius), put, new, merge_key=("cell",))
+
+    # -- plot_options out (round trip to the script)
+    def plot_options(self) -> dict:
+        """Everything shown, as plot_options: the scene's state plus the current camera, lighting and image options."""
+        opts = self.scene.options()
+        if self.viewer is not None:
+            opts.update(camera=self.viewer.camera.settings(), lighting=self.viewer.lighting.settings(),
+                        image=dict(self.render_options))
+        return plain(opts)
+
+    def export_plot_options(self, path=None) -> Path:
+        """Write ``PLOT_OPTIONS = {...}`` (and how to use it) to a .py file; returns the path."""
+        name = self.scene.system.name or "system"
+        slug = "".join(c if c.isalnum() else "_" for c in name).strip("_").lower() or "system"
+        path = Path(path) if path else Path.cwd() / f"plot_options_{slug}_{time.strftime('%Y%m%d-%H%M%S')}.py"
+        path.write_text(
+            f'''"""plot_options exported from SpinW studio ({name}) on {time.strftime("%Y-%m-%d %H:%M")}.
+
+Use them in your script:
+    plot_options = plot_structure(sw, plot_options=PLOT_OPTIONS)      # the studio, as you left it
+    spinw_studio.render(sw, PLOT_OPTIONS, path="structure.png")        # the same picture, no window
+Keys: see spinw_studio.model.DEFAULTS (colours are sRGB, lengths in Å, boundaries in crystal coordinates).
+"""
+
+PLOT_OPTIONS = {py_literal(self.plot_options())}
+''', encoding="utf-8")
+        self.render_status = f"exported {path}"
+        return path
+
+    def menus(self):
+        """A File menu item for exporting plot options (valo adds Render below it)."""
+        return {"File": self._file_menu}
+
+    def _file_menu(self) -> None:
+        if imgui.menu_item(f"{ICON.FILE_EXPORT} Export plot options...")[0]:
+            self.export_plot_options()
 
     # -- compass: the crystal axes next to x, y, z
     def compass_axes(self):

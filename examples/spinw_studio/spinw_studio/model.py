@@ -156,11 +156,13 @@ DEFAULTS = {
     "atom_radii": {},  # {label: Å}; missing labels get default_radius
     "materials": {},  # {label: Material.to_dict()}: full material, overrides atom_colors
     "show_moments": True,
-    "moment_length": 1.0,  # Å, arrow length (centred on the atom)
+    "moment_length": 2.0,  # Å, arrow length, centred on the atom (must exceed the atom diameter to show)
     "moment_color": "Crimson",
+    "moment_material": {},  # full Material.to_dict() for the arrows (overrides moment_color); written on export
     "show_cell": True,
     "cell_radius": 0.03,  # Å, edge cylinder radius
     "cell_color": "Gray",
+    "cell_material": {},  # full Material.to_dict() for the edges (overrides cell_color); written on export
     "coupling_colors": {},  # {coupling label: colour}; kept for when couplings are drawn
     "camera": {},  # valo OrbitCamera.settings() keys
     "lighting": {},  # valo Lighting.settings() keys

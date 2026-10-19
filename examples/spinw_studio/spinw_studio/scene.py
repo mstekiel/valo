@@ -45,8 +45,10 @@ class SpinwScene:
         self.library: list[Material] = []  # materials the atom labels can choose from
         self.radii: dict[str, float] = {}
         self.spheres, self.arrows = {}, {}
-        self.moment_material = r.material("Moments", "pbr", base_color=_linear(opts["moment_color"]), roughness=0.5)
-        self.cell_material = r.material("Unit cell", "lambert", base_color=_linear(opts["cell_color"]))
+        self.moment_material = self._material("Moments", opts["moment_material"], "pbr",
+                                              base_color=_linear(opts["moment_color"]), roughness=0.5)
+        self.cell_material = self._material("Unit cell", opts["cell_material"], "lambert",
+                                            base_color=_linear(opts["cell_color"]))
         for i, label in enumerate(system.labels):
             if label in opts["materials"]:
                 params = dict(opts["materials"][label])
@@ -65,6 +67,13 @@ class SpinwScene:
         self.passthrough = {k: opts[k] for k in ("coupling_colors", "camera", "lighting", "image")}
         self._arrow_rows: dict[str, np.ndarray] = {}  # per label: arrow k → expanded row (zero moments skipped)
         self.rebuild()
+
+    def _material(self, name: str, full: dict, shading: str, **params) -> Material:
+        """``full`` (Material.to_dict()) when given, else a new material from ``shading`` and ``params``."""
+        if full:
+            params = dict(full)
+            shading = params.pop("shading")
+        return self.renderer.material(name, shading, **params)
 
     # -- geometry
     def rebuild(self) -> None:
@@ -147,9 +156,10 @@ class SpinwScene:
             "boundaries": [list(map(float, b)) for b in self.bounds],
             "atom_colors": {label: _srgb(m) for label, m in material_of.items()},
             "atom_radii": dict(self.radii),
-            "materials": {label: m.to_dict(digits=6) for label, m in material_of.items()},
+            "materials": {label: m.to_dict(digits=8) for label, m in material_of.items()},
             "show_moments": self.show_moments, "moment_length": self.moment_length,
-            "moment_color": _srgb(self.moment_material),
+            "moment_color": _srgb(self.moment_material), "moment_material": self.moment_material.to_dict(digits=8),
             "show_cell": self.show_cell, "cell_radius": self.cell_radius, "cell_color": _srgb(self.cell_material),
+            "cell_material": self.cell_material.to_dict(digits=8),
             **{k: (dict(v) if isinstance(v, dict) else v) for k, v in self.passthrough.items()},
         }

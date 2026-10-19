@@ -68,9 +68,13 @@ def _check(key: str, spec, value):
     return value
 
 
-def _unknown(name: str, known: list[str], where: str) -> str:
+def unknown_key_message(name: str, known: list[str], where: str) -> str:
+    """Error text for an unknown key, with a "did you mean" hint (apps use it to validate their own options)."""
     hint = difflib.get_close_matches(name, known, n=1, cutoff=0.5)
     return f"unknown key {name!r} in {where}" + (f" (did you mean {hint[0]!r}?)" if hint else "")
+
+
+_unknown = unknown_key_message
 
 
 @dataclass
@@ -145,6 +149,10 @@ class UIConfig(Section):
     bottom_share: float = opt(0.42, "Lower dock height", 0.1, 0.9, "share")
     window_background: tuple = opt((0.12, 0.12, 0.13), "Window background", 0.0, 1.0, "sRGB 0-1",
                                    help="around the 3D view, behind the panels")
+    compass: bool = opt(True, "Compass", help="axis gizmo in a corner of the 3D view")
+    compass_size: float = opt(42.0, "Compass size", 16.0, 200.0, "px", help="length of a full-length axis")
+    compass_corner: str = opt("bottom-left", "Compass corner",
+                              choices=("bottom-left", "bottom-right", "top-left", "top-right"))
 
 
 @dataclass

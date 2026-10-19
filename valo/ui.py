@@ -96,6 +96,27 @@ class Editor:
     def panel(self) -> None:
         """Contents of the default single window (override ``windows()`` instead for several)."""
 
+    def compass_axes(self) -> list[tuple[str, tuple, tuple]]:
+        """Axes of the corner compass, (label, xyz direction, sRGB 0-1 colour); apps add their own (e.g. a, b, c)."""
+        return [("x", (1.0, 0.0, 0.0), (0.93, 0.33, 0.31)), ("y", (0.0, 1.0, 0.0), (0.45, 0.80, 0.35)),
+                ("z", (0.0, 0.0, 1.0), (0.35, 0.55, 0.95))]
+
+    def draw_compass(self) -> None:
+        """The axis gizmo in a corner of the 3D view (``rc.ui.compass``), drawn over the scene by ImGui."""
+        if not (rc.ui.compass and self.viewer and self.scene_rect):
+            return
+        x, y, w, h = self.scene_rect
+        size, margin = rc.ui.compass_size, rc.ui.compass_size + 18.0
+        cx = x + margin if "left" in rc.ui.compass_corner else x + w - margin
+        cy = y + h - margin if "bottom" in rc.ui.compass_corner else y + margin
+        draw = imgui.get_foreground_draw_list()
+        for label, start, end, rgb, near in compass_layout(self.viewer.camera, self.compass_axes(), (cx, cy), size):
+            col = imgui.get_color_u32(imgui.ImVec4(*rgb, 1.0 if near else 0.45))
+            draw.add_line(imgui.ImVec2(*start), imgui.ImVec2(*end), col, 2.5 if near else 1.5)
+            dx, dy = end[0] - start[0], end[1] - start[1]
+            n = max((dx * dx + dy * dy) ** 0.5, 1e-6)
+            draw.add_text(imgui.ImVec2(end[0] + 7 * dx / n - 4, end[1] + 7 * dy / n - 8), col, label)
+
     def menus(self) -> dict[str, Callable[[], None]]:
         """Extra menus before Edit and View, name → function drawing the items (e.g. a File menu)."""
         return {}
@@ -354,6 +375,7 @@ class Editor:
             self._layout = None
         central = internal.dock_builder_get_central_node(dock_id)
         self.scene_rect = (central.pos.x, central.pos.y, central.size.x, central.size.y)
+        self.draw_compass()
 
         for name, draw in wins.items():
             if not self.visible.setdefault(name, True):
@@ -591,3 +613,21 @@ def pick_info(pick, scene) -> dict[str, str]:
     extra = scene.describe(pick) if hasattr(scene, "describe") else (src.info(i) if src and src.info else {})
     rows.update({str(k): str(v) for k, v in (extra or {}).items()})
     return rows
+
+
+def compass_layout(camera, axes, center, size: float) -> list[tuple]:
+    """Where to draw each compass axis: (label, start, end, rgb, toward_viewer), back-to-front.
+
+    ``axes`` are (label, direction xyz, rgb) as from ``Editor.compass_axes``; ``center`` and ``size`` are in
+    logical pixels. A direction is projected onto the camera's right / up vectors (screen y points down), so the
+    gizmo turns with the view; axes pointing away from the viewer come first, so nearer ones are drawn on top.
+    """
+    right, up = camera.right_up()
+    forward = camera.forward()
+    out = []
+    for label, direction, rgb in axes:
+        d = np.asarray(direction, float)
+        d = d / (np.linalg.norm(d) or 1.0)
+        end = (center[0] + size * float(d @ right), center[1] - size * float(d @ up))
+        out.append((label, tuple(center), end, tuple(rgb), float(d @ forward) < 0))
+    return sorted(out, key=lambda a: a[4])

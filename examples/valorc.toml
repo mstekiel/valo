@@ -88,6 +88,9 @@ scale = 1.15                  # scales text and spacing together, like View > UI
 # right_column = 0.3          # default layout: share of the window width for the right dock column (0.1-0.7)
 # bottom_share = 0.42         # default layout: height share of the lower dock (Info, Camera, Lighting, History)
 # window_background = [0.12, 0.12, 0.13]  # around the 3D view and behind the panels, sRGB 0-1
+# compass = true              # axis gizmo in a corner of the 3D view (not in offline renders)
+# compass_size = 42.0         # length of an axis in the gizmo, px (16-200)
+# compass_corner = "bottom-left"   # bottom-left, bottom-right, top-left or top-right
 # The two layout shares only apply when there is no saved layout yet, or after View > Reset layout.
 
 

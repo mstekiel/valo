@@ -592,3 +592,23 @@ def test_any_app_can_render_an_image_but_export_needs_scene_settings(viewer, bal
     assert not editor.can_export()
     with pytest.raises(ValueError):
         editor.export_script(tmp_path / "x.py")
+
+
+def test_compass_turns_with_the_camera_and_draws_in_its_corner(viewer):
+    from valo import Editor, OrbitCamera, rc_context
+    from valo.ui import compass_layout
+
+    cam = OrbitCamera(azimuth=-90.0, elevation=0.0)  # looking along +Y: right = +X, up = +Z
+    axes = Editor().compass_axes()
+    layout = {label: (end, near) for label, _, end, _, near in compass_layout(cam, axes, (100, 100), 40)}
+    assert layout["x"][0] == pytest.approx((140, 100)) and layout["z"][0] == pytest.approx((100, 60))
+    assert compass_layout(cam, axes, (100, 100), 40)[0][0] == "y"  # pointing away: drawn first (behind)
+
+    viewer.show(SimpleNamespace(batches=list), Editor())
+    with rc_context({"ui.compass": False}):
+        plain = viewer.snapshot().astype(int)
+    with rc_context({"ui.compass_corner": "bottom-left"}):
+        drawn = viewer.snapshot().astype(int)
+    changed = np.abs(drawn - plain).max(-1) > 20
+    h, w = changed.shape
+    assert changed[h // 2 :, : w // 3].sum() > 30 and not changed[: h // 2].any()  # only bottom-left

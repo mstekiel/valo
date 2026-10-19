@@ -174,6 +174,7 @@ apps:    examples/crystal_studio: studio → crystal → valo
 | New panel or window | app: an action method on its `Editor` subclass (with undo) + an entry in `windows()`. |
 | New crystal structure (CIF, POSCAR, other lattice), more species | `examples/crystal_studio/crystal.py`: centres + species per site; keep `batches()`. |
 | A new app | `examples/<name>/` with a scene, an `Editor` subclass, a `main()` and a test. |
+| A real application (domain library → valo) | follow `examples/spinw_studio/`: an adapter turning the library's objects into plain data, a pure model, then scene / editor on valo's public API (its README states the layering rules). |
 
 ## Parked ideas (pull in only when a feature needs them)
 

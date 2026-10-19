@@ -1,9 +1,10 @@
-# spinw_studio — agreed plan (paused)
+# spinw_studio — agreed plan (implemented)
 
-**Status (2026-10-19):** design agreed, **nothing implemented yet**.
-- **Blocker:** installing `spinwaves` (exact, old dependency pins) — see [DEPENDENCIES.md](DEPENDENCIES.md).
-- **What can start before it's fixed:** steps 2–5 below need no spinwaves (tests use a hand-made `SystemView`).
-- **What waits:** step 1 (the dependency group) and running `lfo_spinw.py`.
+**Status (2026-10-19):** steps 1–7 below are **implemented**. The current state and rules are in
+[README.md](README.md), the defining document; this file keeps the original design notes. spinwaves' dependency
+pins were fixed upstream ([DEPENDENCIES.md](DEPENDENCIES.md) is history).
+
+**Open:** fill the adapter stubs from spinwaves (by hand), then couplings.
 
 **Resume by:** reading this file + `lfo_spinw.py`, then following "Implementation steps". Follow CLAUDE.md:
 - plan mode first;

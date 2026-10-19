@@ -44,6 +44,7 @@ Apps built on it live in `examples/`. Design and extension points: `ARCHITECTURE
 |---|---|
 | `crystal_studio` | `crystal.py` (rock-salt model, species, material library), `studio.py` (`CrystalEditor` + `main`), `test_studio.py` |
 | `mesh_gallery` | `gallery.py` (every standard mesh + a ring of arrows, `GalleryEditor` + `main`), `test_gallery.py` |
+| `spinw_studio` | spinwaves systems in valo: `spinw_studio/` package (`adapter`, `model`, `scene`, `editor`, `api`), `lfo_spinw.py`, `test_spinw_studio.py`. **Read its `README.md` (the defining document) before changing it**; it needs `uv sync --group spinw` only to run the real script |
 
 ## Rules that keep it working
 

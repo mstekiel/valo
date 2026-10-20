@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import time
 import traceback
+from contextlib import contextmanager
 from pathlib import Path
 
 from imgui_bundle import imgui
@@ -75,6 +76,22 @@ class SceneEditor(Editor):
     def _push(self, label: str, undo, redo, merge_key=None) -> None:
         self.undo_stack.push(Command(label, undo, redo, merge_key=merge_key))
 
+    @contextmanager
+    def one_step(self, label: str):
+        """Record every action inside the ``with`` block as one undo step called ``label``."""
+        stack = self.undo_stack
+        start = len(stack.done)
+        try:
+            yield
+        finally:
+            steps = stack.done[start:]
+            del stack.done[start:]
+            if len(steps) == 1:
+                stack.done.append(steps[0])
+            elif steps:
+                stack.push(Command(label, lambda: [c.undo() for c in reversed(steps)],
+                                   lambda: [c.redo() for c in steps]))
+
     # -- selection (not an edit)
     def select(self, node: Node | None) -> None:
         """Make ``node`` the selected one (shown in the Object window, highlighted whole in the 3D view)."""
@@ -117,10 +134,11 @@ class SceneEditor(Editor):
     def add_shape(self, source, parent: Group | None = None, material: str | None = None) -> MeshObject:
         """Add a MeshObject made by ``source`` (a callable, ``"module:function"`` or sculpt file) with default
         parameters and ``material`` (default: the library's first, or a new one); returns it."""
-        if material is None:
-            material = next(iter(self.scene.materials), None) or self.new_material().name
         shape = Shape(source)
-        return self.add(MeshObject(shape.name.capitalize(), shape, material), parent)
+        with self.one_step(f"Add {shape.name.capitalize()}"):
+            if material is None:
+                material = next(iter(self.scene.materials), None) or self.new_material().name
+            return self.add(MeshObject(shape.name.capitalize(), shape, material), parent)
 
     def add(self, node: Node, parent: Group | None = None) -> Node:
         """Add ``node`` (with its subtree) at the end of ``parent`` (default: the root), select it; returns it."""

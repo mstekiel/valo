@@ -380,7 +380,23 @@ def test_shapes_from_sculpt_files_reload_when_the_file_changes(viewer, tmp_path)
     assert "SyntaxError" in editor.errors["Box"] and box.instances.mesh is good  # the last good mesh stays
     change(SCULPT, 30)
     assert "Box" not in editor.errors and np.isclose(width(), 0.8) and box.instances.mesh is not good
+    change(SCULPT.replace("tall: bool = False", "tall: bool = True"), 40)
+    assert box.shape.params == {"size": 0.8, "tall": True}  # your value stays; an untouched one follows the code
     assert len(editor.undo_stack.done) == 2  # add and set_shape_param; reloads are not edits
+
+
+def test_adding_a_shape_to_an_empty_scene_is_one_undo_step(viewer):
+    from valo import Scene, SceneEditor
+
+    scene = Scene()
+    editor = SceneEditor(scene)
+    viewer.show(scene, editor)
+    editor.add_shape(meshes.cube)  # makes a default material too
+    assert list(scene.materials) == ["Material"] and len(editor.undo_stack.done) == 1
+    editor.undo_stack.undo()
+    assert scene.materials == {} and scene.objects() == []
+    editor.undo_stack.redo()
+    assert list(scene.materials) == ["Material"] and [o.name for o in scene.objects()] == ["Cube"]
 
 
 def picky_ring(group, n: int = 2):

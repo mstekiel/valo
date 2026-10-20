@@ -136,11 +136,18 @@ class Shape:
             return False
 
     def reload(self) -> None:
-        """Re-read a sculpt file; parameters that still exist (same kind) keep their values."""
-        old = {p.name: p.kind for p in self.specs}
+        """Re-read a sculpt file. A parameter you changed from its default keeps your value (if it still exists with
+        the same kind); the others take the file's new defaults, so editing a default in the code shows at once."""
+        old = {p.name: p for p in self.specs}
         values = self.params
         self._load()
-        self.params = {p.name: values[p.name] if old.get(p.name) == p.kind else p.default for p in self.specs}
+
+        def value(p):
+            before = old.get(p.name)
+            edited = before is not None and before.kind == p.kind and values[p.name] != before.default
+            return values[p.name] if edited else p.default
+
+        self.params = {p.name: value(p) for p in self.specs}
 
     def settings(self) -> dict:
         """As plain data: the function reference (or file) and the parameters."""

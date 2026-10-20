@@ -172,3 +172,34 @@ def test_every_menu_and_window_draws_without_errors(viewer, studio):
         studio._dialog = None
         viewer.snapshot()
     assert viewer.gui_error is None
+
+
+def test_the_normals_overlay_follows_the_selection_and_the_mesh(viewer, studio):
+    blob(studio)
+    obj = studio.scene.find("Blob")
+    studio.set_transform(obj, "translate", (1, 0, 0))
+    image = viewer.snapshot()
+    studio.show_normals = True
+    viewer.snapshot()
+    arrows = studio.normals
+    assert 0 < arrows.count <= 2000 and arrows.batch() in studio.scene.batches()
+    assert np.abs(viewer.snapshot().astype(int) - image).max() > 10
+    v = int(studio._normal_rows[0, 1])
+    start = arrows.matrices[0][:3, 3]
+    assert np.allclose(start, obj.shape.build().positions[v] + [1, 0, 0], atol=1e-5)  # at the vertex, in world space
+    assert set(studio.normal_info(0)) == {"Instance", "Vertex", "Normal"}
+    count = arrows.count
+    studio.set_shape_param(obj, "segments", 8)
+    viewer.snapshot()
+    assert arrows.count == len(obj.shape.build().positions) < count  # fewer vertices, fewer arrows
+    studio.show_normals = False
+    viewer.snapshot()
+    off = viewer.snapshot()
+    assert studio.normals.count == 0  # switched off
+    studio.show_normals = True
+    studio.select(None)
+    viewer.snapshot()
+    assert studio.normals.count == 0  # nothing selected
+    studio.select(obj)
+    studio.show_normals = False
+    assert np.array_equal(viewer.snapshot(), off)  # the overlay leaves nothing behind

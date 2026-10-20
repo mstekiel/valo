@@ -26,7 +26,9 @@ import numpy as np
 from imgui_bundle import imgui
 from imgui_bundle import imgui_color_text_edit as text_edit
 
-from .geometry import decompose, euler_xyz
+from . import meshes
+from .config import rc
+from .geometry import decompose, euler_xyz, instance_matrices
 from .meshes import library
 from .meshes.sculpt import IDENTITY, transform_matrix
 from .scene import MeshObject, Scene, Shape, Transform
@@ -80,6 +82,13 @@ class StudioEditor(SceneEditor):
         self._code_mtime = 0.0
         self._dialog: tuple[str, str] | None = None  # ("new" | "open" | "save", text being typed)
         self._confirm_overwrite = False
+        self.show_normals, self.normal_length = False, 0.08  # the normals overlay (view state, not undoable)
+        self.normals = scene.renderer.instances(meshes.arrow(), scene.renderer.material(
+            "Normals", "unlit", base_color=(1.0, 0.75, 0.1)), label="normal", info=self.normal_info)
+        self._normal_rows = np.zeros((0, 2), int)  # arrow → (instance, vertex)
+        self._normal_key = None
+        self._normal_data: tuple | None = None  # (gpu mesh, MeshData) of the object the overlay shows
+        scene.overlays.append(self.normals)
 
     # -- the Code window's file (viewing a file is not an edit)
     @property
@@ -205,12 +214,56 @@ class StudioEditor(SceneEditor):
             self.open_code(path)
             self.status = f"reloaded {path.name} (changed on disk)"
 
+    # -- normals overlay
+    def update_normals(self) -> None:
+        """Arrows along the vertex normals of the selected object (every instance, at most
+        ``rc.studio.max_normal_arrows``), ``normal_length`` long; nothing when ``show_normals`` is off."""
+        obj = self.selected
+        if not (self.show_normals and isinstance(obj, MeshObject) and obj.shown() and obj.instances.count):
+            if self.normals.count:
+                self.normals.set(np.zeros((0, 4, 4)))
+            self._normal_key = None
+            return
+        inst = obj.instances
+        key = (id(obj), id(inst.mesh), inst.matrices.tobytes(), self.normal_length, rc.studio.max_normal_arrows)
+        if key == self._normal_key:
+            return
+        self._normal_key = key
+        if self._normal_data is None or self._normal_data[0] is not inst.mesh:
+            self._normal_data = (inst.mesh, obj.shape.build())
+        data = self._normal_data[1]
+        n_inst, n_vert = len(inst.matrices), len(data.positions)
+        pick = np.linspace(0, n_inst * n_vert - 1, min(n_inst * n_vert, rc.studio.max_normal_arrows)).astype(int)
+        rows = np.c_[pick // n_vert, pick % n_vert]
+        m = inst.matrices[rows[:, 0]]
+        p = np.einsum("nij,nj->ni", m[:, :3, :3], data.positions[rows[:, 1]]) + m[:, :3, 3]
+        normal_m = np.linalg.inv(m[:, :3, :3]).transpose(0, 2, 1)  # normals transform with the inverse transpose
+        n = np.einsum("nij,nj->ni", normal_m, data.normals[rows[:, 1]])
+        w, L = np.full(len(p), 0.12 * self.normal_length), np.full(len(p), self.normal_length)
+        self.normals.set(instance_matrices(p, np.c_[w, w, L], z_axis=n))
+        self._normal_rows = rows
+
+    def normal_info(self, i: int) -> dict:
+        """Info rows for normal arrow ``i``: the instance and vertex it starts at, and that vertex's normal."""
+        k, v = (int(c) for c in self._normal_rows[i])
+        n = self._normal_data[1].normals[v]
+        return {"Instance": str(k), "Vertex": str(v), "Normal": "(" + ", ".join(f"{c + 0.0:.3f}" for c in n) + ")"}
+
+    def object_window(self) -> None:
+        """SceneEditor's Object window plus the normals overlay switch for mesh objects."""
+        super().object_window()
+        if isinstance(self.selected, MeshObject):
+            _, self.show_normals = imgui.checkbox("Show normals", self.show_normals)
+            if self.show_normals:
+                _, self.normal_length = imgui.slider_float("Normal length", self.normal_length, 0.01, 0.5)
+
     def gui(self) -> None:
         """Show the selected object's shape file in the Code window (when nothing is unsaved), then draw."""
         sel = self.selected
         if (isinstance(sel, MeshObject) and sel.shape.sculpt is not None and not self.dirty
                 and not _same(sel.shape.source, self.code_path)):
             self.open_code(sel.shape.source)
+        self.update_normals()
         super().gui()
         self._dialogs()
 

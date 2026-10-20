@@ -412,6 +412,7 @@ class Scene:
         self.materials: dict[str, Material] = {}
         self.root = Group("Scene")
         self.root.scene = self
+        self.overlays: list[Instances] = []  # drawn after the objects, not in the tree, not saved (editor helpers)
 
     # -- materials
     def material(self, name: str, shading: str = "pbr", **params) -> Material:
@@ -500,8 +501,9 @@ class Scene:
 
     # -- what the renderer and the camera need
     def batches(self):
-        """One batch per visible object with at least one instance."""
-        return [n.instances.batch() for n in self.objects() if n.shown() and n.instances.count]
+        """One batch per visible object with at least one instance, then the overlays."""
+        return ([n.instances.batch() for n in self.objects() if n.shown() and n.instances.count]
+                + [o.batch() for o in self.overlays if o.count])
 
     def _spheres(self) -> tuple[np.ndarray, np.ndarray]:
         centres, radii = [], []

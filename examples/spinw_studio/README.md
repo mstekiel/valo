@@ -141,15 +141,3 @@ the same picture pixel for pixel (a test checks this). **The lattice isn't in pl
   The adapter is tested through its contract checks on a duck-typed stand-in for `sw`.
 - **No render script:** valo's Export render script is off, because the structure needs your `sw`. Use Export
   plot options + `render(sw, PLOT_OPTIONS)`. Render image works.
-
-
-# Issues
-
-For future development
-
-### spinw studio
-- model.AtomSite reimplements spinwaves.Atom. Looks like some wrong architectural choice overall. I want a simpler, lower level behaviour, where the adapter doesn
-
-
-### valo
-

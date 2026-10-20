@@ -89,8 +89,16 @@ def set_lattice(sw, a: float, b: float, c: float, alpha: float, beta: float, gam
     crystal coordinates uvw. Called by the studio's Structure parameters; until filled, editing them shows this
     error and changes nothing.
     """
-    raise NotImplementedError("fill in from spinwaves: set_lattice(sw, a, b, c, alpha, beta, gamma) changes sw's "
-                              "lattice in place (Å, degrees), so lattice_matrix(sw) returns the new A")
+    sw.crystal.a = a
+    sw.crystal.b = b
+    sw.crystal.c = c
+
+    sw.crystal.alpha = alpha
+    sw.crystal.beta = beta
+    sw.crystal.gamma = gamma
+
+    # raise NotImplementedError("fill in from spinwaves: set_lattice(sw, a, b, c, alpha, beta, gamma) changes sw's "
+    #                           "lattice in place (Å, degrees), so lattice_matrix(sw) returns the new A")
 
 
 # -- the contract check ----------------------------------------------------------------------------

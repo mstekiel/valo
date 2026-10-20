@@ -4,7 +4,7 @@
     ├─ Atoms             moment_length (Å); its children are rebuilt when one changes, keeping your edits
     │   └─ Fe, O1, …     one InstancedObject per label: Shape(sphere, r = radius), material named after the label
     ├─ Moments
-    │   └─ Fe moments    arrows centred on the atoms (zero moments skipped), material "Moments"
+    │   └─ Fe moments    arrows centred on the atoms per magnetic label, material "Moments"
     └─ Cell              the 12 unit-cell edges: Shape(cylinder, r = edge radius), material "Unit cell"
 
 All of it is locked (hide it, edit it, but it can't be deleted); objects you add in the studio sit next to it.
@@ -117,6 +117,8 @@ def structure(group, a: float = 5.0, b: float = 5.0, c: float = 5.0, alpha: floa
                                   label, instance_matrices(ex.xyz) if len(ex.xyz) else [],
                                   info=lambda k, lb=label: atom_info(lb, k), locked=True))
         norms = np.linalg.norm(ex.moments, axis=1)
+        if not any(np.any(site.moment) for site in system.atoms if site.label == label):
+            continue  # a non-magnetic label gets no moments object
         rows = np.flatnonzero(norms > 1e-12)  # arrow k → expanded row
         d = ex.moments[rows] / norms[rows, None]
         w, L = np.full(len(rows), 0.3 * moment_length), np.full(len(rows), moment_length)

@@ -141,6 +141,15 @@ def test_scene_draws_atoms_moments_and_cell(studio):
     assert scene.find("Structure").params["b"] == pytest.approx(5.6)
 
 
+def test_non_magnetic_labels_get_no_moments_object(viewer):
+    from spinw_studio import show
+
+    o = AtomSite("O", 4, (0.25, 0.25, 0.25), (0, 0, 0))
+    editor = show(viewer, lfo_like(atoms=(*lfo_like().atoms, o)))
+    assert [n.name for n in editor.scene.find("Moments").children] == ["Fe moments"]
+    assert editor.scene.find("O").instances.count == 1
+
+
 def structure_param(key, value):
     return lambda ed, s: ed.set_procedural_param(s.find("Structure"), key, value)
 

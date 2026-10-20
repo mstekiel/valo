@@ -1,4 +1,4 @@
-"""Diagnostics: ``check(mesh)`` reports what is wrong with a mesh (shared by the tests and MeshSculptor)."""
+"""Diagnostics: ``check(mesh)`` reports what is wrong with a mesh (shared by the tests and the studio)."""
 
 from __future__ import annotations
 
@@ -35,7 +35,7 @@ class MeshReport:
 
 
 def check(mesh: MeshData) -> MeshReport:
-    """What's wrong with ``mesh``: the checks the tests and the MeshSculptor panel share."""
+    """What's wrong with ``mesh``: the checks the tests and the studio's Object window share."""
     p = mesh.positions.astype(float)
     n = mesh.normals.astype(float)
     t = mesh.indices.reshape(-1, 3).astype(np.int64)

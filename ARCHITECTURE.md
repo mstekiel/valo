@@ -43,7 +43,7 @@ viewer.show(scene, SceneEditor(scene))
   (scale, rotate x→y→z in degrees, translate: `geometry.transform_matrix`). Hidden ancestors hide a node.
 - **Shapes**: a `Shape` is a function (callable, `"module:function"`, or a sculpt file) plus parameters; the
   editable ones (float/int/bool with defaults; ranges from `func.ranges` / `RANGES`) come from its signature
-  (`meshes/params.py`, shared with MeshSculptor and procedural builders). Sculpt-file shapes hot-reload.
+  (`meshes/params.py`, shared by shape files and procedural builders). Shape files hot-reload.
 - **Rebuilds keep children:** a procedural rebuild matches the new children to the old ones by name path and
   type, and keeps the old nodes. A property the user changed from what the builder gave (visibility, transform,
   material, shape) stays; the rest (instance matrices, info) comes from the builder. So selection and undo history
@@ -63,7 +63,7 @@ viewer.show(scene, SceneEditor(scene))
   rename, reparent, visibility), an object (transform, base shape, shape / builder parameters, material) and the library
   (new, duplicate, delete unused); windows **Scene** (tree with type and eye toggle, context menu, drag onto a
   group to reparent, "+ Add"), **Object** (parameters, transform, material, `meshes.check` diagnostics) and
-  **Materials**. `examples/mesh_gallery/` is the reference app.
+  **Materials**. `SceneEditor.one_step(label)` groups several actions into one undo step.
 - **Why only a tree, no scene graph of dependencies:** shared transforms and one-click visibility are what
   grouping needs; "parameter → regenerate a structure" (lattice constants → atoms, cell edges) is a procedural
   group's rebuild, with the physics links kept in the app's builder. A procedural group rebuilds all its children
@@ -72,31 +72,40 @@ viewer.show(scene, SceneEditor(scene))
 Meshes live in the `valo/meshes/` package; import everything from `valo.meshes`.
 - **`primitives.py`**: the standard meshes, all unit-sized, Z-up and CCW outward. They are `sphere`, `icosphere`, `cube`,
   `cylinder`, `cone`, `torus`, `capsule`, `arrow` (tail at origin, tip at z=1) and `plane` (double-sided).
-  `examples/mesh_gallery/` shows them all.
+  The studio's Scene window (+ Add > Shape) adds any of them.
 - **`ops.py`**: `transform` and `merge`.
 - **`builders.py`**: `revolve`, `parametric` and `heightfield`.
 - **`check.py`**: diagnostics.
-- **`sculpt.py`** and **`library/`**: the sculpting workflow below.
+- **`sculpt.py`** and **`library/`**: shape files and the procedural mesh library (below).
 
-## Sculpting meshes into the library
+## valo studio: procedural meshes in code
 
 ```
-your_shape.py ──valo-sculpt──▶ MeshSculptor ──Save──▶ valo/meshes/library/<name>.py ──▶ library.mesh("<name>")
- mesh(a=1.0, n=32)              sliders from the       same file, tuned values     Sculpt.build(): mesh(**params)
- RANGES / MATERIAL / TRANSFORM  signature, transform,  as defaults + MATERIAL +    with TRANSFORM baked in
-                                material, check()      TRANSFORM (AST rewrite)
+File > New shape ──▶ data/procedural_meshes/<name>.py ──Code window, Ctrl+S──▶ parameters re-read in the Object tab
+valo-studio my.py      mesh(a=1.0, n=32)                  (your edited values stay;     ──Save to library──▶
+                       RANGES / MATERIAL / TRANSFORM       untouched ones follow the code)    defaults + MATERIAL +
+                                                                                              baked TRANSFORM
 ```
-A sculpt file is plain Python (contract in `valo/meshes/sculpt.py`): a `mesh(...)` function whose parameters
-all have defaults (`float`, `int`, `bool`), optionally `RANGES`, `MATERIAL`, `TRANSFORM`. Build shapes with
-`meshes.revolve` ((ρ, z) profile; repeat a point for a hard edge), `meshes.parametric` (P(u, v), outward is
-∂u × ∂v) or `meshes.heightfield` (z = f(x, y)). `meshes.check` (winding, unit normals, watertight + volume)
-drives the Diagnostics panel and the tests, which run it on every library entry. Preview and library share
-`Sculpt.build`, so what you see is what's saved. Starter sculpts: `examples/sculpts/`.
+- **`StudioEditor`** (`valo/studio.py`, `uv run valo-studio [shape.py]`): `SceneEditor` plus a **Code** window
+  (`imgui_color_text_edit`, docked left through `Editor.dock_left`). It's the base of every domain studio
+  (spinw_studio derives from it).
+- **A shape file** is plain Python (contract in `valo/meshes/sculpt.py`): a `mesh(...)` function whose parameters
+  all have defaults (`float`, `int`, `bool`), optionally `RANGES`, `MATERIAL`, `TRANSFORM`. Build with
+  `meshes.revolve` ((ρ, z) profile; repeat a point for a hard edge), `meshes.parametric` (P(u, v), outward is
+  ∂u × ∂v) or `meshes.heightfield` (z = f(x, y)). Starter shapes: `examples/sculpts/`.
+- **Saving the code** re-reads the file for every object built from it (`Shape.reload`). On an error the last good
+  mesh stays and the error, cut to your file's frames, shows under the code.
+- **Save to library** writes the file with the object's values as defaults, its material as `MATERIAL` and its
+  transform baked into `TRANSFORM` (AST rewrite, `Sculpt.save`) to `rc.studio.procedural_meshes` (default
+  `data/procedural_meshes/`); the object's own transform becomes identity. `valo.library.mesh("<name>")` reads
+  it back. One undo step.
+- **Diagnostics:** the Object window shows `meshes.check` (winding, unit normals, watertight + volume); "Show
+  normals" draws the selected object's normals through `Scene.overlays`. The tests check every library entry.
 
 A real app subclasses `Editor`: its actions are methods that push `Command`s, and `windows()` returns its
 dockable windows as `{title: draw_function}`; `material_section(m)` gives the schema-driven material editor.
-Optional: `menus()` adds menus (e.g. File) before Edit and View; `dock_bottom` / `bottom_share` / `right_column`
-shape the default layout. The base class draws the menu bar (Edit: undo/redo, View: window toggles, auto-rotate,
+Optional: `menus()` adds menus (e.g. File) before Edit and View; `dock_bottom` / `bottom_share` / `right_column` /
+`dock_left` / `left_column` shape the default layout. The base class draws the menu bar (Edit: undo/redo, View: window toggles, auto-rotate,
 UI scale, Reset layout), the History window and the dockspace; the scene shows through the empty **central dock
 node**. The layout is saved to `~/.valo/<title>.ini` (real windows only, also on close). A scene with
 `bounding_radius()` gets the camera fitted on `show`.
@@ -124,7 +133,7 @@ real pixel density, so text is crisp at any DPI.
 ## Configuration: `valo.rc`
 
 `valo/config.py` holds every tunable as typed sections with defaults in code: camera, lighting, highlight,
-picking, ui, keys, sculptor. Read them as `rc.camera.orbit_speed` or `rc["camera.orbit_speed"]`; every set is
+picking, ui, keys, studio. Read them as `rc.camera.orbit_speed` or `rc["camera.orbit_speed"]`; every set is
 validated (type, range, choices; typos get a "did you mean"). Files override the defaults, in this order:
 `~/.valo/valorc.toml` → `./valorc.toml` → `$VALO_RC`. `valo-config --write-defaults` writes a commented file of
 every key. View → Preferences edits `rc` live (generated from the schema) and saves the changed keys.
@@ -202,10 +211,9 @@ engine:  geometry, materials, undo              (leaves: numpy only, materials h
          ui      → materials, undo
          app     → render, ui
          scene_editor → scene, ui, meshes (check, library)
-tools:   tools/sculptor → app, meshes  (the `valo-sculpt` command)
+         studio  → scene_editor, meshes (library, sculpt)  (the `valo-studio` command)
 apps:    examples/crystal_studio: studio → crystal → valo
-         examples/mesh_gallery:   gallery → valo (Scene, SceneEditor)
-         examples/spinw_studio:   api → editor, scene → model, adapter; scene / editor → valo (Scene, SceneEditor)
+         examples/spinw_studio:   api → editor, scene → model, adapter; scene / editor → valo (Scene, StudioEditor)
 ```
 `render` draws anything with a `batches()` method; nothing in `valo/` imports from `examples/`.
 
@@ -214,7 +222,8 @@ apps:    examples/crystal_studio: studio → crystal → valo
 | Request | Change |
 |---|---|
 | New shading model | `valo/materials.py`: WGSL in `FRAGMENT_WGSL` + parameter list in `SCHEMA`. Panels and pipelines pick it up. |
-| New mesh shape | sculpt it: `uv run valo-sculpt my_shape.py`, then Save to library (→ `valo/meshes/library/`, checked by the tests). A primitive every app needs goes in `valo/meshes/primitives.py` + `STANDARD`. |
+| New mesh shape | write it in the studio: `uv run valo-studio`, File > New shape, then Save to library (→ `data/procedural_meshes/`, checked by the tests). A primitive every app needs goes in `valo/meshes/primitives.py` + `STANDARD`. |
+| A new domain studio | subclass `valo.StudioEditor` (scene tree, objects, materials, code window come with it); see `examples/spinw_studio/`. |
 | New mesh builder | `valo/meshes/builders.py`, next to `revolve` / `parametric` / `heightfield`; test it with `check()`. |
 | Bonds, vector fields | app: `renderer.instances(meshes.cylinder() / arrow(), m)` + `instance_matrices(..., z_axis=...)`. |
 | Polyhedra, isosurfaces (per-scene meshes) | app: build a `MeshData` and draw it with one identity instance. |

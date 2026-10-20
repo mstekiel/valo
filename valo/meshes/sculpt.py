@@ -9,7 +9,7 @@ The contract (only ``mesh`` is required; every parameter needs a default)::
     def mesh(height: float = 1.0, segments: int = 48, closed: bool = True):
         return revolve(...)
 
-``Sculpt.build`` applies TRANSFORM, so the MeshSculptor preview and ``valo.library.mesh`` agree.
+``Sculpt.build`` applies TRANSFORM, so the studio preview and ``valo.library.mesh`` agree.
 ``Sculpt.save`` rewrites only the defaults and the MATERIAL / TRANSFORM values; comments and the rest
 of the file are kept byte for byte.
 """

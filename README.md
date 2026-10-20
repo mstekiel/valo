@@ -7,8 +7,8 @@ Dear ImGui for a docking UI. Apps hand the `Viewer` a scene of instanced, shaded
 ```powershell
 uv sync
 uv run python examples/crystal_studio/studio.py   # example app: rock-salt crystal + material editor
-uv run python examples/mesh_gallery/gallery.py    # example app: a valo.Scene of every standard mesh
-uv run valo-sculpt examples/sculpts/vase.py      # MeshSculptor: sculpt a mesh from a .py file, save to the library
+uv run valo-studio                                # the studio: scene, objects, materials, procedural meshes in code
+uv run valo-studio examples/sculpts/vase.py       # ...opening a shape file
 uv run pytest                                     # engine + example tests (GPU tests render offscreen)
 ```
 
@@ -16,8 +16,9 @@ Apps build a `valo.Scene`: a tree of objects, each a shape function with paramet
 from the scene's library. `SceneEditor` gives it Scene (tree, visibility, drag to reparent), Object (parameters,
 transform, material) and Materials windows, with undo for everything.
 
-MeshSculptor hot-reloads the sculpt file whenever you save it in your editor. "Save to library" writes
-`valo/meshes/library/<name>.py`, and apps use it as `valo.library.mesh("<name>")`.
+In the studio, File > New shape starts a procedural mesh in the Code window. Every save (Ctrl+S) re-reads its
+parameters into the Object tab; files changed in another editor reload too. "Save to library" writes
+`data/procedural_meshes/<name>.py`, and apps use it as `valo.library.mesh("<name>")`.
 
 | Mouse / key | Action |
 |---|---|

@@ -59,6 +59,7 @@ class Viewer:
         self.pointer = None  # last pointer position, logical px
         self.hover = None  # Pick under the pointer (render.Pick) or None
         self.selection = None  # Pick chosen by a click, or None
+        self.highlighted: list = []  # Instances tinted whole, like a selection (e.g. a scene editor's selected group)
         self._last_click = None  # (time, x, y) of the last click, for double-click
         self._last_frame = time.perf_counter()
         canvas.add_event_handler(self.on_pointer, "pointer_down", "pointer_move", "pointer_up", "wheel")
@@ -102,14 +103,25 @@ class Viewer:
                 return
 
     def _highlights(self) -> list:
-        """(batch, instance, rgb) tints for the renderer: the selection, and the hovered object (last frame's pick)."""
+        """(batch, instance, rgb) tints for the renderer: the selection (the whole object when its Instances has an
+        ``owner``), the ``highlighted`` Instances, and the hovered instance (last frame's pick)."""
         h = rc.highlight
         if not h.enabled:
             return []
-        out = []
-        for pick, strength in ((self.selection, h.selected_strength), (self.hover, h.strength)):
-            key = pick and (pick.batch_index, pick.instance_index)
-            if pick is not None and key not in [o[:2] for o in out]:
+        index = {id(getattr(b, "source", None)): i for i, b in enumerate(self.scene.batches())}
+        keys = []
+        sel = self.selection
+        if sel is not None:
+            whole = getattr(sel.source, "owner", None) is not None and id(sel.source) in index
+            keys.append(((index[id(sel.source)], None) if whole else (sel.batch_index, sel.instance_index),
+                         h.selected_strength))
+        keys += [((index[id(s)], None), h.selected_strength) for s in self.highlighted if id(s) in index]
+        if self.hover is not None:
+            keys.append(((self.hover.batch_index, self.hover.instance_index), h.strength))
+        out, seen = [], set()
+        for key, strength in keys:
+            if key not in seen and (key[0], None) not in seen:
+                seen.add(key)
                 out.append((*key, tuple(c * strength for c in h.color)))
         return out
 

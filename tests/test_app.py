@@ -435,6 +435,32 @@ def test_hovered_object_is_highlighted_and_nothing_else(viewer):
     viewer.pointer = None
 
 
+def test_selecting_an_owned_instance_highlights_the_whole_object(viewer):
+    from valo import Editor, OrbitCamera
+    from valo.render import Pick
+
+    m = viewer.renderer.material("M", "lambert", base_color=(0.5, 0.5, 0.5))
+    balls = viewer.renderer.spheres(m)
+    balls.set([[-1.2, 0, 0], [1.2, 0, 0]], 0.6)
+    viewer.show(SimpleNamespace(batches=lambda: [balls.batch()]), Editor())
+    viewer.camera = OrbitCamera(azimuth=-90.0, elevation=0.0, distance=6.0)
+    plain = viewer.snapshot().astype(int)
+    w = plain.shape[1]
+
+    def changed():  # (left sphere tinted, right sphere tinted)
+        diff = np.abs(viewer.snapshot().astype(int) - plain).max(-1) > 3
+        return diff[:, : w // 2].sum() > 200, diff[:, w // 2 :].sum() > 200
+
+    viewer.selection = Pick(0, 0, balls, np.zeros(3))
+    assert changed() == (True, False)  # no owner: just the clicked instance
+    balls.owner = object()
+    assert changed() == (True, True)  # an object's instance: the whole object
+    viewer.selection, viewer.highlighted = None, [balls]
+    assert changed() == (True, True)
+    viewer.highlighted = []
+    assert changed() == (False, False)
+
+
 def test_info_rows_show_how_the_instance_was_placed(viewer):
     from valo import instance_matrices, meshes
     from valo.render import Pick

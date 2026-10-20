@@ -359,13 +359,14 @@ class Instances:
     """Instances of one mesh sharing one material: a grow-only storage buffer of model matrices.
 
     ``batch()`` is the Batch the renderer draws. ``label`` names the object in the Info panel, and
-    ``info(i) -> dict`` (optional) adds scene-specific lines for instance ``i``.
+    ``info(i) -> dict`` (optional) adds scene-specific lines for instance ``i``. ``owner`` (optional) is the scene
+    object the instances belong to: a click on any of them selects, and highlights, the whole object.
     """
 
     def __init__(self, device: wgpu.GPUDevice, instance_layout, mesh: GpuMesh, material: Material,
                  label: str | None = None, info: Callable[[int], dict] | None = None):
         self.device, self.layout, self.mesh, self.material = device, instance_layout, mesh, material
-        self.label, self.info = label, info
+        self.label, self.info, self.owner = label, info, None
         self.count = self.capacity = 0  # capacity: instances the buffer can hold
         self.buffer = self.bind_group = None
         self.set(np.zeros((0, 4, 4)))
@@ -465,11 +466,7 @@ class Renderer:
             fragment={"module": hl_module, "entry_point": "fs_main",
                       "targets": [{"format": SCENE_FORMAT, "blend": add}]},
         )
-        self._hl_buffers = []
-        for _ in range(2):  # hover, selection
-            buf = device.create_buffer(size=16, usage=wgpu.BufferUsage.UNIFORM | wgpu.BufferUsage.COPY_DST)
-            self._hl_buffers.append((buf, device.create_bind_group(
-                layout=hl_layout, entries=[{"binding": 0, "resource": {"buffer": buf}}])))
+        self._hl_layout, self._hl_buffers = hl_layout, []  # one tint buffer per highlight, made on demand
         self.post_origin = device.create_buffer(size=16, usage=wgpu.BufferUsage.UNIFORM | wgpu.BufferUsage.COPY_DST)
         self._meshes: weakref.WeakKeyDictionary[MeshData, GpuMesh] = weakref.WeakKeyDictionary()
         self.sphere = self.mesh(sphere(20, 40))  # unit diameter; scaled per instance
@@ -510,6 +507,13 @@ class Renderer:
             )
             self._pick_ids: list = []  # bind group per batch index, holding that index + 1
             self._pick_targets = None
+
+    def _hl_buffer(self, i: int):
+        while len(self._hl_buffers) <= i:
+            buf = self.device.create_buffer(size=16, usage=wgpu.BufferUsage.UNIFORM | wgpu.BufferUsage.COPY_DST)
+            self._hl_buffers.append((buf, self.device.create_bind_group(
+                layout=self._hl_layout, entries=[{"binding": 0, "resource": {"buffer": buf}}])))
+        return self._hl_buffers[i]
 
     def _pick_id(self, i: int):
         while len(self._pick_ids) <= i:
@@ -598,7 +602,8 @@ class Renderer:
         pixels, origin top-left); the rest of the texture is cleared to the window background.
 
         ``scene.batches()`` yields Batch (material, gpu_mesh, instance_bind_group, instance_count, source)
-        tuples. ``highlights``: up to two (batch_index, instance_index, rgb) tints drawn over those instances.
+        tuples. ``highlights``: (batch_index, instance_index, rgb) tints drawn over those instances; an
+        instance_index of None tints every instance of the batch (a whole object).
         ``samples`` k renders the scene k×k larger and averages it down; ``transparent`` gives the background
         alpha 0; ``background`` (linear RGB) overrides ``rc.render.background``.
         """
@@ -643,12 +648,14 @@ class Renderer:
             mesh.draw(rpass, instances=count)
         if highlights:
             rpass.set_pipeline(self.highlight_pipeline)
-        for (bi, ii, rgb), (buf, bg) in zip(highlights, self._hl_buffers, strict=False):
-            if bi < len(all_batches) and ii < all_batches[bi][3]:
+        for i, (bi, ii, rgb) in enumerate(highlights):
+            if bi < len(all_batches) and (ii is None or ii < all_batches[bi][3]):
+                buf, bg = self._hl_buffer(i)
                 self.device.queue.write_buffer(buf, 0, np.array([*rgb, 0.0], np.float32))
                 rpass.set_bind_group(1, bg)
                 rpass.set_bind_group(2, all_batches[bi][2])
-                all_batches[bi][1].draw(rpass, instances=1, first_instance=ii)
+                first, n = (0, all_batches[bi][3]) if ii is None else (ii, 1)
+                all_batches[bi][1].draw(rpass, instances=n, first_instance=first)
         rpass.end()
 
         rpass = encoder.begin_render_pass(color_attachments=[{

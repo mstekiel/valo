@@ -23,7 +23,7 @@ import argparse
 from pathlib import Path
 
 import numpy as np
-from imgui_bundle import imgui
+from imgui_bundle import imgui, portable_file_dialogs
 from imgui_bundle import imgui_color_text_edit as text_edit
 
 from . import meshes
@@ -70,6 +70,7 @@ class StudioEditor(SceneEditor):
 
     title = "valo studio"
     dock_left = ("Code",)
+    file_dialog = staticmethod(portable_file_dialogs.open_file)  # the OS's file dialog (swapped out in tests)
 
     def __init__(self, scene: Scene):
         super().__init__(scene)
@@ -81,6 +82,7 @@ class StudioEditor(SceneEditor):
         self._in_widget = None  # the text last put into the widget
         self._code_mtime = 0.0
         self._dialog: tuple[str, str] | None = None  # ("new" | "open" | "save", text being typed)
+        self._browsing = None  # the open file dialog, polled each frame until you pick a file or cancel
         self._confirm_overwrite = False
         self.show_normals, self.normal_length = False, 0.08  # the normals overlay (view state, not undoable)
         self.normals = scene.renderer.instances(meshes.arrow(), scene.renderer.material(
@@ -257,12 +259,34 @@ class StudioEditor(SceneEditor):
             if self.show_normals:
                 _, self.normal_length = imgui.slider_float("Normal length", self.normal_length, 0.01, 0.5)
 
+    def browse_shape(self) -> None:
+        """Open the system's file dialog (in the library folder) to pick a shape file; the studio keeps running and
+        ``open_shape`` follows when you choose one. Without a system dialog, a path field opens instead."""
+        if self._browsing is not None:
+            return
+        try:
+            self._browsing = self.file_dialog("Open shape file", str(library.directory()),
+                                              ["Python shape files (*.py)", "*.py", "All files", "*"])
+        except Exception:
+            self._dialog = ("open", "")
+
+    def _poll_browsing(self) -> None:
+        if self._browsing is None or not self._browsing.ready(0):
+            return
+        paths, self._browsing = self._browsing.result(), None
+        if paths:
+            try:
+                self.open_shape(Path(paths[0]))
+            except Exception as exc:
+                self.status = f"! could not open {Path(paths[0]).name}: {exc}"
+
     def gui(self) -> None:
         """Show the selected object's shape file in the Code window (when nothing is unsaved), then draw."""
         sel = self.selected
         if (isinstance(sel, MeshObject) and sel.shape.sculpt is not None and not self.dirty
                 and not _same(sel.shape.source, self.code_path)):
             self.open_code(sel.shape.source)
+        self._poll_browsing()
         self.update_normals()
         super().gui()
         self._dialogs()
@@ -281,7 +305,7 @@ class StudioEditor(SceneEditor):
         if imgui.menu_item_simple(f"{ICON.FILE} New shape..."):
             self._dialog = ("new", "")
         if imgui.menu_item_simple(f"{ICON.FOLDER_OPEN} Open shape file..."):
-            self._dialog = ("open", "")
+            self.browse_shape()
         obj = self.selected
         can_save = isinstance(obj, MeshObject) and obj.shape.sculpt is not None
         if imgui.menu_item(f"{ICON.BOOK} Save to library as...", "", False, can_save)[0]:

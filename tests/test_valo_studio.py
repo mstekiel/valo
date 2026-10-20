@@ -203,3 +203,46 @@ def test_the_normals_overlay_follows_the_selection_and_the_mesh(viewer, studio):
     studio.select(obj)
     studio.show_normals = False
     assert np.array_equal(viewer.snapshot(), off)  # the overlay leaves nothing behind
+
+
+class FakeFileDialog:
+    """Stands in for the system file dialog: not ready on the first poll, then returns ``picked``."""
+
+    def __init__(self, picked, calls):
+        self.picked, self.polls = picked, 0
+        calls.append(self)
+
+    def ready(self, timeout=20):  # noqa: D102 - the dialog interface
+        self.polls += 1
+        return self.polls > 1
+
+    def result(self):  # noqa: D102
+        return self.picked
+
+
+@pytest.mark.parametrize("picked", ["vase", None, "missing"])
+def test_open_shape_file_uses_the_system_file_dialog(viewer, studio, tmp_path, monkeypatch, picked):
+    calls = []
+    path = {"vase": tmp_path / "vase.py", "missing": tmp_path / "missing.py", None: None}[picked]
+    monkeypatch.setattr(studio, "file_dialog", lambda title, folder, filters: FakeFileDialog(
+        [str(path)] if path else [], calls))
+    studio.browse_shape()
+    studio.browse_shape()  # a second click while it's open doesn't open another
+    studio._poll_browsing()  # still open: nothing happens yet
+    assert len(calls) == 1 and studio.scene.objects() == [] and studio._browsing is not None
+    viewer.snapshot()  # the next frame sees the choice
+    names = [o.name for o in studio.scene.objects()]
+    if picked == "vase":
+        assert names == ["Vase"] and studio.code_path == path
+    else:
+        assert names == [] and studio._browsing is None
+        assert ("could not open missing.py" in studio.status) == (picked == "missing")
+
+
+def test_without_a_system_dialog_a_path_field_opens(studio, monkeypatch):
+    def unavailable(*args):
+        raise RuntimeError("no dialog backend")
+
+    monkeypatch.setattr(studio, "file_dialog", unavailable)
+    studio.browse_shape()
+    assert studio._dialog == ("open", "")

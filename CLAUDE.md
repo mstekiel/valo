@@ -22,7 +22,7 @@ Apps built on it live in `examples/`. Design and extension points: `ARCHITECTURE
 | `meshes/` | package, pure numpy; import everything from `valo.meshes` (its `__init__` re-exports) | no |
 | `meshes/data.py` | `MeshData` (+ `_mesh`, `_grid_indices` helpers) | no |
 | `meshes/ops.py` | `transform`, `merge` | no |
-| `meshes/builders.py` | `revolve`, `parametric`, `heightfield` | no |
+| `meshes/builders.py` | `revolve`, `parametric`, `heightfield`, `tube` | no |
 | `meshes/primitives.py` | `sphere`, `icosphere`, `cube`, `plane`, `cylinder`, `cone`, `torus`, `capsule`, `arrow`, `STANDARD` | no |
 | `meshes/params.py` | `ShapeParam`, `shape_params`: editable float/int/bool parameters from a function signature | no |
 | `meshes/check.py` | `check` → `MeshReport` (winding, unit normals, watertight + volume) | no |

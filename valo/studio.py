@@ -41,7 +41,7 @@ TEMPLATE = '''"""{name}: a procedural mesh. Edit, then save (Ctrl+S): the Object
 
 mesh(...) returns a valo MeshData. Every parameter needs a default and a float / int / bool type; RANGES sets the
 slider ranges. Build with valo.meshes: revolve ((rho, z) profile around Z), parametric (P(u, v)), heightfield,
-the primitives, transform and merge.
+tube (a circle swept along a 3D path), the primitives, transform and merge.
 """
 
 import numpy as np

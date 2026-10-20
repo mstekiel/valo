@@ -74,7 +74,7 @@ Meshes live in the `valo/meshes/` package; import everything from `valo.meshes`.
   `cylinder`, `cone`, `torus`, `capsule`, `arrow` (tail at origin, tip at z=1) and `plane` (double-sided).
   The studio's Scene window (+ Add > Shape) adds any of them.
 - **`ops.py`**: `transform` and `merge`.
-- **`builders.py`**: `revolve`, `parametric` and `heightfield`.
+- **`builders.py`**: `revolve`, `parametric`, `heightfield` and `tube` (a circle swept along a 3D path).
 - **`check.py`**: diagnostics.
 - **`sculpt.py`** and **`library/`**: shape files and the procedural mesh library (below).
 
@@ -92,7 +92,7 @@ valo-studio my.py      mesh(a=1.0, n=32)                  (your edited values st
 - **A shape file** is plain Python (contract in `valo/meshes/sculpt.py`): a `mesh(...)` function whose parameters
   all have defaults (`float`, `int`, `bool`), optionally `RANGES`, `MATERIAL`, `TRANSFORM`. Build with
   `meshes.revolve` ((ρ, z) profile; repeat a point for a hard edge), `meshes.parametric` (P(u, v), outward is
-  ∂u × ∂v) or `meshes.heightfield` (z = f(x, y)). Starter shapes: `examples/sculpts/`.
+  ∂u × ∂v), `meshes.heightfield` (z = f(x, y)) or `meshes.tube` (around a 3D path: springs, wires, rings). Starter shapes: `examples/sculpts/`.
 - **Saving the code** re-reads the file for every object built from it (`Shape.reload`). On an error the last good
   mesh stays and the error, cut to your file's frames, shows under the code.
 - **Save to library** writes the file with the object's values as defaults, its material as `MATERIAL` and its
@@ -224,7 +224,7 @@ apps:    examples/crystal_studio: studio → crystal → valo
 | New shading model | `valo/materials.py`: WGSL in `FRAGMENT_WGSL` + parameter list in `SCHEMA`. Panels and pipelines pick it up. |
 | New mesh shape | write it in the studio: `uv run valo-studio`, File > New shape, then Save to library (→ `data/procedural_meshes/`, checked by the tests). A primitive every app needs goes in `valo/meshes/primitives.py` + `STANDARD`. |
 | A new domain studio | subclass `valo.StudioEditor` (scene tree, objects, materials, code window come with it); see `examples/spinw_studio/`. |
-| New mesh builder | `valo/meshes/builders.py`, next to `revolve` / `parametric` / `heightfield`; test it with `check()`. |
+| New mesh builder | `valo/meshes/builders.py`, next to `revolve` / `parametric` / `heightfield` / `tube`; test it with `check()`. |
 | Bonds, vector fields | app: `renderer.instances(meshes.cylinder() / arrow(), m)` + `instance_matrices(..., z_axis=...)`. |
 | Polyhedra, isosurfaces (per-scene meshes) | app: build a `MeshData` and draw it with one identity instance. |
 | Animation (vibrations, precession) | engine: time in the frame uniform; per-instance amplitudes; displacement in `vs_main`. |

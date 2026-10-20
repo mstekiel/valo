@@ -119,3 +119,10 @@ fit_all = "h"                 # fit the whole scene (default "Home")
 
 # poll_s = 0.3                # how often the sculpt file is checked for changes (hot reload), seconds
 # max_normal_arrows = 2000    # Diagnostics > Show normals draws at most this many arrows
+
+[studio]
+# valo studio (uv run valo-studio): shape files and the procedural mesh library.
+
+# poll_s = 0.3                # how often shape files are checked for changes (hot reload), seconds
+# max_normal_arrows = 2000    # Show normals draws at most this many arrows
+# procedural_meshes = "data/procedural_meshes"   # Save to library writes here; relative to the project folder

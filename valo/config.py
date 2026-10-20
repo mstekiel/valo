@@ -182,8 +182,19 @@ class SculptorConfig(Section):
     max_normal_arrows: int = opt(2000, "Max normal arrows", 10, 100000)
 
 
+@dataclass
+class StudioConfig(Section):
+    """valo studio: shape files, hot reload, the procedural mesh library."""
+
+    NAME = "studio"
+    poll_s: float = opt(0.3, "File poll interval", 0.05, 5.0, "s", help="How often shape files are checked for changes")
+    max_normal_arrows: int = opt(2000, "Max normal arrows", 10, 100000, help="Normals overlay: at most this many")
+    procedural_meshes: str = opt("data/procedural_meshes", "Procedural mesh library",
+                                 help="Folder of saved shape files; relative to the project folder")
+
+
 SECTIONS = {cls.NAME: cls for cls in (CameraConfig, LightingConfig, RenderConfig, HighlightConfig, PickingConfig,
-                                      UIConfig, KeysConfig, SculptorConfig)}
+                                      UIConfig, KeysConfig, SculptorConfig, StudioConfig)}
 
 
 class RC:

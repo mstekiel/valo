@@ -26,10 +26,10 @@ def viewer():
 
 @pytest.fixture
 def sculptor(viewer, tmp_path, monkeypatch):
-    from valo import library
+    from valo import rc
     from valo.tools.sculptor import build
 
-    monkeypatch.setattr(library, "LIBRARY_DIR", tmp_path / "library")  # never write into the real library
+    monkeypatch.setattr(rc.studio, "procedural_meshes", str(tmp_path / "library"))  # never the real library
     path = tmp_path / "vase.py"
     shutil.copy(VASE, path)
     return build(viewer, path)

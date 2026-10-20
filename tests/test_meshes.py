@@ -195,9 +195,11 @@ def test_starter_sculpts_build_clean_meshes(path):
 
 
 def test_library_material_comes_from_the_saved_preset(tmp_path, monkeypatch):
+    from valo import rc
     from valo.meshes import library
 
-    monkeypatch.setattr(library, "LIBRARY_DIR", tmp_path)
+    assert library.directory() == library.PROJECT_DIR / "data" / "procedural_meshes"  # the default
+    monkeypatch.setattr(rc.studio, "procedural_meshes", str(tmp_path))
     (tmp_path / "blob.py").write_text(SCULPT.replace('RANGES = {"height": (0.1, 4.0)}',
                                                      'MATERIAL = {"shading": "toon", "bands": 5.0}'), encoding="utf-8")
     (tmp_path / "plain.py").write_text(SCULPT, encoding="utf-8")
@@ -242,3 +244,4 @@ def test_transform_matrix_is_scale_then_rotate_then_translate():
     assert np.allclose(m @ [1, 0, 0, 1], [1, 4, 3, 1])  # x scaled to 2, turned onto +y, moved
     t = {"translate": [1, 2, 3], "rotate_deg": [10, 20, 30], "scale": [1, 2, 3]}
     assert np.allclose(from_dict(t), transform_matrix(t["translate"], t["rotate_deg"], t["scale"]))
+

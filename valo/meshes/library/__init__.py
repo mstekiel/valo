@@ -1,6 +1,7 @@
-"""valo's mesh library: sculpt files saved by MeshSculptor (``uv run valo-sculpt <file.py>``; this folder is valo/meshes/library).
+"""valo's library of procedural meshes: shape files saved by the studio, in ``rc.studio.procedural_meshes``
+(default ``data/procedural_meshes/`` in the project folder; a relative path is resolved against that folder).
 
-Every ``*.py`` file in this folder is an entry, named after the file::
+Every ``*.py`` file there is an entry, named after the file::
 
     from valo import library
     library.names()                          # ["vase", ...]
@@ -12,21 +13,27 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from ...config import rc
 from ...materials import Material
 from ..data import MeshData
 from ..sculpt import Sculpt
 
-LIBRARY_DIR = Path(__file__).parent
+PROJECT_DIR = Path(__file__).resolve().parents[3]  # the folder holding the valo package
+
+
+def directory() -> Path:
+    """The library folder: ``rc.studio.procedural_meshes``, relative paths resolved against the project folder."""
+    return PROJECT_DIR / Path(rc.studio.procedural_meshes).expanduser()
 
 
 def names() -> list[str]:
     """Names of all saved library meshes, sorted."""
-    return sorted(p.stem for p in LIBRARY_DIR.glob("*.py") if not p.name.startswith("_"))
+    return sorted(p.stem for p in directory().glob("*.py") if not p.name.startswith("_"))
 
 
 def path(name: str) -> Path:
     """File path of library entry ``name`` (it may not exist yet)."""
-    return LIBRARY_DIR / f"{name}.py"
+    return directory() / f"{name}.py"
 
 
 def load(name: str) -> Sculpt:

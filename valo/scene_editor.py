@@ -86,11 +86,17 @@ class SceneEditor(Editor):
 
     @contextmanager
     def one_step(self, label: str):
-        """Record every action inside the ``with`` block as one undo step called ``label``."""
+        """Record every action inside the ``with`` block as one undo step called ``label``; if the block raises,
+        the actions it already did are undone and the error passes on."""
         stack = self.undo_stack
         start = len(stack.done)
         try:
             yield
+        except Exception:
+            while len(stack.done) > start:
+                stack.undo()
+            stack.undone.clear()
+            raise
         finally:
             steps = stack.done[start:]
             del stack.done[start:]

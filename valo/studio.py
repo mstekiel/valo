@@ -20,6 +20,7 @@ Domain studios (spinw_studio, ...) subclass ``StudioEditor``.
 from __future__ import annotations
 
 import argparse
+import traceback
 from pathlib import Path
 
 import numpy as np
@@ -32,7 +33,7 @@ from .geometry import decompose, euler_xyz, instance_matrices
 from .meshes import library
 from .meshes.sculpt import IDENTITY, transform_matrix
 from .scene import MeshObject, Scene, Shape, Transform
-from .scene_editor import SceneEditor
+from .scene_editor import SceneEditor, shape_error
 from .ui_style import ICON, mono_font
 
 ERROR_COLOR = imgui.ImVec4(1.0, 0.45, 0.4, 1.0)
@@ -83,6 +84,7 @@ class StudioEditor(SceneEditor):
         self._code_mtime = 0.0
         self._dialog: tuple[str, str] | None = None  # ("new" | "open" | "save", text being typed)
         self._browsing = None  # the open file dialog, polled each frame until you pick a file or cancel
+        self._pending: tuple[Path, str] | None = None  # (file, error): opened but its object couldn't be made yet
         self._confirm_overwrite = False
         self.show_normals, self.normal_length = False, 0.08  # the normals overlay (view state, not undoable)
         self.normals = scene.renderer.instances(meshes.arrow(), scene.renderer.material(
@@ -116,6 +118,8 @@ class StudioEditor(SceneEditor):
     @property
     def code_error(self) -> str | None:
         """The error of the last reload of the Code window's file, if any."""
+        if self._pending is not None and _same(self._pending[0], self.code_path):
+            return self._pending[1]
         return next((self.errors[o.name] for o in self.users(self.code_path) if o.name in self.errors), None)
 
     # -- actions with undo
@@ -133,9 +137,12 @@ class StudioEditor(SceneEditor):
         if self.code_path is None or not self.dirty:
             return
         path, old, new = self.code_path, self.saved_code, self.code
-        self._write_and_reload(path, new)
-        self._push(f"Save {path.name}", lambda: self._write_and_reload(path, old),
-                   lambda: self._write_and_reload(path, new))
+        with self.one_step(f"Save {path.name}"):
+            self._write_and_reload(path, new)
+            self._push(f"Save {path.name}", lambda: self._write_and_reload(path, old),
+                       lambda: self._write_and_reload(path, new))
+            if self._pending is not None and _same(self._pending[0], path) and not self.users(path):
+                self._try_add(path)  # opened while broken: the object appears once the file builds
         self.status = f"saved {path.name}" + (" (with errors)" if self.code_error else "")
 
     def add_shape(self, source, parent=None, material: str | None = None) -> MeshObject:
@@ -148,10 +155,26 @@ class StudioEditor(SceneEditor):
                 material = self.new_material(shape.name, preset.pop("shading", "pbr"), **preset).name
             return super().add_shape(source, parent, material)
 
-    def open_shape(self, path) -> MeshObject:
-        """Add an object built from shape file ``path`` and show the file in the Code window; returns it."""
-        obj = self.add_shape(Path(path))
+    def _try_add(self, path: Path) -> MeshObject | None:
+        try:
+            obj = self.add_shape(path)
+        except Exception:
+            self._pending = (path, shape_error(traceback.format_exc(), path))
+            return None
+        self._pending = None
+        return obj
+
+    def open_shape(self, path) -> MeshObject | None:
+        """Add an object built from shape file ``path`` and show the file in the Code window; returns the object.
+        A file that fails to load or build still opens, with its error under the code and no object (returns None):
+        fix it there, and the object appears on the first save that builds."""
+        path = Path(path)
+        if not path.is_file():
+            raise FileNotFoundError(f"{path} is not a file")
+        obj = self._try_add(path)
         self.open_code(path)
+        if obj is None:
+            self.status = f"! {path.name} doesn't build yet: fix the code and save"
         return obj
 
     def new_shape(self, name: str) -> MeshObject:

@@ -246,3 +246,32 @@ def test_without_a_system_dialog_a_path_field_opens(studio, monkeypatch):
     monkeypatch.setattr(studio, "file_dialog", unavailable)
     studio.browse_shape()
     assert studio._dialog == ("open", "")
+
+
+BROKEN = """
+MATERIAL = {"shading": "lambert", "base_color": [0.2, 0.4, 0.9]}
+
+
+def mesh(size: float = 1.0):
+    from valo import meshes
+
+    return meshes.cube(points)
+"""
+
+
+def test_a_broken_shape_file_opens_for_fixing(viewer, studio, tmp_path):
+    path = tmp_path / "broken.py"
+    path.write_text(BROKEN, encoding="utf-8")
+    image = viewer.snapshot()
+    assert studio.open_shape(path) is None
+    assert studio.scene.objects() == [] and studio.scene.materials == {} and not studio.undo_stack.done
+    assert studio.code_path == path and "NameError" in studio.code_error and "broken.py" in studio.code_error
+    assert np.array_equal(viewer.snapshot(), image) and viewer.gui_error is None  # the studio keeps drawing
+    studio.set_code(studio.code.replace("cube(points)", "cube(size)"))
+    studio.save_code()
+    assert [o.name for o in studio.scene.objects()] == ["Broken"] and studio.code_error is None
+    assert len(studio.undo_stack.done) == 1  # the save and the object it made: one step
+    studio.undo_stack.undo()
+    assert studio.scene.objects() == [] and "cube(points)" in path.read_text(encoding="utf-8")
+    with pytest.raises(FileNotFoundError):
+        studio.open_shape(tmp_path / "nothing.py")

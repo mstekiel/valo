@@ -1,4 +1,4 @@
-"""A seashell: a parametric surface P(u, v). Open it with: uv run valo-sculpt examples/sculpts/shell.py"""
+"""A seashell: a parametric surface P(u, v). Open it with: uv run valo-studio examples/sculpts/shell.py"""
 
 import numpy as np
 

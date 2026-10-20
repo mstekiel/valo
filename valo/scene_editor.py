@@ -10,9 +10,12 @@ parameters, transform, material and mesh diagnostics) and **Materials** (the lib
 selects the object under the pointer.
 
 The actions (``add``, ``add_shape``, ``delete``, ``duplicate``, ``rename``, ``reparent``, ``set_visible``,
-``set_transform``, ``set_shape_param``, ``set_object_material``, ``set_procedural_param``, ``new_material``,
-``duplicate_material``, ``delete_material``) are what the windows call, so scripts and tests can do the same.
-Selection (``select``) is not an edit and is not recorded.
+``set_transform``, ``set_shape``, ``set_shape_param``, ``set_object_material``, ``set_procedural_param``,
+``new_material``, ``duplicate_material``, ``delete_material``) are what the windows call, so scripts
+and tests can do the same.
+Selection (``select``) is not an edit and is not recorded. Locked nodes (an app's fixed structure) can be hidden and
+edited but not deleted, renamed, duplicated or moved, and nothing can be added inside a procedural group (its
+builder owns those children).
 """
 
 from __future__ import annotations
@@ -84,6 +87,22 @@ class SceneEditor(Editor):
                 self.viewer.selection = None  # a 3D pick of something else no longer applies
 
     # -- the tree
+    @staticmethod
+    def _check_free(node: Node, action: str) -> None:
+        locked = next((n for n in node.walk() if n.locked), None)
+        if locked is not None:
+            raise ValueError(f"{locked.name} is part of a fixed structure: it can be hidden, not {action}")
+
+    @staticmethod
+    def _check_can_hold(parent: Node) -> None:
+        if not isinstance(parent, Group):
+            raise TypeError(f"{parent!r} can't have children: only groups can")
+        p = parent
+        while p is not None:
+            if isinstance(p, ProceduralGroup):
+                raise ValueError(f"{parent.name} is built by {p.name}'s builder: nothing can be added inside it")
+            p = p.parent
+
     def _insert(self, node: Node, parent: Group, index: int) -> None:
         self.scene.add(node, parent, index)
 
@@ -106,6 +125,7 @@ class SceneEditor(Editor):
     def add(self, node: Node, parent: Group | None = None) -> Node:
         """Add ``node`` (with its subtree) at the end of ``parent`` (default: the root), select it; returns it."""
         parent = parent or self.scene.root
+        self._check_can_hold(parent)
         self.scene.add(node, parent)
         index = parent.children.index(node)
         self._push(f"Add {node.name}", lambda: self._take(node), lambda: self._insert(node, parent, index))
@@ -114,11 +134,13 @@ class SceneEditor(Editor):
 
     def delete(self, node: Node) -> None:
         """Remove ``node`` and everything below it."""
+        self._check_free(node, "deleted")
         parent, index = self._take(node)
         self._push(f"Delete {node.name}", lambda: self._insert(node, parent, index), lambda: self._take(node))
 
     def duplicate(self, node: Node) -> Node:
         """Add a copy of ``node`` (and its subtree) right after it, select it; returns the copy."""
+        self._check_free(node, "duplicated")
         copy = node_from_settings(node.settings())
         parent = node.parent
         index = parent.children.index(node) + 1
@@ -129,6 +151,8 @@ class SceneEditor(Editor):
 
     def rename(self, node: Node, name: str) -> None:
         """Rename ``node`` (made unique within the scene)."""
+        if node.locked:
+            self._check_free(node, "renamed")
         old = node.name
         new = unique_name(name, {n.name for n in self.scene.walk() if n is not node})
         if new == old:
@@ -147,8 +171,8 @@ class SceneEditor(Editor):
     def reparent(self, node: Node, parent: Group, index: int | None = None) -> None:
         """Move ``node`` under group ``parent`` (at ``index``, default last); its own transform is kept, so it
         moves with its new parent."""
-        if not isinstance(parent, Group):
-            raise TypeError(f"{parent!r} can't have children: only groups can")
+        self._check_free(node, "moved")
+        self._check_can_hold(parent)
         if parent in node.walk():
             raise ValueError(f"can't move {node.name} into itself or its own subtree")
         old_parent, old_index = node.parent, node.parent.children.index(node)
@@ -197,6 +221,20 @@ class SceneEditor(Editor):
         apply(new)()
         self._push(f"{node.name}: {field}", apply(old), apply(new), merge_key=(id(node), field))
 
+    def set_shape(self, obj: MeshObject, source) -> None:
+        """Make ``obj`` from another shape ``source`` (callable, ``"module:function"`` or sculpt file), with its
+        default parameters; instances, material and transform stay."""
+        old, new = obj.shape, Shape(source)
+
+        def apply(shape):
+            def f():
+                obj.shape = shape
+                obj.rebuild_mesh()
+            return f
+
+        apply(new)()
+        self._push(f"{obj.name}: shape {new.name}", apply(old), apply(new))
+
     def set_shape_param(self, obj: MeshObject, key: str, value) -> None:
         """Set shape parameter ``key`` of ``obj`` and rebuild its mesh."""
         if key not in obj.shape.params:
@@ -225,7 +263,9 @@ class SceneEditor(Editor):
         self._push(f"{obj.name}: material {name}", lambda: obj.set_material(old), lambda: obj.set_material(name))
 
     def set_procedural_param(self, group: ProceduralGroup, key: str, value) -> None:
-        """Set builder parameter ``key`` of ``group`` and rebuild its children."""
+        """Set builder parameter ``key`` of ``group`` and rebuild its children. If the builder fails, the parameter
+        and the children stay as they were, the error is kept in ``errors`` (shown in the Object window) and nothing
+        is recorded."""
         if key not in group.params:
             raise KeyError(f"{group.name} has no parameter {key!r}")
         old = group.params[key]
@@ -240,7 +280,13 @@ class SceneEditor(Editor):
                     self.select(group)  # the selected child was rebuilt away
             return f
 
-        apply(value)()
+        try:
+            apply(value)()
+        except Exception:
+            group.params[key] = old
+            self.errors[group.name] = traceback.format_exc(limit=-3)
+            return
+        self.errors.pop(group.name, None)
         self._push(f"{group.name}: {key}", apply(old), apply(value), merge_key=(id(group), key))
 
     # -- the material library
@@ -318,7 +364,12 @@ class SceneEditor(Editor):
     def _insert_parent(self) -> Group:
         """Where "+ Add" puts a node: into the selected group, next to the selected object, or at the root."""
         sel = self.selected
-        return sel if isinstance(sel, Group) else (sel.parent if sel is not None else self.scene.root)
+        parent = sel if isinstance(sel, Group) else (sel.parent if sel is not None else self.scene.root)
+        try:
+            self._check_can_hold(parent)
+        except (TypeError, ValueError):
+            return self.scene.root
+        return parent
 
     def _add_menu(self) -> None:
         if imgui.begin_menu(f"{ICON.CUBE} Shape"):
@@ -374,11 +425,11 @@ class SceneEditor(Editor):
         if imgui.begin_popup_context_item("row"):
             self._row_menu(node)
             imgui.end_popup()
-        if imgui.begin_drag_drop_source():
+        if not any(n.locked for n in node.walk()) and imgui.begin_drag_drop_source():
             imgui.set_drag_drop_payload_py_id(DRAG_TYPE, id(node))
             imgui.text(node.name)
             imgui.end_drag_drop_source()
-        if isinstance(node, Group) and imgui.begin_drag_drop_target():
+        if self._holds(node) and imgui.begin_drag_drop_target():
             payload = imgui.accept_drag_drop_payload_py_id(DRAG_TYPE)
             if payload is not None:
                 dragged = next((n for n in self.scene.walk() if id(n) == payload.data_id), None)
@@ -396,7 +447,17 @@ class SceneEditor(Editor):
                 self._tree_row(child)
             imgui.tree_pop()
 
+    def _holds(self, node: Node) -> bool:
+        try:
+            self._check_can_hold(node)
+        except (TypeError, ValueError):
+            return False
+        return True
+
     def _row_menu(self, node: Node) -> None:
+        if any(n.locked for n in node.walk()):
+            imgui.text_disabled(f"{ICON.LOCK} part of a fixed structure: hide it with the eye")
+            return
         if imgui.menu_item_simple(f"{ICON.PEN} Rename"):
             self._renaming = (node, node.name)
         if imgui.menu_item_simple(f"{ICON.COPY} Duplicate"):
@@ -449,9 +510,10 @@ class SceneEditor(Editor):
             imgui.push_style_color(imgui.Col_.text, imgui.ImVec4(1.0, 0.45, 0.4, 1.0))
             imgui.text_wrapped(self.errors[node.name])
             imgui.pop_style_color()
-            imgui.text_disabled("showing the last good mesh")
+            imgui.text_disabled("showing the last good result")
         if isinstance(node, MeshObject):
-            imgui.separator_text(f"Shape: {node.shape.name}")
+            imgui.separator_text("Shape")
+            self._shape_combo(node)
             for p in node.shape.specs:
                 changed, v = self._param_widget(p, node.shape.params[p.name])
                 if changed:
@@ -476,6 +538,16 @@ class SceneEditor(Editor):
             imgui.separator_text("Mesh")
             for line in self.diagnostics(node):
                 imgui.text_disabled(line)
+
+    def _shape_combo(self, obj: MeshObject) -> None:
+        if imgui.begin_combo("Shape", obj.shape.name):
+            for name, func in meshes.STANDARD.items():
+                if imgui.selectable(name, func is obj.shape.func)[0]:
+                    self.set_shape(obj, func)
+            for name in library.names():
+                if imgui.selectable(f"{ICON.BOOK} {name}", obj.shape.name == name and obj.shape.sculpt)[0]:
+                    self.set_shape(obj, library.path(name))
+            imgui.end_combo()
 
     def _transform_section(self, node: Node) -> None:
         imgui.separator_text("Transform")

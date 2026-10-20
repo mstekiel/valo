@@ -269,6 +269,7 @@ SCENE_ACTIONS = {  # name → (action(editor, scene), changes the image; None: m
     "reparent": (lambda ed, s: ed.reparent(s.find("B"), s.find("G")), True),  # moves up with G
     "visibility": (lambda ed, s: ed.set_visible(s.find("G"), False), True),
     "transform": (lambda ed, s: ed.set_transform(s.find("B"), "rotate_deg", (0, 0, 45)), True),
+    "shape": (lambda ed, s: ed.set_shape(s.find("B"), meshes.icosphere), True),
     "shape parameter": (lambda ed, s: ed.set_shape_param(s.find("A"), "size", 1.2), True),
     "object material": (lambda ed, s: ed.set_object_material(s.find("B"), "Gold"), True),
     "procedural parameter": (lambda ed, s: ed.set_procedural_param(s.find("Ring"), "n", 5), True),
@@ -380,3 +381,38 @@ def test_shapes_from_sculpt_files_reload_when_the_file_changes(viewer, tmp_path)
     change(SCULPT, 30)
     assert "Box" not in editor.errors and np.isclose(width(), 0.8) and box.instances.mesh is not good
     assert len(editor.undo_stack.done) == 2  # add and set_shape_param; reloads are not edits
+
+
+def picky_ring(group, n: int = 2):
+    """A builder that fails above 3 beads."""
+    if n > 3:
+        raise RuntimeError("at most 3 beads")
+    ring(group, n)
+
+
+def test_locked_nodes_stay_and_a_failing_builder_changes_nothing(viewer):
+    from valo import Group, ProceduralGroup
+
+    scene, editor = edited_scene(viewer)
+    pts = scene.add(ProceduralGroup("Pts", labelled_points, context={"Fe": [0, 1]}, locked=True))
+    fe = scene.find("Fe")
+    for action, match in ((lambda: editor.delete(fe), "not deleted"), (lambda: editor.delete(pts), "not deleted"),
+                          (lambda: editor.rename(fe, "X"), "not renamed"),
+                          (lambda: editor.duplicate(scene.find("Points")), "not duplicated"),
+                          (lambda: editor.reparent(fe, scene.find("G")), "not moved"),
+                          (lambda: editor.add(Group("In"), scene.find("Points")), "nothing can be added"),
+                          (lambda: editor.reparent(scene.find("B"), pts), "nothing can be added")):
+        with pytest.raises(ValueError, match=match):
+            action()
+    editor.set_visible(fe, False)  # hiding is fine
+    editor.set_shape_param(fe, "r", 0.3)  # and so is editing
+    assert len(editor.undo_stack.done) == 2
+
+    g = scene.add(ProceduralGroup("Picky", picky_ring))
+    beads = list(g.children)
+    image = viewer.snapshot()
+    editor.set_procedural_param(g, "n", 5)
+    assert g.params["n"] == 2 and g.children == beads and "at most 3 beads" in editor.errors["Picky"]
+    assert np.array_equal(viewer.snapshot(), image) and len(editor.undo_stack.done) == 2
+    editor.set_procedural_param(g, "n", 3)
+    assert len(g.children) == 3 and "Picky" not in editor.errors

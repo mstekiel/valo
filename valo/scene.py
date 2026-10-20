@@ -270,10 +270,17 @@ class ProceduralGroup(Group):
 
     def rebuild(self) -> None:
         """Let the builder make the children again from the current parameters, keeping the ones it remakes."""
-        old = dict(self._paths(self))
-        for child in list(self.children):
+        old, before = dict(self._paths(self)), list(self.children)
+        for child in before:
             self.scene.remove(child)
-        self.func(self, **self.params)
+        try:
+            self.func(self, **self.params)
+        except Exception:  # put the old children back, so a failed rebuild changes nothing
+            for child in list(self.children):
+                self.scene.remove(child)
+            for child in before:
+                self.scene.add(child, self)
+            raise
         self._reconcile(self, (), old)
         self.scene.refresh(self)
 

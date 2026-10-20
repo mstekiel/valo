@@ -469,7 +469,7 @@ class Editor:
         viewer = self.viewer
         out = {"camera": viewer.camera.settings(), "lighting": viewer.lighting.settings(),
                "image": image_settings(None, **self.render_options)}
-        if hasattr(viewer.scene, "settings"):
+        if self.can_export():
             out = {"scene": viewer.scene.settings(), **out}
         return plain(out)
 

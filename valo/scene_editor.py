@@ -322,6 +322,10 @@ class SceneEditor(Editor):
         self._drop(m)
         self._push(f"Delete material {name}", lambda: self._put(m, index), lambda: self._drop(m))
 
+    def can_export(self) -> bool:
+        """True unless a procedural group builds from a context object (then the scene can't be saved)."""
+        return super().can_export() and not any(getattr(n, "context", None) is not None for n in self.scene.walk())
+
     # -- windows
     def windows(self):
         """Scene (the tree), Object (the selection) and Materials (the library)."""

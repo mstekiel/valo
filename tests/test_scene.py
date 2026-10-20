@@ -416,3 +416,12 @@ def test_locked_nodes_stay_and_a_failing_builder_changes_nothing(viewer):
     assert np.array_equal(viewer.snapshot(), image) and len(editor.undo_stack.done) == 2
     editor.set_procedural_param(g, "n", 3)
     assert len(g.children) == 3 and "Picky" not in editor.errors
+
+
+def test_a_scene_with_a_context_group_renders_but_does_not_export(viewer):
+    from valo import ProceduralGroup
+
+    scene, editor = edited_scene(viewer)
+    assert editor.can_export()
+    scene.add(ProceduralGroup("Pts", labelled_points, context={"Fe": [0, 1]}))
+    assert not editor.can_export() and "scene" not in editor.render_settings()

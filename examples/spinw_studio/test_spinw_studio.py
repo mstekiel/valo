@@ -261,6 +261,21 @@ def test_plot_options_round_trip_and_export(studio, tmp_path):
     assert namespace["PLOT_OPTIONS"] == opts and not editor.can_export()
 
 
+def test_the_file_menu_opens_without_errors(studio):
+    from imgui_bundle import imgui
+
+    viewer, _, editor = studio
+    viewer.snapshot()  # lays out the dock: the scene rect is known
+    x, y, w, h = editor.scene_rect
+    viewer.gui_error, opened = None, 0
+    for mx in range(4, 240, 6):  # along the menu bar: File (with Export plot options), Edit, View
+        viewer.ui_click(mx, 10)
+        imgui.set_current_context(viewer.imgui.imgui_context)
+        opened += imgui.is_popup_open("", imgui.PopupFlags_.any_popup_id)
+        viewer.ui_click(x + w / 2, y + h / 2)
+    assert opened >= 3 and viewer.gui_error is None
+
+
 def test_plot_structure_blocks_then_returns_the_final_options(viewer, monkeypatch):
     from spinw_studio import api
 

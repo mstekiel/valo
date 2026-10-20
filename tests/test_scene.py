@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from valo import meshes
+from valo import Transform, meshes
 from valo.geometry import transform_matrix
 
 pytestmark = pytest.mark.gpu
@@ -124,7 +124,7 @@ def test_procedural_group_builds_children_from_its_parameters(scene):
 
 
 SCULPT = '''
-from valo import meshes
+from valo import Transform, meshes
 
 TRANSFORM = {"translate": [0.0, 0.0, 1.0]}
 
@@ -169,3 +169,90 @@ def test_unknown_kinds_and_unimportable_functions_are_reported():
         reference(lambda: None)
     with pytest.raises(ValueError, match="unknown node kind"):
         node_from_settings({"kind": "light", "name": "L"})
+
+
+# -- SceneEditor: every action changes the scene, undoes exactly (state and image) and redoes
+
+@pytest.fixture(scope="module")
+def viewer():
+    pytest.importorskip("wgpu")
+    from rendercanvas.offscreen import RenderCanvas
+
+    from valo import Viewer
+
+    try:
+        return Viewer(RenderCanvas(size=(480, 320), pixel_ratio=1))
+    except Exception as exc:  # no adapter on this machine
+        pytest.skip(f"no GPU adapter: {exc}")
+
+
+def edited_scene(viewer):
+    """A scene with a group, plain and instanced objects, a procedural ring and an unused material, in an editor."""
+    from valo import Group, InstancedObject, OrbitCamera, ProceduralGroup, Scene, SceneEditor, Shape, Transform
+
+    scene = Scene()
+    scene.material("Matte", "lambert", base_color=(0.6, 0.6, 0.6))
+    scene.material("Gold", "pbr", base_color=(1.0, 0.71, 0.29), metallic=1.0)
+    g = scene.add(Group("G", transform=Transform((0, 0, 1))))
+    scene.add(cube("A", 0.6), parent=g)
+    scene.add(cube("B", 0.5, transform=Transform((-1.5, 0, 0))))
+    scene.add(InstancedObject("Row", Shape(meshes.sphere, {"r": 0.2}), "Matte",
+                              np.stack([transform_matrix((x, 1.5, 0)) for x in (-1, 0, 1)])))
+    scene.add(ProceduralGroup("Ring", ring, {"n": 3, "radius": 2.5}))
+    editor = SceneEditor(scene)
+    viewer.show(scene, editor)
+    viewer.camera = OrbitCamera(distance=9.0, elevation=30.0)
+    return scene, editor
+
+
+SCENE_ACTIONS = {  # name → (action(editor, scene), changes the image; None: may or may not)
+    "add": (lambda ed, s: ed.add(cube("C", transform=Transform((1.5, 0, 0)))), True),
+    "delete": (lambda ed, s: ed.delete(s.find("A")), True),
+    "duplicate": (lambda ed, s: ed.duplicate(s.find("B")), None),  # the copy sits on the original
+    "rename": (lambda ed, s: ed.rename(s.find("B"), "Box"), False),
+    "reparent": (lambda ed, s: ed.reparent(s.find("B"), s.find("G")), True),  # moves up with G
+    "visibility": (lambda ed, s: ed.set_visible(s.find("G"), False), True),
+    "transform": (lambda ed, s: ed.set_transform(s.find("B"), "rotate_deg", (0, 0, 45)), True),
+    "shape parameter": (lambda ed, s: ed.set_shape_param(s.find("A"), "size", 1.2), True),
+    "object material": (lambda ed, s: ed.set_object_material(s.find("B"), "Gold"), True),
+    "procedural parameter": (lambda ed, s: ed.set_procedural_param(s.find("Ring"), "n", 5), True),
+    "new material": (lambda ed, s: ed.new_material("Glass", "blinn_phong"), False),
+    "duplicate material": (lambda ed, s: ed.duplicate_material("Gold"), False),
+    "delete material": (lambda ed, s: ed.delete_material("Gold"), False),
+    "material parameter": (lambda ed, s: ed.set_param(s.materials["Matte"], "base_color", (0, 0, 1)), True),
+}
+
+
+@pytest.mark.parametrize("name", list(SCENE_ACTIONS))
+def test_scene_editor_action_undoes_exactly(viewer, name):
+    action, visible = SCENE_ACTIONS[name]
+    scene, editor = edited_scene(viewer)
+    before, image = scene.settings(), viewer.snapshot()
+    action(editor, scene)
+    after = scene.settings()
+    assert after != before
+    if visible is not None:
+        assert (np.abs(viewer.snapshot().astype(int) - image).max() > 10) == visible
+    assert len(editor.undo_stack.done) == 1
+    editor.undo_stack.undo()
+    assert scene.settings() == before
+    assert np.array_equal(viewer.snapshot(), image)
+    editor.undo_stack.redo()
+    assert scene.settings() == after
+
+
+def test_scene_editor_refuses_impossible_edits_and_selection_highlights(viewer):
+    scene, editor = edited_scene(viewer)
+    with pytest.raises(ValueError, match="is used by A, B"):
+        editor.delete_material("Matte")
+    with pytest.raises(ValueError, match="own subtree"):
+        editor.reparent(scene.find("G"), scene.find("G"))
+    with pytest.raises(TypeError, match="only groups"):
+        editor.reparent(scene.find("G"), scene.find("B"))
+    with pytest.raises(KeyError, match="no parameter"):
+        editor.set_shape_param(scene.find("A"), "radius", 1.0)
+    assert not editor.undo_stack.done
+    editor.select(scene.find("Ring"))
+    assert {i.owner.name for i in viewer.highlighted} == {"Bead", "Bead 2", "Bead 3"}
+    editor.delete(scene.find("Ring"))
+    assert editor.selected is None and viewer.highlighted == []

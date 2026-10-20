@@ -27,12 +27,13 @@ from .meshes import MeshData, Sculpt, library
 from .offline import plain, py_literal, render, save_png
 from .render import Instances, OrbitCamera, Renderer, Spheres, renderer
 from .scene import Group, InstancedObject, MeshObject, ProceduralGroup, Scene, Shape, Transform
+from .scene_editor import SceneEditor
 from .ui import Editor
 from .ui_style import ICON, mono_font
 from .undo import Command, UndoStack
 
 __all__ = ["ICON", "SCHEMA", "SHADINGS", "Command", "Editor", "Group", "InstancedObject", "Instances", "Lighting",
-           "Material", "MeshData", "MeshObject", "OrbitCamera", "ProceduralGroup", "Renderer", "Scene", "Sculpt",
-           "Shape", "Spheres", "Transform", "UndoStack", "Viewer", "instance_matrices", "library", "linear_to_srgb",
-           "meshes", "mono_font", "plain", "py_literal", "rc", "rc_context", "render", "renderer", "save_png",
-           "srgb_to_linear"]
+           "Material", "MeshData", "MeshObject", "OrbitCamera", "ProceduralGroup", "Renderer", "Scene", "SceneEditor",
+           "Sculpt", "Shape", "Spheres", "Transform", "UndoStack", "Viewer", "instance_matrices", "library",
+           "linear_to_srgb", "meshes", "mono_font", "plain", "py_literal", "rc", "rc_context", "render", "renderer",
+           "save_png", "srgb_to_linear"]

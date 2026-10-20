@@ -112,3 +112,15 @@ the same picture pixel for pixel (a test checks this).
 - **Compass:** it's drawn by ImGui, so it appears in the studio but not in `render()` images.
 - **Tests:** `uv run pytest` runs spinw_studio's tests on a hand-made LFO-like `SystemView`, without spinwaves.
   The adapter itself is tested through its contract checks.
+
+
+# Issues
+
+For future development
+
+### spinw studio
+- model.AtomSite reimplements spinwaves.Atom. Looks like some wrong architectural choice overall. I want a simpler, lower level behaviour, where the adapter doesn
+
+
+### valo
+

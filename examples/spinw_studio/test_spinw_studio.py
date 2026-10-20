@@ -199,3 +199,7 @@ def test_plot_structure_blocks_then_returns_the_final_options(viewer, monkeypatc
     opts = api.plot_structure(lfo_like(), {"atom_colors": {"Fe": "Orange"}})
     assert calls == ["SpinW studio: LFO-like"] and opts["atom_radii"] == {"Fe": 0.9}
     monkeypatch.undo()
+
+
+if __name__ == '__main__':
+    viewer()

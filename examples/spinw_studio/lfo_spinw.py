@@ -20,7 +20,12 @@ HOME_PATH = Path(__file__).parent
 
 def load_system(parameters: Parameters, show_struct: bool=False, silent=True) -> SpinW:
     Fz = parameters['Fz'].value
-    atoms = [Atom(label='Fe', r=(0,   0.5, 0),   m=(-1,0,Fz), s=2.5)]
+    atoms = [
+        Atom(label='Lu', r=(0.0221, 0.9284, 0.75)),
+        Atom(label='Fe', r=(0,   0.5, 0),   m=(-1,0,Fz), s=2.5),
+        Atom(label='O1',  r=(0.1296, 0.4475, 0.25)),
+        Atom(label='O2',  r=(0.188, 0.1915, 0.5659))
+        ]
     Pbnm = MSG.from_xyz_strings(generators=[
         'x+1/2,-y+1/2,-z, -1',
         '-x,-y,-z, +1',

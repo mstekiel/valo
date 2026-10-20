@@ -27,7 +27,8 @@ def lattice_matrix(sw) -> np.ndarray:
     the orthorhombic LFO cell (a, b, c = 5.3, 5.6, 7.5 Å, all angles 90°): ``np.diag([5.3, 5.6, 7.5])``.
     Use the same Cartesian convention spinwaves uses for moments and couplings.
     """
-    raise NotImplementedError("fill in from spinwaves: lattice_matrix(sw) -> (3, 3) A, columns a, b, c in xyz Å")
+    return sw.crystal.A
+    # raise NotImplementedError("fill in from spinwaves: lattice_matrix(sw) -> (3, 3) A, columns a, b, c in xyz Å")
 
 
 def atom_positions_uvw(sw) -> np.ndarray:
@@ -37,7 +38,8 @@ def atom_positions_uvw(sw) -> np.ndarray:
     indices used by ``Coupling(id1, id2)``. Example for the four Fe of LFO (Pbnm, 4b):
     ``np.array([[0, 0.5, 0], [0.5, 0, 0], [0, 0.5, 0.5], [0.5, 0, 0.5]])`` (order as spinwaves generates them).
     """
-    raise NotImplementedError("fill in from spinwaves: atom_positions_uvw(sw) -> (N, 3) uvw in [0, 1)")
+    return [atom.r for atom in sw.crystal.atoms_all]
+    # raise NotImplementedError("fill in from spinwaves: atom_positions_uvw(sw) -> (N, 3) uvw in [0, 1)")
 
 
 def atom_moments_xyz(sw) -> np.ndarray:
@@ -47,12 +49,14 @@ def atom_moments_xyz(sw) -> np.ndarray:
     Info window; a zero row means "no arrow" (non-magnetic atom). Example (G-type along x): ``[[-1, 0, 0],
     [1, 0, 0], [1, 0, 0], [-1, 0, 0]]``.
     """
-    raise NotImplementedError("fill in from spinwaves: atom_moments_xyz(sw) -> (N, 3) moments in xyz")
+    return [atom.m for atom in sw.crystal.atoms_all]
+    # raise NotImplementedError("fill in from spinwaves: atom_moments_xyz(sw) -> (N, 3) moments in xyz")
 
 
 def atom_labels(sw) -> list[str]:
     """Label of each atom: list of N str, same order ("Fe", "O1", ...). Selects the material and the radius."""
-    raise NotImplementedError("fill in from spinwaves: atom_labels(sw) -> list of N labels")
+    return [atom.label for atom in sw.crystal.atoms_all]
+    # raise NotImplementedError("fill in from spinwaves: atom_labels(sw) -> list of N labels")
 
 
 # -- optional stubs: replace the defaults if spinwaves has the data ---------------------------------
@@ -60,7 +64,8 @@ def atom_labels(sw) -> list[str]:
 
 def atom_spins(sw) -> np.ndarray:
     """Spin length S of each atom: shape (N,), float64. Optional: zeros by default."""
-    return np.zeros(len(atom_labels(sw)))
+    return [atom.s for atom in sw.crystal.atoms_all]
+    # return np.zeros(len(atom_labels(sw)))
 
 
 def atom_extra(sw, i: int) -> dict[str, str]:

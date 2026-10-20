@@ -198,6 +198,9 @@ DEFAULTS = {
     "cell_radius": 0.03,  # Å, edge cylinder radius
     "cell_color": "Gray",
     "cell_material": {},  # full Material.to_dict() for the edges (overrides cell_color); written on export
+    "shapes": {},  # {structure object: {"func": "module:function" or sculpt file, "params": {...}}}: swapped meshes
+    "objects": [],  # valo node settings of the objects added in the studio
+    "object_materials": {},  # {name: Material.to_dict()}: the other materials of the scene's library
     "coupling_colors": {},  # {coupling label: colour}; kept for when couplings are drawn
     "camera": {},  # valo OrbitCamera.settings() keys
     "lighting": {},  # valo Lighting.settings() keys

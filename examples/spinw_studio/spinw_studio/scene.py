@@ -1,25 +1,53 @@
-"""The 3D scene of a SystemView in valo: atoms as instanced spheres, moments as arrows, the unit-cell edges.
+"""The 3D scene of a spinwaves system as a ``valo.Scene``: the structure is one locked procedural group.
 
-Reads only the model (``SystemView`` + plot_options); never spinwaves. Positions come from ``model.expand`` in
-Cartesian xyz (Å); one material per atom label, plus one each for the moment arrows and the cell edges.
+    Structure        ProceduralGroup(structure): lattice a, b, c (Å), alpha, beta, gamma (deg), uvw extent,
+    ├─ Atoms             moment_length (Å); its children are rebuilt when one changes, keeping your edits
+    │   └─ Fe, O1, …     one InstancedObject per label: Shape(sphere, r = radius), material named after the label
+    ├─ Moments
+    │   └─ Fe moments    arrows centred on the atoms (zero moments skipped), material "Moments"
+    └─ Cell              the 12 unit-cell edges: Shape(cylinder, r = edge radius), material "Unit cell"
+
+All of it is locked (hide it, edit it, but it can't be deleted); objects you add in the studio sit next to it.
+A lattice change goes through ``adapter.set_lattice`` for a SpinW object (changing it in place) or
+``model.with_lattice`` for a plain SystemView. Reads only the model and the adapter; never spinwaves directly.
 """
 
 from __future__ import annotations
 
 import numpy as np
 
-from valo import Material, Renderer, instance_matrices, linear_to_srgb, meshes, renderer, srgb_to_linear
+from valo import (
+    Group,
+    InstancedObject,
+    Material,
+    ProceduralGroup,
+    Renderer,
+    Scene,
+    Shape,
+    instance_matrices,
+    linear_to_srgb,
+    meshes,
+    node_from_settings,
+    srgb_to_linear,
+)
 
+from . import adapter
 from .model import (
     SystemView,
     cell_edges,
     default_color,
     default_radius,
     expand,
+    lattice_params,
     parse_color,
-    to_xyz,
     validate_options,
+    with_lattice,
 )
+
+STRUCTURE, LATTICE = "Structure", ("a", "b", "c", "alpha", "beta", "gamma")
+EXTENT = ("umin", "umax", "vmin", "vmax", "wmin", "wmax")
+OWN_MATERIALS = ("Moments", "Unit cell")  # besides one per label
+BASE_SHAPES = {"Atoms": meshes.sphere, "Moments": meshes.arrow, STRUCTURE: meshes.cylinder}  # by parent node name
 
 
 def _linear(color) -> tuple:
@@ -34,132 +62,140 @@ def _vec(v, digits: int = 3) -> str:
     return "(" + ", ".join(f"{float(c) + 0.0:.{digits}f}" for c in v) + ")"
 
 
-class SpinwScene:
-    """Everything drawn for one system; ``options()`` returns the current state as plot_options."""
+class StructureSource:
+    """Where the structure comes from (the procedural group's context): a SpinW object or a SystemView, the current
+    SystemView, and the starting looks the builder gives new children (radii, edge radius, what is shown)."""
 
-    def __init__(self, system: SystemView, options: dict | None = None, gpu: Renderer | None = None):
-        self.system, self.renderer = system, gpu or renderer()
-        opts = validate_options(options)
-        r = self.renderer
-        self.bounds = [list(b) for b in opts["boundaries"]]
-        self.library: list[Material] = []  # materials the atom labels can choose from
-        self.radii: dict[str, float] = {}
-        self.spheres, self.arrows = {}, {}
-        self.moment_material = self._material("Moments", opts["moment_material"], "pbr",
-                                              base_color=_linear(opts["moment_color"]), roughness=0.5)
-        self.cell_material = self._material("Unit cell", opts["cell_material"], "lambert",
-                                            base_color=_linear(opts["cell_color"]))
-        for i, label in enumerate(system.labels):
-            if label in opts["materials"]:
-                params = dict(opts["materials"][label])
-                m = r.material(label, params.pop("shading"), **params)
-            else:
-                color = opts["atom_colors"].get(label, default_color(label, i))
-                m = r.material(label, "pbr", base_color=_linear(color), roughness=0.4)
-            self.library.append(m)
-            self.radii[label] = float(opts["atom_radii"].get(label, default_radius(label)))
-            self.spheres[label] = r.spheres(m, label=label, info=lambda k, lb=label: self.atom_info(lb, k))
-            self.arrows[label] = r.instances(meshes.arrow(), self.moment_material, label=f"{label} moment",
-                                             info=lambda k, lb=label: self.moment_info(lb, k))
-        self.cell = r.instances(meshes.cylinder(), self.cell_material, label="unit cell")
-        self.show_moments, self.moment_length = opts["show_moments"], float(opts["moment_length"])
-        self.show_cell, self.cell_radius = opts["show_cell"], float(opts["cell_radius"])
-        self.passthrough = {k: opts[k] for k in ("coupling_colors", "camera", "lighting", "image")}
-        self._arrow_rows: dict[str, np.ndarray] = {}  # per label: arrow k → expanded row (zero moments skipped)
-        self.rebuild()
+    def __init__(self, sw_or_view, options: dict):
+        self.sw = None if isinstance(sw_or_view, SystemView) else sw_or_view
+        self.original = sw_or_view if self.sw is None else adapter.system_view(sw_or_view)
+        self.system = self.original
+        self.radii = {label: float(options["atom_radii"].get(label, default_radius(label)))
+                      for label in self.system.labels}
+        self.cell_radius = float(options["cell_radius"])
+        self.show_moments, self.show_cell = options["show_moments"], options["show_cell"]
 
-    def _material(self, name: str, full: dict, shading: str, **params) -> Material:
-        """``full`` (Material.to_dict()) when given, else a new material from ``shading`` and ``params``."""
-        if full:
-            params = dict(full)
-            shading = params.pop("shading")
-        return self.renderer.material(name, shading, **params)
+    def set_lattice(self, params) -> SystemView:
+        """The system with lattice ``params`` (a, b, c, alpha, beta, gamma): through ``adapter.set_lattice`` for a
+        SpinW object, ``with_lattice`` for a SystemView; nothing is changed when they are the current ones."""
+        if np.allclose(params, lattice_params(self.system.A), rtol=0, atol=1e-9):
+            return self.system
+        if self.sw is None:
+            same = np.allclose(params, lattice_params(self.original.A), rtol=0, atol=1e-9)
+            self.system = self.original if same else with_lattice(self.original, *params)
+        else:
+            adapter.set_lattice(self.sw, *params)
+            self.system = adapter.system_view(self.sw)
+        return self.system
 
-    # -- geometry
-    def rebuild(self) -> None:
-        """Recompute the atoms inside the current uvw bounds and upload everything."""
-        self.expanded = expand(self.system, self.bounds)
-        for label in self.system.labels:
-            self.upload_atoms(label)
-        self.upload_moments()
-        self.upload_cell()
 
-    def upload_atoms(self, label: str) -> None:
-        """Place the spheres of ``label`` at its expanded positions with its current radius."""
-        self.spheres[label].set(self.expanded[label].xyz, self.radii[label])
+def structure(group, a: float = 5.0, b: float = 5.0, c: float = 5.0, alpha: float = 90.0, beta: float = 90.0,
+              gamma: float = 90.0, umin: float = -0.1, umax: float = 1.1, vmin: float = -0.1, vmax: float = 1.1,
+              wmin: float = -0.1, wmax: float = 1.1, moment_length: float = 2.0):
+    """The Structure builder: atoms, moment arrows and cell edges for the lattice (Å, degrees) and uvw extent."""
+    source: StructureSource = group.context
+    bounds = [[umin, umax], [vmin, vmax], [wmin, wmax]]
+    if not all(lo < hi for lo, hi in bounds):
+        raise ValueError(f"each extent needs min < max, got u {bounds[0]}, v {bounds[1]}, w {bounds[2]}")
+    system = source.set_lattice((a, b, c, alpha, beta, gamma))
+    expanded = expand(system, bounds)
 
-    def upload_moments(self) -> None:
-        """Arrows of length ``moment_length`` (Å) along each non-zero moment, centred on its atom."""
-        L = self.moment_length
-        for label, ex in self.expanded.items():
-            norms = np.linalg.norm(ex.moments, axis=1)
-            keep = norms > 1e-12
-            self._arrow_rows[label] = np.flatnonzero(keep)  # arrow k → expanded row
-            d = ex.moments[keep] / norms[keep, None] if keep.any() else np.zeros((0, 3))
-            w = np.full(len(d), 0.3 * L)
-            self.arrows[label].set(instance_matrices(ex.xyz[keep] - d * L / 2, np.c_[w, w, np.full(len(d), L)],
-                                                     z_axis=d) if len(d) else np.zeros((0, 4, 4)))
-
-    def upload_cell(self) -> None:
-        """The 12 cell edges as cylinders of radius ``cell_radius`` (Å)."""
-        e = cell_edges(self.system.A)
-        mid, vec = e.mean(1), e[:, 1] - e[:, 0]
-        length = np.linalg.norm(vec, axis=1)
-        d = 2 * self.cell_radius
-        self.cell.set(instance_matrices(mid, np.c_[np.full(12, d), np.full(12, d), length], z_axis=vec))
-
-    @property
-    def atom_count(self) -> int:
-        """Number of atoms drawn."""
-        return sum(len(ex.xyz) for ex in self.expanded.values())
-
-    def batches(self):
-        """Atoms, then moments and the cell edges when shown."""
-        out = [s.batch() for s in self.spheres.values()]
-        if self.show_moments:
-            out += [a.batch() for a in self.arrows.values()]
-        if self.show_cell:
-            out.append(self.cell.batch())
-        return out
-
-    def center(self) -> np.ndarray:
-        """Centre of the uvw bounds, in xyz (Å): where the camera aims."""
-        return to_xyz(self.system.A, [np.mean(self.bounds, axis=1)])[0]
-
-    def bounding_radius(self) -> float:
-        """Radius around ``center()`` containing every atom and the cell."""
-        pts = [ex.xyz for ex in self.expanded.values()] + [cell_edges(self.system.A).reshape(-1, 3)]
-        pts = np.concatenate(pts)
-        return float(np.linalg.norm(pts - self.center(), axis=1).max()) + max(self.radii.values(), default=0.5)
-
-    # -- Info rows
-    def atom_info(self, label: str, k: int) -> dict:
-        """Info rows for drawn atom ``k`` of ``label``: cell index, uvw with translation, xyz, moment, spin."""
-        ex = self.expanded[label]
-        site = self.system.atoms[int(ex.indices[k])]
+    def atom_info(label, k):
+        ex = expanded[label]
+        site = system.atoms[int(ex.indices[k])]
         m = np.asarray(site.moment, float)
         rows = {"Label": label, "Cell index": str(site.index), "uvw": _vec(ex.uvw[k]),
                 "Translation": _vec(ex.translations[k], 0), "xyz (Å)": _vec(ex.xyz[k]),
                 "|m|": f"{np.linalg.norm(m):.3f}", "m (xyz)": _vec(m), "S": f"{site.spin:g}"}
-        rows.update(site.extra)
-        return rows
+        return {**rows, **site.extra}
 
-    def moment_info(self, label: str, k: int) -> dict:
-        """Info rows for moment arrow ``k`` of ``label``: the atom it sits on."""
-        return self.atom_info(label, int(self._arrow_rows[label][k]))
+    atoms = group.add(Group("Atoms", locked=True))
+    moments = group.add(Group("Moments", visible=source.show_moments, locked=True))
+    for label in system.labels:
+        ex = expanded[label]
+        atoms.add(InstancedObject(label, Shape(meshes.sphere, {"n_lat": 24, "n_lon": 48, "r": source.radii[label]}),
+                                  label, instance_matrices(ex.xyz) if len(ex.xyz) else [],
+                                  info=lambda k, lb=label: atom_info(lb, k), locked=True))
+        norms = np.linalg.norm(ex.moments, axis=1)
+        rows = np.flatnonzero(norms > 1e-12)  # arrow k → expanded row
+        d = ex.moments[rows] / norms[rows, None]
+        w, L = np.full(len(rows), 0.3 * moment_length), np.full(len(rows), moment_length)
+        moments.add(InstancedObject(f"{label} moments", Shape(meshes.arrow), "Moments",
+                                    instance_matrices(ex.xyz[rows] - d * moment_length / 2, np.c_[w, w, L], z_axis=d)
+                                    if len(rows) else [],
+                                    info=lambda k, lb=label, rows=rows: atom_info(lb, int(rows[k])), locked=True))
+    e = cell_edges(system.A)
+    vec = e[:, 1] - e[:, 0]
+    group.add(InstancedObject("Cell", Shape(meshes.cylinder, {"r": source.cell_radius}), "Unit cell",
+                              instance_matrices(e.mean(1), np.c_[np.ones(12), np.ones(12), np.linalg.norm(vec, axis=1)],
+                                                z_axis=vec), visible=source.show_cell, locked=True))
 
-    # -- as plot_options
-    def options(self) -> dict:
-        """The current state as plot_options (materials in full; camera / lighting / image as given)."""
-        material_of = {label: s.material for label, s in self.spheres.items()}
-        return {
-            "boundaries": [list(map(float, b)) for b in self.bounds],
-            "atom_colors": {label: _srgb(m) for label, m in material_of.items()},
-            "atom_radii": dict(self.radii),
-            "materials": {label: m.to_dict(digits=8) for label, m in material_of.items()},
-            "show_moments": self.show_moments, "moment_length": self.moment_length,
-            "moment_color": _srgb(self.moment_material), "moment_material": self.moment_material.to_dict(digits=8),
-            "show_cell": self.show_cell, "cell_radius": self.cell_radius, "cell_color": _srgb(self.cell_material),
-            "cell_material": self.cell_material.to_dict(digits=8),
-            **{k: (dict(v) if isinstance(v, dict) else v) for k, v in self.passthrough.items()},
-        }
+
+def build_scene(sw_or_view, plot_options: dict | None = None, renderer: Renderer | None = None) -> Scene:
+    """The valo.Scene for a SpinW object (read through the adapter) or a SystemView, set up from plot_options."""
+    opts = validate_options(plot_options)
+    source = StructureSource(sw_or_view, opts)
+    scene = Scene(renderer)
+
+    def material(name, full, shading, **params):
+        if full:
+            params = dict(full)
+            shading = params.pop("shading")
+        scene.material(name, shading, **params)
+
+    for i, label in enumerate(source.system.labels):
+        color = opts["atom_colors"].get(label, default_color(label, i))
+        material(label, opts["materials"].get(label), "pbr", base_color=_linear(color), roughness=0.4)
+    material("Moments", opts["moment_material"], "pbr", base_color=_linear(opts["moment_color"]), roughness=0.5)
+    material("Unit cell", opts["cell_material"], "lambert", base_color=_linear(opts["cell_color"]))
+    for name, full in opts["object_materials"].items():
+        material(name, full, None)
+
+    lattice = lattice_params(source.system.A)
+    params = {**dict(zip(LATTICE, lattice, strict=True)),
+              **dict(zip(EXTENT, np.ravel(opts["boundaries"]).tolist(), strict=True)),
+              "moment_length": float(opts["moment_length"])}
+    ranges = {**{k: (0.5 * v, 1.5 * v) for k, v in zip(LATTICE[:3], lattice[:3], strict=True)},
+              **{k: (30.0, 150.0) for k in LATTICE[3:]}, **{k: (-3.0, 4.0) for k in EXTENT},
+              "moment_length": (0.1, 5.0)}
+    scene.add(ProceduralGroup(STRUCTURE, structure, params, ranges=ranges, context=source, locked=True))
+    for name, shape in opts["shapes"].items():  # base meshes changed in the studio: kept like any edit
+        node = scene.find(name)
+        node.shape = Shape(shape["func"], shape.get("params"))
+        node.rebuild_mesh()
+    for node in opts["objects"]:
+        scene.add(node_from_settings(node))
+    return scene
+
+
+def source_of(scene: Scene) -> StructureSource:
+    """The StructureSource behind a scene made by ``build_scene`` (holds the current SystemView)."""
+    return scene.find(STRUCTURE).context
+
+
+def options(scene: Scene) -> dict:
+    """The scene's state as plot_options: extent, looks per label, moments, cell, materials in full, and the objects
+    added in the studio (camera / lighting / image are the editor's)."""
+    group, source = scene.find(STRUCTURE), source_of(scene)
+    p = group.params
+    labels = {label: scene.find(label) for label in source.system.labels}
+    arrows = [n for n in scene.find("Moments").children]
+    cell = scene.find("Cell")
+    moment_material = scene.materials[arrows[0].material if arrows else "Moments"]
+    extra = [n for n in scene.root.children if n is not group]
+    swapped = [n for n in group.walk() if hasattr(n, "shape") and n.shape.func is not BASE_SHAPES[n.parent.name]]
+    return {
+        "boundaries": [[float(p[lo]), float(p[hi])] for lo, hi in zip(EXTENT[::2], EXTENT[1::2], strict=True)],
+        "atom_colors": {label: _srgb(scene.materials[n.material]) for label, n in labels.items()},
+        "atom_radii": {label: float(n.shape.params.get("r", default_radius(label))) for label, n in labels.items()},
+        "materials": {label: scene.materials[n.material].to_dict(digits=8) for label, n in labels.items()},
+        "show_moments": scene.find("Moments").visible, "moment_length": float(p["moment_length"]),
+        "moment_color": _srgb(moment_material), "moment_material": moment_material.to_dict(digits=8),
+        "show_cell": cell.visible, "cell_radius": float(cell.shape.params.get("r", 0.03)),
+        "cell_color": _srgb(scene.materials[cell.material]),
+        "cell_material": scene.materials[cell.material].to_dict(digits=8),
+        "shapes": {n.name: n.shape.settings() for n in swapped},
+        "objects": [n.settings() for n in extra],
+        "object_materials": {name: m.to_dict(digits=8) for name, m in scene.materials.items()
+                             if name not in OWN_MATERIALS and name not in labels},
+    }

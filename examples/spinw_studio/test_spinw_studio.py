@@ -124,35 +124,39 @@ def viewer():
 
 @pytest.fixture
 def studio(viewer):
-    from spinw_studio.editor import SpinwEditor
-    from spinw_studio.scene import SpinwScene
+    from spinw_studio import show
 
-    scene = SpinwScene(lfo_like(), {"atom_colors": {"Fe": "Orange"}})
-    editor = SpinwEditor(scene)
-    viewer.show(scene, editor)
-    viewer.camera.target = tuple(scene.center())
-    return viewer, scene, editor
+    editor = show(viewer, lfo_like(), {"atom_colors": {"Fe": "Orange"}})
+    return viewer, editor.scene, editor
 
 
 def test_scene_draws_atoms_moments_and_cell(studio):
-    viewer, scene, _ = studio
-    assert scene.atom_count == 12 and scene.spheres["Fe"].count == 12
-    assert scene.arrows["Fe"].count == 12 and scene.cell.count == 12
-    assert len(scene.batches()) == 3 and viewer.snapshot().std() > 5
-    m = scene.arrows["Fe"].matrices[0]
-    assert np.linalg.norm(m[:3, 2]) == pytest.approx(scene.moment_length)  # arrow length along its z axis
+    viewer, scene, editor = studio
+    assert [n.name for n in scene.walk()] == ["Structure", "Atoms", "Fe", "Moments", "Fe moments", "Cell"]
+    assert all(n.locked for n in scene.walk()) and editor.selected is scene.find("Structure")
+    assert scene.find("Fe").instances.count == 12 and scene.find("Fe moments").instances.count == 12
+    assert scene.find("Cell").instances.count == 12 and viewer.snapshot().std() > 5
+    m = scene.find("Fe moments").instances.matrices[0]
+    assert np.linalg.norm(m[:3, 2]) == pytest.approx(2.0)  # arrow length (moment_length, Å) along its z axis
+    assert scene.find("Structure").params["b"] == pytest.approx(5.6)
 
 
-SPINW_ACTIONS = {  # name → (action, changes the image)
-    "extent": (lambda ed: ed.set_bounds(0, -0.1, 2.1), True),
-    "radius": (lambda ed: ed.set_radius("Fe", 1.0), True),
-    "duplicate material": (lambda ed: ed.duplicate("Fe"), False),  # an identical copy is assigned
-    "material parameter": (lambda ed: ed.set_param(ed.scene.spheres["Fe"].material, "base_color", (0.1, 0.2, 0.9)),
-                           True),
-    "moment length": (lambda ed: ed.set_moments(length=3.0), True),
-    "hide moments": (lambda ed: ed.set_moments(show=False), True),
-    "cell": (lambda ed: ed.set_cell(radius=0.15), True),
-    "hide cell": (lambda ed: ed.set_cell(show=False), True),
+def structure_param(key, value):
+    return lambda ed, s: ed.set_procedural_param(s.find("Structure"), key, value)
+
+
+SPINW_ACTIONS = {  # name → (action(editor, scene), changes the image)
+    "lattice a": (structure_param("a", 6.5), True),
+    "lattice gamma": (structure_param("gamma", 105.0), True),
+    "extent": (structure_param("umax", 2.1), True),
+    "moment length": (structure_param("moment_length", 3.0), True),
+    "radius": (lambda ed, s: ed.set_shape_param(s.find("Fe"), "r", 1.0), True),
+    "atom shape": (lambda ed, s: ed.set_shape(s.find("Fe"), "valo.meshes.primitives:cube"), True),
+    "material parameter": (lambda ed, s: ed.set_param(s.materials["Fe"], "base_color", (0.1, 0.2, 0.9)), True),
+    "hide moments": (lambda ed, s: ed.set_visible(s.find("Moments"), False), True),
+    "cell radius": (lambda ed, s: ed.set_shape_param(s.find("Cell"), "r", 0.15), True),
+    "hide cell": (lambda ed, s: ed.set_visible(s.find("Cell"), False), True),
+    "add object": (lambda ed, s: ed.add_shape("valo.meshes.primitives:torus"), True),
 }
 
 
@@ -160,26 +164,61 @@ SPINW_ACTIONS = {  # name → (action, changes the image)
 def test_studio_actions_undo_exactly(studio, name):
     viewer, scene, editor = studio
     action, visible = SPINW_ACTIONS[name]
-
-    def state():
-        return scene.options(), scene.spheres["Fe"].material
+    def state():  # plot_options, plus the lattice (it lives in sw, not in plot_options)
+        return editor.plot_options(), dict(scene.find("Structure").params)
 
     before, image = state(), viewer.snapshot()
-    action(editor)
+    action(editor, scene)
     assert len(editor.undo_stack.done) == 1 and state() != before
     assert (np.abs(viewer.snapshot().astype(int) - image).max() > 10) == visible
     editor.undo_stack.undo()
     assert state() == before and np.array_equal(viewer.snapshot(), image)
 
 
+def test_a_lattice_change_moves_everything_and_keeps_your_edits(studio):
+    _, scene, editor = studio
+    fe, structure = scene.find("Fe"), scene.find("Structure")
+    editor.set_shape_param(fe, "r", 0.8)
+    editor.set_visible(scene.find("Moments"), False)
+    editor.set_procedural_param(structure, "c", 9.0)
+    assert scene.find("Fe") is fe and fe.shape.params["r"] == 0.8 and not scene.find("Moments").visible
+    assert editor.system.A[2, 2] == pytest.approx(9.0) and fe.instances.matrices[:, 2, 3].max() == pytest.approx(9.0)
+    assert sorted(np.linalg.norm(scene.find("Cell").instances.matrices[:, :3, 2], axis=1))[-1] == pytest.approx(9.0)
+    editor.set_procedural_param(structure, "beta", 100.0)
+    axes = {label: d for label, d, *_ in editor.compass_axes()}
+    assert np.dot(axes["a"], axes["c"]) == pytest.approx(np.cos(np.radians(100.0)))  # the compass follows
+    with pytest.raises(ValueError, match="not deleted"):
+        editor.delete(fe)
+    editor.set_procedural_param(structure, "umin", 1.5)  # min > max: refused, nothing changes
+    assert structure.params["umin"] == -0.1 and "min < max" in editor.errors["Structure"]
+
+
+def test_lattice_edits_go_through_the_adapter(viewer, monkeypatch):
+    from spinw_studio import adapter, show
+    from spinw_studio.model import lattice_matrix
+
+    sw = fake_sw()
+    editor = show(viewer, sw)
+    structure = editor.scene.find("Structure")
+    editor.set_procedural_param(structure, "a", 6.0)  # the stub isn't filled: an error, and nothing changes
+    assert "set_lattice" in editor.errors["Structure"] and structure.params["a"] == pytest.approx(5.3)
+    assert np.allclose(sw.crystal.A, A_LFO)
+    monkeypatch.setattr(adapter, "set_lattice", lambda sw, *p: setattr(sw.crystal, "A", lattice_matrix(*p)))
+    editor.set_procedural_param(structure, "a", 6.0)
+    assert sw.crystal.A[0, 0] == pytest.approx(6.0) and editor.system.A[0, 0] == pytest.approx(6.0)
+    editor.undo_stack.undo()
+    assert sw.crystal.A[0, 0] == pytest.approx(5.3)
+
+
 def test_info_rows_and_compass_axes(studio):
     _, scene, editor = studio
-    k = int(np.flatnonzero((scene.expanded["Fe"].indices == 1) & (scene.expanded["Fe"].translations == 0).all(1))[0])
-    rows = scene.spheres["Fe"].info(k)
-    assert rows["Cell index"] == "1" and rows["uvw"] == "(0.500, 0.000, 0.000)"
+    fe = scene.find("Fe")
+    k = int(np.flatnonzero(np.all(np.isclose(fe.instances.matrices[:, :3, 3], [2.65, 0, 0]), axis=1))[0])
+    rows = fe.info(k)
+    assert rows["Object"] == "Fe" and rows["Cell index"] == "1" and rows["uvw"] == "(0.500, 0.000, 0.000)"
     assert rows["xyz (Å)"] == "(2.650, 0.000, 0.000)"
     assert rows["m (xyz)"] == "(1.000, 0.000, -0.100)" and rows["S"] == "2.5"
-    assert scene.arrows["Fe"].info(k)["Cell index"] == "1"
+    assert scene.find("Fe moments").info(k)["Cell index"] == "1"
     axes = {label: d for label, d, *_ in editor.compass_axes()}
     assert set(axes) == {"x", "y", "z", "a", "b", "c"} and axes["b"] == pytest.approx((0.0, 1.0, 0.0))
 
@@ -189,26 +228,28 @@ def test_plot_options_round_trip_and_export(studio, tmp_path):
 
     import spinw_studio
 
-    viewer, scene, editor = studio
-    editor.set_bounds(2, -0.1, 1.6)
-    editor.set_radius("Fe", 0.45)
-    editor.set_param(scene.spheres["Fe"].material, "roughness", 0.8)
-    editor.render_options.update(size=[240, 160], samples=1)
-    opts = editor.plot_options()
-    assert opts["boundaries"][2] == [-0.1, 1.6] and opts["atom_radii"] == {"Fe": 0.45}
-    assert opts["camera"]["azimuth"] == viewer.camera.azimuth and opts["image"]["size"] == [240, 160]
-    shown = valo_render_of(editor)
-    assert np.array_equal(spinw_studio.render(lfo_like(), opts), shown)  # the options rebuild the same picture
-    namespace = runpy.run_path(str(editor.export_plot_options(tmp_path / "opts.py")))
-    assert namespace["PLOT_OPTIONS"] == opts
-    while editor.undo_stack.done:
-        editor.undo_stack.undo()
-
-
-def valo_render_of(editor):
     import valo
 
-    return valo.render(editor.scene, editor.render_settings())
+    viewer, scene, editor = studio
+    editor.set_procedural_param(scene.find("Structure"), "wmax", 1.6)
+    editor.set_shape_param(scene.find("Fe"), "r", 0.45)
+    editor.set_param(scene.materials["Fe"], "roughness", 0.8)
+    editor.set_object_material(scene.find("Fe"), editor.duplicate_material("Fe").name)
+    gold = editor.new_material("Gold", "pbr", metallic=1.0).name
+    editor.add_shape("valo.meshes.primitives:torus", material=gold)
+    editor.set_visible(scene.find("Cell"), False)
+    editor.set_shape(scene.find("Fe moments"), "valo.meshes.primitives:cone")
+    editor.render_options.update(size=[240, 160], samples=1)
+    opts = editor.plot_options()
+    assert opts["boundaries"][2] == [-0.1, 1.6] and opts["atom_radii"] == {"Fe": 0.45} and not opts["show_cell"]
+    assert [o["name"] for o in opts["objects"]] == ["Torus"] and "Gold" in opts["object_materials"]
+    assert opts["shapes"] == {"Fe moments": {"func": "valo.meshes.primitives:cone",
+                                             "params": opts["shapes"]["Fe moments"]["params"]}}
+    assert opts["camera"]["azimuth"] == viewer.camera.azimuth and opts["image"]["size"] == [240, 160]
+    shown = valo.render(scene, editor.render_settings())  # also: Render works for a scene that can't be saved
+    assert np.array_equal(spinw_studio.render(lfo_like(), opts), shown)  # the options rebuild the same picture
+    namespace = runpy.run_path(str(editor.export_plot_options(tmp_path / "opts.py")))
+    assert namespace["PLOT_OPTIONS"] == opts and not editor.can_export()
 
 
 def test_plot_structure_blocks_then_returns_the_final_options(viewer, monkeypatch):
@@ -216,7 +257,8 @@ def test_plot_structure_blocks_then_returns_the_final_options(viewer, monkeypatc
 
     calls = []
     monkeypatch.setattr(api, "_window", lambda title: calls.append(title) or viewer)
-    monkeypatch.setattr(viewer, "run", lambda: viewer.editor.set_radius("Fe", 0.9))  # "the user" edits, then closes
+    monkeypatch.setattr(viewer, "run",  # "the user" edits, then closes
+                        lambda: viewer.editor.set_shape_param(viewer.scene.find("Fe"), "r", 0.9))
     opts = api.plot_structure(lfo_like(), {"atom_colors": {"Fe": "Orange"}})
     assert calls == ["SpinW studio: LFO-like"] and opts["atom_radii"] == {"Fe": 0.9}
     monkeypatch.undo()

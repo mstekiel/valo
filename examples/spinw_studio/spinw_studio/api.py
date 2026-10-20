@@ -2,7 +2,8 @@
 
 Both take your ``SpinW`` object (read through ``adapter.system_view``) or a ``SystemView``, and ``plot_options``
 (see ``model.DEFAULTS``). ``plot_structure`` returns the plot_options as they are when you close the window, so
-your adjustments can go straight back into the script (or use File > Export plot options).
+your adjustments can go straight back into the script (or use File > Export plot options). Lattice edits in the
+studio change your SpinW object in place (through ``adapter.set_lattice``).
 """
 
 from __future__ import annotations
@@ -14,7 +15,7 @@ import valo
 from . import adapter
 from .editor import SpinwEditor
 from .model import SystemView, validate_options
-from .scene import SpinwScene
+from .scene import build_scene
 
 
 def system_of(sw_or_view) -> SystemView:
@@ -24,9 +25,8 @@ def system_of(sw_or_view) -> SystemView:
 
 def show(viewer: valo.Viewer, sw_or_view, plot_options: dict | None = None) -> SpinwEditor:
     """Build the scene and editor for ``sw_or_view`` in ``viewer`` (camera and lighting from plot_options)."""
-    system = system_of(sw_or_view)
     opts = validate_options(plot_options)
-    scene = SpinwScene(system, opts, viewer.renderer)
+    scene = build_scene(sw_or_view, opts, viewer.renderer)
     editor = SpinwEditor(scene)
     viewer.show(scene, editor)
     if opts["camera"]:
@@ -46,9 +46,9 @@ def _window(title: str) -> valo.Viewer:
 
 def plot_structure(sw_or_view, plot_options: dict | None = None, *, title: str | None = None) -> dict:
     """Open SpinW studio on ``sw_or_view``; block until the window is closed; return the final plot_options."""
-    system = system_of(sw_or_view)
-    viewer = _window(title or ("SpinW studio" + (f": {system.name}" if system.name else "")))
-    editor = show(viewer, system, plot_options)
+    name = system_of(sw_or_view).name
+    viewer = _window(title or ("SpinW studio" + (f": {name}" if name else "")))
+    editor = show(viewer, sw_or_view, plot_options)
     viewer.run()
     return editor.plot_options()
 
@@ -58,11 +58,10 @@ def render(sw_or_view, plot_options: dict | None = None, *, path=None, **image) 
 
     ``image`` keywords (size, samples, transparent, background) override ``plot_options["image"]``.
     """
-    system = system_of(sw_or_view)
     opts = validate_options(plot_options)
-    scene = SpinwScene(system, opts)
+    scene = build_scene(sw_or_view, opts)
     camera = valo.OrbitCamera.from_settings(opts["camera"]) if opts["camera"] else None
-    if camera is None:  # the studio's starting view: fitted, aimed at the extent's centre
+    if camera is None:  # the studio's starting view: fitted, aimed at the scene's centre
         camera = valo.OrbitCamera(fovy=valo.rc.camera.fov)
         camera.target = tuple(float(c) for c in scene.center())
         camera.fit(scene.bounding_radius())

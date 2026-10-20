@@ -11,6 +11,9 @@ An app builds a scene (anything with ``batches()``) from the Viewer's renderer a
     viewer.show(SimpleNamespace(batches=lambda: [balls.batch(), arrows.batch()]), Editor())
     viewer.run()
 
+Or, at a higher level, a ``valo.Scene``: a tree of named objects, each a shape function with parameters, a
+transform and a material from the scene's library (see ``valo/scene.py``).
+
 See ``examples/`` for complete apps.
 """
 
@@ -23,11 +26,13 @@ from .materials import SCHEMA, SHADINGS, Material, linear_to_srgb, srgb_to_linea
 from .meshes import MeshData, Sculpt, library
 from .offline import plain, py_literal, render, save_png
 from .render import Instances, OrbitCamera, Renderer, Spheres, renderer
+from .scene import Group, InstancedObject, MeshObject, ProceduralGroup, Scene, Shape, Transform
 from .ui import Editor
 from .ui_style import ICON, mono_font
 from .undo import Command, UndoStack
 
-__all__ = ["ICON", "SCHEMA", "SHADINGS", "Command", "Editor", "Instances", "Lighting", "Material", "MeshData",
-           "OrbitCamera", "Renderer", "Sculpt", "Spheres", "UndoStack", "Viewer", "instance_matrices", "library",
-           "linear_to_srgb", "meshes", "mono_font", "plain", "py_literal", "rc", "rc_context", "render", "renderer",
-           "save_png", "srgb_to_linear"]
+__all__ = ["ICON", "SCHEMA", "SHADINGS", "Command", "Editor", "Group", "InstancedObject", "Instances", "Lighting",
+           "Material", "MeshData", "MeshObject", "OrbitCamera", "ProceduralGroup", "Renderer", "Scene", "Sculpt",
+           "Shape", "Spheres", "Transform", "UndoStack", "Viewer", "instance_matrices", "library", "linear_to_srgb",
+           "meshes", "mono_font", "plain", "py_literal", "rc", "rc_context", "render", "renderer", "save_png",
+           "srgb_to_linear"]

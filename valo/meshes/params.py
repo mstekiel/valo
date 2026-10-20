@@ -41,11 +41,12 @@ def default_range(kind: str, default) -> tuple[float, float]:
     return 0, 1
 
 
-def shape_params(func, ranges: dict | None = None) -> list[ShapeParam]:
-    """The editable parameters of ``func``: every parameter needs a default and a float / int / bool type."""
+def shape_params(func, ranges: dict | None = None, skip: int = 0) -> list[ShapeParam]:
+    """The editable parameters of ``func`` (after the first ``skip`` ones, e.g. a builder's ``group`` argument):
+    every one needs a default and a float / int / bool type."""
     ranges = {**getattr(func, "ranges", {}), **(ranges or {})}
     out = []
-    for p in inspect.signature(func).parameters.values():
+    for p in list(inspect.signature(func).parameters.values())[skip:]:
         if p.default is inspect.Parameter.empty:
             raise TypeError(f"parameter {p.name!r} of {getattr(func, '__name__', func)}() needs a default value")
         kind = param_kind(p.annotation, p.default)

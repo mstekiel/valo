@@ -207,6 +207,7 @@ def edited_scene(viewer):
 
 SCENE_ACTIONS = {  # name → (action(editor, scene), changes the image; None: may or may not)
     "add": (lambda ed, s: ed.add(cube("C", transform=Transform((1.5, 0, 0)))), True),
+    "add shape": (lambda ed, s: ed.add_shape("valo.meshes.primitives:torus", s.find("G")), True),
     "delete": (lambda ed, s: ed.delete(s.find("A")), True),
     "duplicate": (lambda ed, s: ed.duplicate(s.find("B")), None),  # the copy sits on the original
     "rename": (lambda ed, s: ed.rename(s.find("B"), "Box"), False),
@@ -256,3 +257,40 @@ def test_scene_editor_refuses_impossible_edits_and_selection_highlights(viewer):
     assert {i.owner.name for i in viewer.highlighted} == {"Bead", "Bead 2", "Bead 3"}
     editor.delete(scene.find("Ring"))
     assert editor.selected is None and viewer.highlighted == []
+
+
+
+
+def test_windows_draw_for_every_kind_of_selection(viewer):
+    scene, editor = edited_scene(viewer)
+    calls = []
+    for name, draw in list(editor.windows().items()):
+        setattr(editor, draw.__name__, lambda draw=draw, name=name: (calls.append(name), draw()))
+    for node in [None, *scene.walk()]:
+        editor.select(node)
+        for window in ("Object", "Materials"):
+            editor._focus = [window]  # bring the tab to the front
+            viewer.snapshot()
+    assert {"Scene", "Object", "Materials"} <= set(calls)
+    assert editor.diagnostics(scene.find("A"))[-1].startswith("watertight")
+    assert editor.diagnostics(scene.find("Row"))[0] == "3 instances"
+    assert not editor.undo_stack.done  # drawing edits nothing
+
+
+def test_a_click_in_the_3d_view_selects_the_object(viewer):
+    scene, editor = edited_scene(viewer)
+    viewer.snapshot()
+    x0, y0, w, h = viewer.viewport
+    clip = viewer.camera.matrices(w / h)[0] @ np.array([-1.5, 0, 0, 1.0])  # cube B
+    r = viewer.canvas.get_pixel_ratio()
+    at = ((x0 + (clip[0] / clip[3] + 1) / 2 * w) / r, (y0 + (1 - clip[1] / clip[3]) / 2 * h) / r)
+    viewer.on_pointer({"event_type": "pointer_move", "x": at[0], "y": at[1]})
+    viewer.snapshot()
+    viewer.on_pointer({"event_type": "pointer_down", "button": 1, "x": at[0], "y": at[1], "modifiers": ()})
+    viewer.on_pointer({"event_type": "pointer_up", "button": 1, "x": at[0], "y": at[1], "modifiers": ()})
+    viewer.snapshot()
+    assert editor.selected is scene.find("B") and viewer.selection.source.owner is editor.selected
+    viewer.on_key({"event_type": "key_down", "key": "Escape", "modifiers": ()})
+    viewer.snapshot()
+    assert editor.selected is None and viewer.highlighted == []
+    viewer.pointer, viewer._last_click = None, None

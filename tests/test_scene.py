@@ -441,3 +441,26 @@ def test_a_scene_with_a_context_group_renders_but_does_not_export(viewer):
     assert editor.can_export()
     scene.add(ProceduralGroup("Pts", labelled_points, context={"Fe": [0, 1]}))
     assert not editor.can_export() and "scene" not in editor.render_settings()
+
+
+def broken_shape(size: float = 1.0):
+    """A shape function with a bug."""
+    return points  # noqa: F821 - the bug
+
+
+def broken_builder(group, n: int = 2):
+    """A builder with a bug."""
+    raise RuntimeError("builder bug")
+
+
+def test_a_shape_that_fails_to_build_leaves_the_scene_as_it_was(viewer):
+    from valo import MeshObject, ProceduralGroup, Shape
+
+    scene, editor = edited_scene(viewer)
+    before, image = scene.settings(), viewer.snapshot()
+    with pytest.raises(NameError):
+        scene.add(MeshObject("Bad", Shape(broken_shape), "Matte"))
+    with pytest.raises(RuntimeError, match="builder bug"):
+        scene.add(ProceduralGroup("BadGroup", broken_builder))
+    assert scene.settings() == before and np.array_equal(viewer.snapshot(), image)  # still draws
+    assert viewer.gui_error is None

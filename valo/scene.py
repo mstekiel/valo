@@ -449,7 +449,8 @@ class Scene:
         raise KeyError(f"no node {name!r} in the scene")
 
     def add(self, node: Node, parent: Node | None = None, index: int | None = None) -> Node:
-        """Insert ``node`` (and its subtree) under ``parent`` (default: the root); returns it."""
+        """Insert ``node`` (and its subtree) under ``parent`` (default: the root); returns it. If a mesh or a
+        procedural group fails to build, the error is raised and the scene stays as it was."""
         parent = parent or self.root
         if not isinstance(parent, Group):
             raise TypeError(f"{parent!r} can't have children: only groups can")
@@ -459,15 +460,20 @@ class Scene:
             taken.add(n.name)
             if isinstance(n, MeshObject) and n.material not in self.materials:
                 raise KeyError(f"{n.name}: no material {n.material!r} in the scene; add it with scene.material()")
+        for n in node.walk():  # build the meshes first: a shape that fails never reaches the tree
+            if isinstance(n, MeshObject) and n.instances is None:
+                n.attach(self)
         node.parent = parent
         parent.children.insert(len(parent.children) if index is None else index, node)
         for n in node.walk():
             n.scene = self
-            if isinstance(n, MeshObject) and n.instances is None:
-                n.attach(self)
         self.refresh(node)
-        for n in [n for n in node.walk() if isinstance(n, ProceduralGroup) and not n.children]:
-            n.rebuild()
+        try:
+            for n in [n for n in node.walk() if isinstance(n, ProceduralGroup) and not n.children]:
+                n.rebuild()
+        except Exception:
+            self.remove(node)
+            raise
         return node
 
     def remove(self, node: Node) -> None:

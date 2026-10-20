@@ -21,6 +21,45 @@ viewer.show(SimpleNamespace(batches=lambda: [balls.batch(), arrows.batch()]), ed
 viewer.run()
 ```
 
+That is the low level: `Instances` and a `batches()` function. Most apps build a **`valo.Scene`** instead
+(next section) and get the Scene / Object / Materials windows for free.
+
+## The scene model: `valo.Scene`
+
+```python
+from valo import Group, InstancedObject, MeshObject, ProceduralGroup, Scene, SceneEditor, Shape, Transform
+
+scene = Scene()                                                  # on the shared valo.renderer()
+scene.material("Gold", "pbr", base_color=(1.0, 0.71, 0.29), metallic=1.0)   # the library: shared by name
+shapes = scene.add(Group("Shapes", transform=Transform((0, 0, 1))))
+scene.add(MeshObject("Ball", Shape("valo.meshes.primitives:sphere", {"r": 0.4}), "Gold"), parent=shapes)
+scene.add(InstancedObject("Arrows", Shape(meshes.arrow), "Gold", instances=matrices))   # (N, 4, 4)
+scene.add(ProceduralGroup("Ring", "my_app.builders:ring", {"n": 8}))   # ring(group, n=8) adds the children
+viewer.show(scene, SceneEditor(scene))
+```
+- **A tree** (`valo/scene.py`): `Group` (transform + visibility for its children), `ProceduralGroup` (a group
+  whose children `builder(group, **params)` regenerates whenever a parameter changes), `MeshObject` (one mesh)
+  and `InstancedObject` (one mesh at world · M_i per instance matrix). world = parent world · own `Transform`
+  (scale, rotate x→y→z in degrees, translate: `geometry.transform_matrix`). Hidden ancestors hide a node.
+- **Shapes**: a `Shape` is a function (callable, `"module:function"`, or a sculpt file) plus parameters; the
+  editable ones (float/int/bool with defaults; ranges from `func.ranges` / `RANGES`) come from its signature
+  (`meshes/params.py`, shared with MeshSculptor and procedural builders). Sculpt-file shapes hot-reload.
+- **Names** of nodes and materials are unique per scene (" 2" suffix), so they work as references.
+- **GPU**: each object owns an `Instances` whose `owner` is the object; `scene.batches()` draws the visible ones.
+  A click on any instance selects (and highlights) the whole object; `viewer.highlighted` tints a group's objects.
+- **Serialization**: `scene.settings()` / `Scene.from_settings(d)`: materials plus the tree as plain data,
+  functions as `"module:function"` paths (so they must be importable), procedural groups as builder + parameters
+  only. So Export render script works for any Scene.
+- **`SceneEditor`** (`valo/scene_editor.py`): undoable actions for the tree (add, add_shape, delete, duplicate,
+  rename, reparent, visibility), an object (transform, shape / builder parameters, material) and the library
+  (new, duplicate, delete unused); windows **Scene** (tree with type and eye toggle, context menu, drag onto a
+  group to reparent, "+ Add"), **Object** (parameters, transform, material, `meshes.check` diagnostics) and
+  **Materials**. `examples/mesh_gallery/` is the reference app.
+- **Why only a tree, no scene graph of dependencies:** shared transforms and one-click visibility are what
+  grouping needs; "parameter → regenerate a structure" (lattice constants → atoms, cell edges) is a procedural
+  group's rebuild, with the physics links kept in the app's builder. A procedural group rebuilds all its children
+  (no partial updates) and there are no links across groups; add either when a real case needs it.
+
 Meshes live in the `valo/meshes/` package; import everything from `valo.meshes`.
 - **`primitives.py`**: the standard meshes, all unit-sized, Z-up and CCW outward. They are `sphere`, `icosphere`, `cube`,
   `cylinder`, `cone`, `torus`, `capsule`, `arrow` (tail at origin, tip at z=1) and `plane` (double-sided).
@@ -97,7 +136,8 @@ the objects, so `Lighting()` starts from `rc.lighting`, but the Lighting window 
   - translation / rotation / scale from `geometry.decompose`;
   - the point hit;
   - then `scene.describe(pick)` or `source.info(i)`.
-- **Highlight:** the hovered and selected instances are drawn again over the scene, with an additive tint + rim
+- **Highlight:** the hovered and selected instances (a whole object when the instances have an `owner`, plus
+  `viewer.highlighted`) are drawn again over the scene, with an additive tint + rim
   pipeline at the same depth (`@invariant` position, `greater-equal`). Colour and strength come from `rc.highlight`.
 - **Navigation** (`Viewer.on_pointer` / `on_key`, keys in `rc.keys`):
   - mouse: left-drag orbit, middle- or Shift-drag pan, wheel zoom, click select, double-click centre on the point;
@@ -149,11 +189,13 @@ engine:  geometry, materials, undo              (leaves: numpy only, materials h
          meshes/  data ← ops ← builders ← primitives;  data ← check;  ops ← sculpt ← library
                   (sculpt → geometry, library → materials)
          render  → geometry, materials, meshes.data, meshes.primitives
+         scene   → geometry, materials, meshes (data, params, sculpt), render
          ui      → materials, undo
          app     → render, ui
+         scene_editor → scene, ui, meshes (check, library)
 tools:   tools/sculptor → app, meshes  (the `valo-sculpt` command)
 apps:    examples/crystal_studio: studio → crystal → valo
-         examples/mesh_gallery:   gallery → valo
+         examples/mesh_gallery:   gallery → valo (Scene, SceneEditor)
 ```
 `render` draws anything with a `batches()` method; nothing in `valo/` imports from `examples/`.
 
@@ -171,6 +213,8 @@ apps:    examples/crystal_studio: studio → crystal → valo
 | A new tunable | add a field to a section in `valo/config.py` (default, label, range, unit, help); read `rc.<section>.<key>`. |
 | Image export | done: `valo.render` / File → Render. Video: render frames with `valo.render` in a loop. |
 | Scripting / export for an app's scene | app: `settings()` + `from_settings(d, gpu=None)` on the scene class (in an importable module). |
+| Objects with parameters in the Scene / Object windows | app: build a `valo.Scene` and show it with `SceneEditor` (or a subclass adding windows). |
+| A parameter that regenerates part of the scene | app: a `ProceduralGroup` with a builder `fn(group, **params)` in an importable module. |
 | New panel or window | app: an action method on its `Editor` subclass (with undo) + an entry in `windows()`. |
 | New crystal structure (CIF, POSCAR, other lattice), more species | `examples/crystal_studio/crystal.py`: centres + species per site; keep `batches()`. |
 | A new app | `examples/<name>/` with a scene, an `Editor` subclass, a `main()` and a test. |

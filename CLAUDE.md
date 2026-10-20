@@ -24,12 +24,15 @@ Apps built on it live in `examples/`. Design and extension points: `ARCHITECTURE
 | `meshes/ops.py` | `transform`, `merge` | no |
 | `meshes/builders.py` | `revolve`, `parametric`, `heightfield` | no |
 | `meshes/primitives.py` | `sphere`, `icosphere`, `cube`, `plane`, `cylinder`, `cone`, `torus`, `capsule`, `arrow`, `STANDARD` | no |
+| `meshes/params.py` | `ShapeParam`, `shape_params`: editable float/int/bool parameters from a function signature | no |
 | `meshes/check.py` | `check` → `MeshReport` (winding, unit normals, watertight + volume) | no |
 | `meshes/sculpt.py` | sculpt files: load (params from `mesh()`'s signature), build (transform baked), save (AST rewrite of defaults, `MATERIAL`, `TRANSFORM`) | no |
 | `meshes/library/` | saved sculpts, one `<name>.py` each; `names()`, `mesh(name, **params)`, `material(renderer, name)` | no |
 | `tools/sculptor.py` | MeshSculptor app (`valo-sculpt`): `SculptScene`, `SculptorEditor` with hot reload, diagnostics, save | yes |
 | `materials.py` | shading models (WGSL), parameter schema, observable `Material`, colour conversion | buffer only |
 | `render.py` | shared WGSL, pipelines, render targets, `OrbitCamera` (projections, `VIEWS`, pan, `center_on`), `Instances` / `Batch` / `Spheres`, scene pass → highlight → post pass, `pick` | yes |
+| `scene.py` | `Scene` (object tree + material library, `batches()`, `settings()` / `from_settings`), `Group`, `ProceduralGroup`, `MeshObject`, `InstancedObject`, `Shape`, `Transform` | yes |
+| `scene_editor.py` | `SceneEditor`: undoable scene actions; Scene / Object / Materials windows; hot reload of sculpt-file shapes | yes |
 | `config.py` | `rc`: typed config sections (camera, lighting, highlight, picking, ui, keys, sculptor), TOML files, `rc_context`, `valo-config` | no |
 | `offline.py` | `valo.render` (offline images: size, supersampling, transparency, background), `export_script`, `py_literal` | yes |
 | `lighting.py` | `Lighting`: headlight or fixed directional light, global hemisphere ambient (sky, ground, intensity) | no |
@@ -43,7 +46,7 @@ Apps built on it live in `examples/`. Design and extension points: `ARCHITECTURE
 | App | Files |
 |---|---|
 | `crystal_studio` | `crystal.py` (rock-salt model, species, material library), `studio.py` (`CrystalEditor` + `main`), `test_studio.py` |
-| `mesh_gallery` | `gallery.py` (every standard mesh + a ring of arrows, `GalleryEditor` + `main`), `test_gallery.py` |
+| `mesh_gallery` | `gallery.py` (every standard mesh + a procedural ring of arrows as a `valo.Scene`, `main`), `test_gallery.py` |
 | `spinw_studio` | spinwaves systems in valo: `spinw_studio/` package (`adapter`, `model`, `scene`, `editor`, `api`), `lfo_spinw.py`, `test_spinw_studio.py`. **Read its `README.md` (the defining document) before changing it**; it needs `uv sync --group spinw` only to run the real script |
 
 ## Rules that keep it working
@@ -53,7 +56,8 @@ Apps built on it live in `examples/`. Design and extension points: `ARCHITECTURE
 3. Every user-facing change is a method on the app's `Editor` subclass that pushes a `Command` for undo. The windows only
    call these methods, so tests and scripts can do everything the UI can.
 4. The renderer draws whatever `scene.batches()` returns: `(material, gpu_mesh, instance_bind_group, count)`
-   tuples, made by `Instances.batch()`. Meshes are CCW-outward (back faces are culled). `valo/` never imports from `examples/` and knows no domain
+   tuples, made by `Instances.batch()`. Build scenes as a `valo.Scene` (objects with shapes, transforms and
+   library materials, edited by `SceneEditor`); raw `Instances` are the low level. Meshes are CCW-outward (back faces are culled). `valo/` never imports from `examples/` and knows no domain
    (crystals, molecules, …); apps use only the public API in `valo/__init__.py`.
 5. Prefer the smallest change that works. Don't add layers, plugins or abstractions before a feature needs them;
    when it does, update `ARCHITECTURE.md` in the same change.
@@ -74,6 +78,7 @@ Apps built on it live in `examples/`. Design and extension points: `ARCHITECTURE
    actions, the app's own test otherwise). It must change state, undo exactly (state and image) and redo.
 4. Where tests go:
    - pure engine code → `tests/test_core.py`, meshes and sculpts → `tests/test_meshes.py`;
+   - scene model and `SceneEditor` (undo table `SCENE_ACTIONS`) → `tests/test_scene.py`;
    - offscreen GPU → `tests/test_app.py` and `tests/test_sculptor.py` (share the module-scoped `viewer`, use
      `viewer.snapshot()`);
    - apps → `examples/<name>/test_*.py`.

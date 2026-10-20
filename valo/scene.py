@@ -169,6 +169,13 @@ class Node:
     def refresh(self) -> None:
         """Re-upload what depends on the world transform (objects override)."""
 
+    def settings(self) -> dict:
+        """The node and its subtree as plain data (``node_from_settings`` rebuilds it)."""
+        d = {"kind": self.kind, "name": self.name, "visible": self.visible, "transform": self.transform.settings()}
+        if self.children:
+            d["children"] = [c.settings() for c in self.children]
+        return d
+
     def __repr__(self):
         return f"{type(self).__name__}({self.name!r})"
 
@@ -204,6 +211,12 @@ class ProceduralGroup(Group):
         if unknown:
             raise KeyError(f"unknown parameters {sorted(unknown)} for builder {self.func.__name__}")
         self.params = {**{p.name: p.default for p in self.specs}, **(params or {})}
+
+    def settings(self) -> dict:
+        """The group, its builder and parameters; not the children (they are rebuilt)."""
+        d = super().settings()
+        d.pop("children", None)
+        return {**d, "builder": reference(self.builder), "params": dict(self.params)}
 
     def rebuild(self) -> None:
         """Remove the children and let the builder make them again from the current parameters."""
@@ -249,6 +262,10 @@ class MeshObject(Node):
         if self.instances is not None:
             self.instances.material = self.scene.materials[name]
 
+    def settings(self) -> dict:
+        """The object, its shape and material name."""
+        return {**super().settings(), "shape": self.shape.settings(), "material": self.material}
+
     def info(self, i: int) -> dict:
         """Info rows: the object, its shape and parameters."""
         params = ", ".join(f"{k}={v:g}" if isinstance(v, float) else f"{k}={v}" for k, v in self.shape.params.items())
@@ -267,6 +284,10 @@ class InstancedObject(MeshObject):
     def local_instances(self) -> np.ndarray:
         """The instance matrices, relative to the node."""
         return self.matrices
+
+    def settings(self) -> dict:
+        """The object and its instance matrices (as nested lists)."""
+        return {**super().settings(), "instances": self.matrices.tolist()}
 
     def set_instances(self, matrices) -> None:
         """Replace the instance matrices (N, 4, 4) and upload."""
@@ -352,6 +373,23 @@ class Scene:
         for n in (node or self.root).walk():
             n.refresh()
 
+    # -- saving
+    def settings(self) -> dict:
+        """The whole scene as plain data: the material library and the node tree (``from_settings`` rebuilds it)."""
+        return {"materials": {name: m.to_dict(digits=6) for name, m in self.materials.items()},
+                "nodes": [n.settings() for n in self.root.children]}
+
+    @classmethod
+    def from_settings(cls, d: dict, renderer: Renderer | None = None) -> Scene:
+        """A scene rebuilt from ``settings()`` data; shape functions and builders are imported by path."""
+        scene = cls(renderer)
+        for name, params in d.get("materials", {}).items():
+            params = dict(params)
+            scene.material(name, params.pop("shading"), **params)
+        for nd in d.get("nodes", []):
+            scene.add(node_from_settings(nd))
+        return scene
+
     # -- what the renderer and the camera need
     def batches(self):
         """One batch per visible object with at least one instance."""
@@ -377,3 +415,25 @@ class Scene:
         """Radius around ``center()`` containing everything shown."""
         c, r = self._spheres()
         return float((np.linalg.norm(c - self.center(), axis=1) + r).max())
+
+
+def node_from_settings(d: dict) -> Node:
+    """A node (with its subtree) from ``Node.settings()`` data; add it to a scene to draw it."""
+    kw = {"visible": d.get("visible", True), "transform": Transform(**d.get("transform", {}))}
+    kind = d["kind"]
+    if kind == "group":
+        node = Group(d["name"], **kw)
+    elif kind == "procedural":
+        return ProceduralGroup(d["name"], d["builder"], d.get("params"), **kw)
+    elif kind == "mesh":
+        node = MeshObject(d["name"], Shape(d["shape"]["func"], d["shape"].get("params")), d["material"], **kw)
+    elif kind == "instances":
+        node = InstancedObject(d["name"], Shape(d["shape"]["func"], d["shape"].get("params")), d["material"],
+                               d.get("instances"), **kw)
+    else:
+        raise ValueError(f"unknown node kind {kind!r} (group, procedural, mesh or instances)")
+    for c in d.get("children", []):
+        child = node_from_settings(c)
+        child.parent = node
+        node.children.append(child)
+    return node

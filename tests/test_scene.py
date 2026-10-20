@@ -121,3 +121,51 @@ def test_procedural_group_builds_children_from_its_parameters(scene):
     assert np.allclose(g.children[0].instances.matrices[0, :3, 3], [5, 0, 0])
     scene.remove(g)
     assert scene.batches() == []
+
+
+SCULPT = '''
+from valo import meshes
+
+TRANSFORM = {"translate": [0.0, 0.0, 1.0]}
+
+
+def mesh(size: float = 0.5, tall: bool = False):
+    """A box."""
+    return meshes.cube(2 * size if tall else size)
+'''
+
+
+def test_settings_round_trip_rebuilds_the_identical_image(scene, tmp_path):
+    from valo import Group, InstancedObject, MeshObject, OrbitCamera, ProceduralGroup, Scene, Shape, Transform, render
+
+    path = tmp_path / "box.py"
+    path.write_text(SCULPT, encoding="utf-8")
+    scene.material("Gold", "pbr", base_color=(1.0, 0.71, 0.29), metallic=1.0, roughness=0.37)
+    g = scene.add(Group("G", transform=Transform((0.5, 0, 0), (0, 0, 30))))
+    scene.add(cube("A", 0.7, transform=Transform(scale=(1, 2, 1))), parent=g)
+    scene.add(cube("Hidden", visible=False), parent=g)
+    scene.add(InstancedObject("Row", Shape(meshes.sphere, {"r": 0.3}), "Gold",
+                              np.stack([transform_matrix((x, -1, 0)) for x in (-1, 0, 1)])))
+    scene.add(ProceduralGroup("Ring", ring, {"n": 5}))
+    box = Shape(path, {"size": 0.4})
+    assert [p.name for p in box.specs] == ["size", "tall"]
+    assert np.isclose(box.build().positions[:, 2].min(), 0.8)  # the file's TRANSFORM is baked in
+    scene.add(MeshObject("Box", box, "Gold"))
+    d = scene.settings()
+    assert "children" not in d["nodes"][2] and d["nodes"][3]["shape"]["func"] == str(path)
+
+    again = Scene.from_settings(d)
+    assert again.settings() == d
+    cam = OrbitCamera(distance=8.0, elevation=30.0)
+    assert np.array_equal(render(scene, size=(160, 120), camera=cam), render(again, size=(160, 120), camera=cam))
+
+
+def test_unknown_kinds_and_unimportable_functions_are_reported():
+    from valo.scene import node_from_settings, reference, resolve
+
+    assert resolve("valo.meshes.primitives:sphere") is meshes.sphere
+    assert reference(meshes.sphere) == "valo.meshes.primitives:sphere"
+    with pytest.raises(ValueError, match="not importable"):
+        reference(lambda: None)
+    with pytest.raises(ValueError, match="unknown node kind"):
+        node_from_settings({"kind": "light", "name": "L"})

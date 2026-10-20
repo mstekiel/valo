@@ -53,6 +53,14 @@ KIND_ICONS = {"group": ICON.FOLDER, "procedural": ICON.GEARS, "mesh": ICON.CUBE,
 DRAG_TYPE = "valo-node"
 
 
+def shape_error(trace: str, path) -> str:
+    """A traceback cut to what concerns shape file ``path``: from its last frame (or the error line) to the end."""
+    lines = trace.rstrip("\n").splitlines()
+    name = Path(path).name
+    starts = [i for i, line in enumerate(lines) if line.lstrip().startswith("File ") and name in line]
+    return "\n".join(line.removeprefix("  ") for line in (lines[starts[-1]:] if starts else lines[-1:]))
+
+
 class SceneEditor(Editor):
     """Editor of a Scene's objects and material library, with undo for every action."""
 
@@ -379,7 +387,7 @@ class SceneEditor(Editor):
             obj.rebuild_mesh()
         except Exception:
             obj.shape.mtime = Path(obj.shape.source).stat().st_mtime  # retry only after the next change
-            self.errors[obj.name] = traceback.format_exc(limit=-3)
+            self.errors[obj.name] = shape_error(traceback.format_exc(), obj.shape.source)
             return
         self.errors.pop(obj.name, None)
 

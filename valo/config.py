@@ -147,6 +147,8 @@ class UIConfig(Section):
     accent: tuple = opt((66, 133, 244), "Accent colour", 0, 255, "sRGB 0-255")
     right_column: float = opt(0.3, "Right column width", 0.1, 0.7, "share")
     bottom_share: float = opt(0.42, "Lower dock height", 0.1, 0.9, "share")
+    left_column: float = opt(0.34, "Left column width", 0.1, 0.6, "share",
+                             help="Apps with a left column (the studio's code editor)")
     window_background: tuple = opt((0.12, 0.12, 0.13), "Window background", 0.0, 1.0, "sRGB 0-1",
                                    help="around the 3D view, behind the panels")
     compass: bool = opt(True, "Compass", help="axis gizmo in a corner of the 3D view")

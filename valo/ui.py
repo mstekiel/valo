@@ -38,6 +38,8 @@ class Editor:
     right_column: float | None = None  # share of the window width for the right dock column (None: rc.ui)
     dock_bottom: tuple[str, ...] = ()  # app windows docked under the right column, before the shared ones
     bottom_share: float | None = None  # height share of that lower part (None: rc.ui)
+    dock_left: tuple[str, ...] = ()  # app windows docked in a left column (e.g. a code editor), tabbed
+    left_column: float | None = None  # share of the window width for that left column (None: rc.ui)
 
     def __init__(self):
         self.undo_stack = UndoStack()
@@ -401,17 +403,24 @@ class Editor:
             imgui.end()
 
     def build_layout(self, dock_id: int, names: list[str]) -> None:
-        """The default layout: a right column of tabbed app windows; ``dock_bottom`` and shared windows below."""
+        """The default layout: a right column of tabbed app windows, ``dock_bottom`` and shared windows below them,
+        and ``dock_left`` windows (if any) in a left column."""
         internal.dock_builder_remove_node(dock_id)
         internal.dock_builder_add_node(
             dock_id, imgui.DockNodeFlags_.passthru_central_node | internal.DockNodeFlagsPrivate_.dock_space)
         viewport = imgui.get_main_viewport()
         internal.dock_builder_set_node_size(dock_id, viewport.work_size)
         column, lower = self.right_column or rc.ui.right_column, self.bottom_share or rc.ui.bottom_share
-        _, right, _ = internal.dock_builder_split_node_py(dock_id, imgui.Dir.right, column)
+        left, rest = None, dock_id
+        if any(name in self.dock_left for name in names):
+            share = self.left_column or rc.ui.left_column
+            _, left, rest = internal.dock_builder_split_node_py(dock_id, imgui.Dir.left, share)
+            column = min(column / (1 - share), 0.9)  # the right column's share of what is left
+        _, right, _ = internal.dock_builder_split_node_py(rest, imgui.Dir.right, column)
         _, bottom, top = internal.dock_builder_split_node_py(right, imgui.Dir.down, lower)
         for name in names:
-            internal.dock_builder_dock_window(name, bottom if self._in_bottom(name) else top)
+            target = left if name in self.dock_left else (bottom if self._in_bottom(name) else top)
+            internal.dock_builder_dock_window(name, target)
         internal.dock_builder_finish(dock_id)
 
     def reset_layout(self) -> None:

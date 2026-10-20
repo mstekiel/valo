@@ -704,3 +704,25 @@ def test_an_error_in_a_window_is_reported_and_later_frames_still_work(viewer):
     editor.fail, viewer.gui_error = False, None
     viewer.snapshot()  # ImGui recovered: no "Missing End()" from here on
     assert viewer.gui_error is None and open_every_menu(viewer) >= 3
+
+
+def test_dock_left_windows_sit_left_of_the_scene(viewer):
+    from imgui_bundle import imgui
+    from imgui_bundle.imgui import internal
+
+    from valo import Editor
+
+    class Wide(Editor):
+        dock_left = ("Code",)
+
+        def windows(self):
+            return {"Tree": lambda: None, "Code": lambda: None}
+
+    editor = Wide()
+    viewer.show(SimpleNamespace(batches=list), editor)
+    editor.reset_layout()  # the shared viewer kept an earlier editor's layout
+    viewer.snapshot()
+    imgui.set_current_context(viewer.imgui.imgui_context)
+    x, _, w, _ = editor.scene_rect
+    code, tree = (internal.find_window_by_name(n) for n in ("Code", "Tree"))
+    assert code.pos.x + code.size.x <= x + 1 and tree.pos.x >= x + w - 1  # left and right of the 3D view

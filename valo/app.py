@@ -6,11 +6,13 @@ from __future__ import annotations
 
 import re
 import time
+import traceback
 from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
 from imgui_bundle import imgui
+from imgui_bundle.imgui import internal
 from wgpu.utils.imgui import ImguiRenderer
 
 from .config import rc
@@ -61,6 +63,7 @@ class Viewer:
         self.selection = None  # Pick chosen by a click, or None
         self.highlighted: list = []  # Instances tinted whole, like a selection (e.g. a scene editor's selected group)
         self._last_click = None  # (time, x, y) of the last click, for double-click
+        self.gui_error: str | None = None  # traceback of the last exception in the editor's gui (it was recovered)
         self._last_frame = time.perf_counter()
         canvas.add_event_handler(self.on_pointer, "pointer_down", "pointer_move", "pointer_up", "wheel")
         canvas.add_event_handler(self._on_close, "close")
@@ -72,9 +75,38 @@ class Viewer:
         self.scene, self.editor = scene, editor
         if editor:
             editor.viewer = self
-            self.imgui.set_gui(editor.gui)
+            self.imgui.set_gui(self._gui)
         if hasattr(scene, "bounding_radius"):
             self.camera.fit(scene.bounding_radius())
+
+    def _gui(self) -> None:
+        """The editor's gui, recovered if it raises: the error is printed and kept in ``gui_error``, and ImGui's
+        unfinished windows / menus are closed, so one broken widget doesn't freeze every later frame."""
+        state = internal.ErrorRecoveryState()
+        internal.error_recovery_store_state(state)
+        try:
+            self.editor.gui()
+        except Exception:
+            error = traceback.format_exc()
+            if error != self.gui_error:
+                print(error)
+            self.gui_error = error
+            io = imgui.get_io()
+            saved = io.config_error_recovery_enable_assert, io.config_error_recovery_enable_debug_log
+            io.config_error_recovery_enable_assert = io.config_error_recovery_enable_debug_log = False  # printed above
+            try:
+                internal.error_recovery_try_to_recover_state(state)
+            finally:
+                io.config_error_recovery_enable_assert, io.config_error_recovery_enable_debug_log = saved
+
+    def ui_click(self, x: float, y: float, button: int = 0) -> None:
+        """Click the ImGui layer at (x, y) logical pixels: press and release, one frame each (tests, demos)."""
+        imgui.set_current_context(self.imgui.imgui_context)
+        io = imgui.get_io()
+        io.add_mouse_pos_event(x, y)
+        for down in (True, False):
+            io.add_mouse_button_event(button, down)
+            self.canvas.draw()
 
     def run(self) -> None:
         """Open the window and run the event loop until it is closed."""

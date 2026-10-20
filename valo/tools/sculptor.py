@@ -234,9 +234,9 @@ class SculptorEditor(Editor):
 
     def file_menu(self) -> None:
         """File menu items: reload the sculpt file, save to the library."""
-        if imgui.menu_item(f"{ICON.ARROWS_ROTATE} Reload sculpt file")[0]:
+        if imgui.menu_item_simple(f"{ICON.ARROWS_ROTATE} Reload sculpt file"):
             self.reload()
-        if imgui.menu_item(f"{ICON.FLOPPY_DISK} Save to library as '{self.save_name}'")[0]:
+        if imgui.menu_item_simple(f"{ICON.FLOPPY_DISK} Save to library as '{self.save_name}'"):
             self._save_clicked()
 
     def _save_clicked(self) -> None:

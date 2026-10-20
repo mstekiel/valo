@@ -454,7 +454,7 @@ class Editor:
                     if imgui.menu_item(f"{s:.0%}", "", s == self.ui_scale)[0]:
                         self.set_ui_scale(s)
                 imgui.end_menu()
-            if imgui.menu_item(f"{ICON.TABLE_COLUMNS} Reset layout")[0]:
+            if imgui.menu_item_simple(f"{ICON.TABLE_COLUMNS} Reset layout"):
                 self.reset_layout()
             imgui.separator()
             if imgui.menu_item(f"{ICON.GEAR} Preferences", "", self.show_preferences)[0]:

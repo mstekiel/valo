@@ -638,3 +638,69 @@ def test_compass_turns_with_the_camera_and_draws_in_its_corner(viewer):
     changed = np.abs(drawn - plain).max(-1) > 20
     h, w = changed.shape
     assert changed[h // 2 :, : w // 3].sum() > 30 and not changed[: h // 2].any()  # only bottom-left
+
+
+def open_every_menu(viewer) -> int:
+    """Click along the menu bar, closing each menu again; returns how many clicks opened one."""
+    from imgui_bundle import imgui
+
+    viewer.snapshot()
+    x, y, w, h = viewer.editor.scene_rect
+    opened, viewer.gui_error = 0, None
+    for mx in range(4, 240, 6):
+        viewer.ui_click(mx, 10)
+        imgui.set_current_context(viewer.imgui.imgui_context)
+        opened += imgui.is_popup_open("", imgui.PopupFlags_.any_popup_id)
+        viewer.ui_click(x + w / 2, y + h / 2)  # click into the scene: closes the menu
+    return opened
+
+
+def menu_editor(kind, viewer, tmp_path):
+    import shutil
+
+    from valo import Editor, MeshObject, Scene, SceneEditor, Shape, meshes
+
+    if kind == "editor":
+        viewer.show(SimpleNamespace(batches=list), Editor())
+    elif kind == "scene editor":
+        scene = Scene()
+        scene.material("M", "lambert")
+        scene.add(MeshObject("Cube", Shape(meshes.cube), "M"))
+        viewer.show(scene, SceneEditor(scene))
+    else:  # MeshSculptor: its own File items
+        from pathlib import Path
+
+        from valo.tools.sculptor import build
+
+        shutil.copy(Path(__file__).parents[1] / "examples" / "sculpts" / "vase.py", tmp_path / "vase.py")
+        build(viewer, tmp_path / "vase.py")
+
+
+@pytest.mark.parametrize("kind", ["editor", "scene editor", "sculptor"])
+def test_every_menu_opens_without_errors(viewer, tmp_path, kind):
+    menu_editor(kind, viewer, tmp_path)
+    assert open_every_menu(viewer) >= 3  # File, Edit, View
+    assert viewer.gui_error is None
+
+
+def test_an_error_in_a_window_is_reported_and_later_frames_still_work(viewer):
+    from valo import Editor
+
+    class Broken(Editor):
+        fail = True
+
+        def windows(self):
+            return {"Broken": self.broken}
+
+        def broken(self):
+            if self.fail:
+                raise RuntimeError("broken widget")
+
+    editor = Broken()
+    viewer.gui_error = None
+    viewer.show(SimpleNamespace(batches=list), editor)
+    viewer.snapshot()
+    assert "broken widget" in viewer.gui_error
+    editor.fail, viewer.gui_error = False, None
+    viewer.snapshot()  # ImGui recovered: no "Missing End()" from here on
+    assert viewer.gui_error is None and open_every_menu(viewer) >= 3

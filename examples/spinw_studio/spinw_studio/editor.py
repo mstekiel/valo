@@ -68,7 +68,7 @@ PLOT_OPTIONS = {py_literal(self.plot_options())}
         return {"File": self._file_menu}
 
     def _file_menu(self) -> None:
-        if imgui.menu_item(f"{ICON.FILE_EXPORT} Export plot options...")[0]:
+        if imgui.menu_item_simple(f"{ICON.FILE_EXPORT} Export plot options..."):
             self.export_plot_options()
 
     # -- compass: the crystal axes next to x, y, z

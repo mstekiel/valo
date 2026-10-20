@@ -294,3 +294,34 @@ def test_a_click_in_the_3d_view_selects_the_object(viewer):
     viewer.snapshot()
     assert editor.selected is None and viewer.highlighted == []
     viewer.pointer, viewer._last_click = None, None
+
+
+def test_shapes_from_sculpt_files_reload_when_the_file_changes(viewer, tmp_path):
+    import os
+
+    from valo import rc_context
+
+    scene, editor = edited_scene(viewer)
+    path = tmp_path / "box.py"
+    path.write_text(SCULPT, encoding="utf-8")
+    box = editor.add_shape(path)
+    editor.set_shape_param(box, "size", 0.8)
+    mesh = box.instances.mesh
+
+    def change(text, step):
+        path.write_text(text, encoding="utf-8")
+        os.utime(path, (path.stat().st_atime, path.stat().st_mtime + step))  # filesystems with coarse mtimes
+        editor._polled = 0.0
+        with rc_context({"sculptor.poll_s": 0.05}):
+            editor.poll()
+
+    change(SCULPT.replace("2 * size if tall else size", "3 * size"), 10)
+    assert box.instances.mesh is not mesh and box.shape.params == {"size": 0.8, "tall": False}  # values kept
+    width = lambda: np.ptp(box.shape.build().positions[:, 0])  # noqa: E731
+    assert np.isclose(width(), 3 * 0.8)
+    good = box.instances.mesh
+    change("def mesh(:\n", 20)
+    assert "SyntaxError" in editor.errors["Box"] and box.instances.mesh is good  # the last good mesh stays
+    change(SCULPT, 30)
+    assert "Box" not in editor.errors and np.isclose(width(), 0.8) and box.instances.mesh is not good
+    assert len(editor.undo_stack.done) == 2  # add and set_shape_param; reloads are not edits

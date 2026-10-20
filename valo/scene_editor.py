@@ -17,9 +17,14 @@ Selection (``select``) is not an edit and is not recorded.
 
 from __future__ import annotations
 
+import time
+import traceback
+from pathlib import Path
+
 from imgui_bundle import imgui
 
 from . import meshes
+from .config import rc
 from .meshes import library
 from .meshes.check import check
 from .meshes.params import ShapeParam
@@ -59,6 +64,8 @@ class SceneEditor(Editor):
         self._last_pick = None  # the viewer's selection last frame: a new 3D click selects its object
         self._renaming: tuple[Node, str] | None = None
         self._reports: dict[int, tuple] = {}  # id(object) → (gpu mesh, MeshReport), made again after a change
+        self.errors: dict[str, str] = {}  # object name → traceback of its sculpt file's last failed reload
+        self._polled = 0.0
         for m in scene.materials.values():
             self.watch(m)
 
@@ -282,7 +289,31 @@ class SceneEditor(Editor):
             if pick is None or owner is not None:
                 self.select(owner)
                 self.viewer.selection = pick  # keep the clicked instance for the Info window
+        self.poll()
         super().gui()
+
+    # -- hot reload (a file change is not an edit: not recorded for undo)
+    def poll(self) -> None:
+        """Every ``rc.sculptor.poll_s`` seconds, reload the shapes whose sculpt files changed on disk."""
+        now = time.monotonic()
+        if now - self._polled < rc.sculptor.poll_s:
+            return
+        self._polled = now
+        for obj in self.scene.objects():
+            if obj.shape.stale():
+                self.reload_shape(obj)
+
+    def reload_shape(self, obj: MeshObject) -> None:
+        """Re-read ``obj``'s sculpt file and rebuild its mesh; on an error keep the last good mesh and remember the
+        traceback in ``errors`` (shown in the Object window)."""
+        try:
+            obj.shape.reload()
+            obj.rebuild_mesh()
+        except Exception:
+            obj.shape.mtime = Path(obj.shape.source).stat().st_mtime  # retry only after the next change
+            self.errors[obj.name] = traceback.format_exc(limit=-3)
+            return
+        self.errors.pop(obj.name, None)
 
     def _insert_parent(self) -> Group:
         """Where "+ Add" puts a node: into the selected group, next to the selected object, or at the root."""
@@ -414,6 +445,11 @@ class SceneEditor(Editor):
         imgui.text(f"{KIND_ICONS.get(node.kind, '')} {node.name}")
         imgui.same_line()
         imgui.text_disabled(node.kind)
+        if node.name in self.errors:
+            imgui.push_style_color(imgui.Col_.text, imgui.ImVec4(1.0, 0.45, 0.4, 1.0))
+            imgui.text_wrapped(self.errors[node.name])
+            imgui.pop_style_color()
+            imgui.text_disabled("showing the last good mesh")
         if isinstance(node, MeshObject):
             imgui.separator_text(f"Shape: {node.shape.name}")
             for p in node.shape.specs:

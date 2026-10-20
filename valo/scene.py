@@ -109,8 +109,9 @@ class Shape:
         if isinstance(self.source, (str, Path)) and str(self.source).endswith(".py"):
             from .meshes.sculpt import Sculpt
 
+            mtime = Path(self.source).stat().st_mtime  # before reading: a write during the read shows next time
             self.sculpt = Sculpt.load(self.source)
-            self.func, self.specs = self.sculpt.build, self.sculpt.params
+            self.func, self.specs, self.mtime = self.sculpt.build, self.sculpt.params, mtime
         else:
             self.func = resolve(self.source)
             self.specs: list[ShapeParam] = shape_params(self.func)
@@ -126,6 +127,13 @@ class Shape:
         if not isinstance(data, MeshData):
             raise TypeError(f"{self.name} returned {type(data).__name__}, expected MeshData")
         return data
+
+    def stale(self) -> bool:
+        """True when the shape's sculpt file changed on disk since it was read (always False for functions)."""
+        try:
+            return self.sculpt is not None and Path(self.source).stat().st_mtime != self.mtime
+        except OSError:
+            return False
 
     def reload(self) -> None:
         """Re-read a sculpt file; parameters that still exist (same kind) keep their values."""

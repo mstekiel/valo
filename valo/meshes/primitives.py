@@ -114,5 +114,14 @@ def arrow(shaft_r: float = 0.15, head_r: float = 0.5, head_len: float = 0.35, se
                      (shaft_r, zh, 0, -1), (head_r, zh, 0, -1), (head_r, zh, nr, nz), (0, 1, nr, nz)], segments)
 
 
+# Slider ranges for the shape parameters (read by meshes.params.shape_params); resolutions start at 3.
+sphere.ranges = {"n_lat": (3, 128), "n_lon": (3, 256), "r": (0.01, 5.0)}
+icosphere.ranges = {"subdivisions": (0, 5), "r": (0.01, 5.0)}
+cube.ranges = plane.ranges = {"size": (0.01, 10.0)}
+cylinder.ranges = cone.ranges = {"segments": (3, 128), "r": (0.01, 5.0), "h": (0.01, 10.0)}
+torus.ranges = {"major": (0.01, 5.0), "minor": (0.005, 2.0), "nu": (3, 256), "nv": (3, 128)}
+capsule.ranges = {"r": (0.01, 2.0), "length": (0.02, 10.0), "segments": (3, 128), "rings": (1, 64)}
+arrow.ranges = {"shaft_r": (0.01, 0.5), "head_r": (0.02, 1.0), "head_len": (0.05, 0.9), "segments": (3, 128)}
+
 STANDARD = {"sphere": sphere, "icosphere": icosphere, "cube": cube, "cylinder": cylinder, "cone": cone,
             "torus": torus, "capsule": capsule, "arrow": arrow, "plane": plane}

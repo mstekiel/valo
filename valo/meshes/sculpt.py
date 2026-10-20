@@ -18,55 +18,28 @@ from __future__ import annotations
 
 import ast
 import importlib.util
-import inspect
 import itertools
 import json
-import math
-from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
 
-from ..geometry import rotate, scale, translate
+from .. import geometry
 from .data import MeshData
 from .ops import transform
+from .params import ShapeParam, shape_params
 
 IDENTITY = {"translate": [0.0, 0.0, 0.0], "rotate_deg": [0.0, 0.0, 0.0], "scale": [1.0, 1.0, 1.0]}
 _counter = itertools.count()
 
 
-@dataclass
-class ShapeParam:
-    """One parameter of a sculpt's ``mesh()``: name, widget kind, default and slider range."""
-    name: str
-    kind: str  # "float" | "int" | "bool" → decides the widget
-    default: float | int | bool
-    lo: float = 0.0
-    hi: float = 1.0
+__all__ = ["IDENTITY", "Sculpt", "ShapeParam", "transform_matrix"]
 
 
 def transform_matrix(t: dict) -> np.ndarray:
     """T · Rz · Ry · Rx · S from a TRANSFORM dict (rotations in degrees, applied x, then y, then z)."""
     t = {**IDENTITY, **(t or {})}
-    rx, ry, rz = (math.radians(a) for a in t["rotate_deg"])
-    return (translate(*t["translate"]) @ rotate((0, 0, 1), rz) @ rotate((0, 1, 0), ry)
-            @ rotate((1, 0, 0), rx) @ scale(*t["scale"]))
-
-
-def _kind(annotation, default) -> str:
-    for kind, typ in (("bool", bool), ("int", int), ("float", float)):  # bool first: it's an int too
-        if annotation is typ or annotation == typ.__name__ or (annotation is inspect.Parameter.empty
-                                                                and type(default) is typ):
-            return kind
-    raise TypeError(f"unsupported parameter type {annotation!r} (use float, int or bool)")
-
-
-def _default_range(kind: str, d) -> tuple[float, float]:
-    if kind == "int":
-        return min(1, d), max(4, 4 * d)
-    if kind == "float":
-        return (0.0, 2 * d) if d > 0 else ((2 * d, 0.0) if d < 0 else (-1.0, 1.0))
-    return 0, 1
+    return geometry.transform_matrix(t["translate"], t["rotate_deg"], t["scale"])
 
 
 def _literal(v) -> str:
@@ -95,14 +68,7 @@ class Sculpt:
         self.func = getattr(module, "mesh", None)
         if not callable(self.func):
             raise AttributeError(f"{path.name} has no mesh(...) function")
-        ranges = getattr(module, "RANGES", {})
-        self.params: list[ShapeParam] = []
-        for p in inspect.signature(self.func).parameters.values():
-            if p.default is inspect.Parameter.empty:
-                raise TypeError(f"parameter {p.name!r} of mesh() needs a default value")
-            kind = _kind(p.annotation, p.default)
-            lo, hi = ranges.get(p.name, _default_range(kind, p.default))
-            self.params.append(ShapeParam(p.name, kind, p.default, lo, hi))
+        self.params: list[ShapeParam] = shape_params(self.func, getattr(module, "RANGES", {}))
         self.material: dict | None = getattr(module, "MATERIAL", None)
         self.transform: dict = {**IDENTITY, **getattr(module, "TRANSFORM", {})}
 

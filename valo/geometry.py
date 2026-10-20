@@ -62,6 +62,13 @@ def pack_mat4(m):
     return np.ascontiguousarray(np.swapaxes(np.asarray(m, np.float32), -1, -2))
 
 
+def transform_matrix(translation=(0.0, 0.0, 0.0), rotation_deg=(0.0, 0.0, 0.0), scaling=(1.0, 1.0, 1.0)) -> np.ndarray:
+    """T · Rz · Ry · Rx · S: scale, then rotate about x, y, z in turn (degrees), then translate. (4, 4) float32."""
+    rx, ry, rz = (math.radians(float(a)) for a in rotation_deg)
+    return (translate(*translation) @ rotate((0, 0, 1), rz) @ rotate((0, 1, 0), ry) @ rotate((1, 0, 0), rx)
+            @ scale(*scaling))
+
+
 def instance_matrices(positions, scale=1.0, z_axis=None) -> np.ndarray:
     """(N, 4, 4) model matrices M = T · R · S, one per position.
 

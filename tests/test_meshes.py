@@ -209,3 +209,36 @@ def test_library_material_comes_from_the_saved_preset(tmp_path, monkeypatch):
     assert library.names() == ["blob", "plain"]
     with pytest.raises(KeyError):
         library.load("missing")
+
+
+@pytest.mark.parametrize("name", list(meshes.STANDARD))
+def test_every_primitive_has_editable_parameters_with_sane_ranges(name):
+    from valo.meshes.params import shape_params
+
+    params = shape_params(meshes.STANDARD[name])
+    assert params and all(p.kind in ("float", "int") and p.lo <= p.default <= p.hi for p in params)
+    assert all(p.lo >= 3 for p in params if p.kind == "int" and p.name in ("segments", "n_lat", "n_lon", "nu", "nv"))
+
+
+def test_shape_params_need_defaults_and_simple_types():
+    from valo.meshes.params import shape_params
+
+    def ok(a: float = 1.0, n: int = 4, flag: bool = True, untyped=0.5):
+        pass
+
+    assert [(p.name, p.kind) for p in shape_params(ok)] == [("a", "float"), ("n", "int"), ("flag", "bool"),
+                                                             ("untyped", "float")]
+    with pytest.raises(TypeError, match="needs a default"):
+        shape_params(lambda x: x)
+    with pytest.raises(TypeError, match="unsupported"):
+        shape_params(lambda s="text": s)
+
+
+def test_transform_matrix_is_scale_then_rotate_then_translate():
+    from valo.geometry import transform_matrix
+    from valo.meshes.sculpt import transform_matrix as from_dict
+
+    m = transform_matrix((1, 2, 3), (0, 0, 90), (2, 1, 1))
+    assert np.allclose(m @ [1, 0, 0, 1], [1, 4, 3, 1])  # x scaled to 2, turned onto +y, moved
+    t = {"translate": [1, 2, 3], "rotate_deg": [10, 20, 30], "scale": [1, 2, 3]}
+    assert np.allclose(from_dict(t), transform_matrix(t["translate"], t["rotate_deg"], t["scale"]))

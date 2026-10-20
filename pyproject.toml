@@ -17,7 +17,6 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project.scripts]
-valo-sculpt = "valo.tools.sculptor:main"
 valo-config = "valo.config:main"
 valo-studio = "valo.studio:main"
 
@@ -30,7 +29,7 @@ select = ["E", "F", "I", "B", "UP", "D1"]  # D1: every public module, class and 
 ignore = ["D105", "D107"]  # magic methods and __init__ (the class docstring covers it)
 
 [tool.ruff.lint.per-file-ignores]
-"valo/meshes/library/*.py" = ["E501", "D103"]  # written by MeshSculptor from your sculpt file
+"data/procedural_meshes/*.py" = ["E501", "D103"]  # written by the studio's Save to library from your shape file
 "tests/*.py" = ["D103"]  # test names say what they check
 "examples/**/test_*.py" = ["D103"]
 

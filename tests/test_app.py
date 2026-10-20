@@ -656,7 +656,6 @@ def open_every_menu(viewer) -> int:
 
 
 def menu_editor(kind, viewer, tmp_path):
-    import shutil
 
     from valo import Editor, MeshObject, Scene, SceneEditor, Shape, meshes
 
@@ -667,16 +666,9 @@ def menu_editor(kind, viewer, tmp_path):
         scene.material("M", "lambert")
         scene.add(MeshObject("Cube", Shape(meshes.cube), "M"))
         viewer.show(scene, SceneEditor(scene))
-    else:  # MeshSculptor: its own File items
-        from pathlib import Path
-
-        from valo.tools.sculptor import build
-
-        shutil.copy(Path(__file__).parents[1] / "examples" / "sculpts" / "vase.py", tmp_path / "vase.py")
-        build(viewer, tmp_path / "vase.py")
 
 
-@pytest.mark.parametrize("kind", ["editor", "scene editor", "sculptor"])
+@pytest.mark.parametrize("kind", ["editor", "scene editor"])  # the studio's menus: tests/test_valo_studio.py
 def test_every_menu_opens_without_errors(viewer, tmp_path, kind):
     menu_editor(kind, viewer, tmp_path)
     assert open_every_menu(viewer) >= 3  # File, Edit, View

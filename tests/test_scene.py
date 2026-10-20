@@ -123,6 +123,61 @@ def test_procedural_group_builds_children_from_its_parameters(scene):
     assert scene.batches() == []
 
 
+def labelled_points(group, spread: float = 1.0):
+    """A builder using a context: a locked group of one instanced object per label in ``group.context``."""
+    from valo import Group, InstancedObject, Shape
+
+    points = group.add(Group("Points", locked=True))
+    for label, xs in group.context.items():
+        points.add(InstancedObject(label, Shape(meshes.sphere, {"r": 0.1}), "Matte",
+                                   np.stack([transform_matrix((spread * x, 0, 0)) for x in xs]), locked=True,
+                                   info=lambda i, lb=label: {"Label": lb, "i": str(i)}))
+
+
+def test_a_rebuild_keeps_its_children_and_the_users_edits(scene):
+    from valo import ProceduralGroup, Transform
+
+    scene.material("Gold", "pbr")
+    g = scene.add(ProceduralGroup("Ring", ring, {"n": 4}))
+    bead, moved, gone = scene.find("Bead 2"), scene.find("Bead 3"), scene.find("Bead 4")
+    bead.set_material("Gold")
+    bead.visible = False
+    bead.shape.params["size"] = 0.5
+    moved.transform = Transform((0, 0, 3))
+    g.params.update(n=3, radius=5.0)
+    g.rebuild()
+    assert [c.name for c in g.children] == ["Bead", "Bead 2", "Bead 3"] and gone.scene is None
+    assert scene.find("Bead 2") is bead and scene.find("Bead 3") is moved  # the same nodes: undo and selection hold
+    assert bead.material == "Gold" and not bead.visible and bead.shape.params["size"] == 0.5  # the user's edits
+    assert np.allclose(bead.instances.matrices[0, :3, 3], [5 * np.cos(2 * np.pi / 3), 5 * np.sin(2 * np.pi / 3), 0])
+    assert np.allclose(moved.instances.matrices[0, :3, 3], [0, 0, 3])  # an edited transform stays
+    assert scene.find("Bead").shape.params["size"] == 0.2
+
+
+def test_procedural_groups_take_ranges_a_context_and_info(scene):
+    from valo import ProceduralGroup
+
+    data = {"Fe": [0, 1], "O": [0.5]}
+    g = scene.add(ProceduralGroup("Pts", labelled_points, {"spread": 2.0}, ranges={"spread": (0.5, 8.0)},
+                                  context=data, locked=True))
+    assert (g.specs[0].lo, g.specs[0].hi) == (0.5, 8.0) and g.locked and scene.find("Fe").locked
+    fe = scene.find("Fe")
+    assert np.allclose(fe.instances.matrices[:, 0, 3], [0, 2])
+    rows = fe.info(1)
+    assert rows["Object"] == "Fe" and (rows["Label"], rows["i"]) == ("Fe", "1")  # object rows, then the hook
+    data["Fe"].append(2)
+    g.rebuild()
+    assert scene.find("Fe") is fe and fe.instances.count == 3  # computed data flows in
+    with pytest.raises(ValueError, match="context"):
+        scene.settings()
+    scene.remove(g)
+    from valo.scene import node_from_settings
+
+    ranged = scene.add(ProceduralGroup("Ring", ring, ranges={"radius": (1.0, 9.0)}, locked=True))
+    again = node_from_settings(ranged.settings())
+    assert again.locked and (again.specs[1].lo, again.specs[1].hi) == (1.0, 9.0)
+
+
 SCULPT = '''
 from valo import Transform, meshes
 

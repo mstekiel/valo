@@ -148,12 +148,17 @@ class Shape:
 
 
 class Node:
-    """A node of the scene tree: name, visibility, a transform relative to its parent, and children."""
+    """A node of the scene tree: name, visibility, a transform relative to its parent, and children.
+
+    A ``locked`` node is part of an app's fixed structure: the editor can hide it but not delete, rename, duplicate
+    or move it.
+    """
 
     kind = "node"
 
-    def __init__(self, name: str, *, visible: bool = True, transform: Transform | None = None):
-        self.name, self.visible = name, visible
+    def __init__(self, name: str, *, visible: bool = True, transform: Transform | None = None,
+                 locked: bool = False):
+        self.name, self.visible, self.locked = name, visible, locked
         self.transform = transform or Transform()
         self.parent: Node | None = None
         self.children: list[Node] = []
@@ -180,9 +185,30 @@ class Node:
     def settings(self) -> dict:
         """The node and its subtree as plain data (``node_from_settings`` rebuilds it)."""
         d = {"kind": self.kind, "name": self.name, "visible": self.visible, "transform": self.transform.settings()}
+        if self.locked:
+            d["locked"] = True
         if self.children:
             d["children"] = [c.settings() for c in self.children]
         return d
+
+    def editable(self) -> dict:
+        """The properties a user can edit and a builder can set: visibility and transform."""
+        return {"visible": self.visible, "transform": self.transform.settings()}
+
+    def _take(self, key: str, fresh: Node) -> None:
+        setattr(self, key, getattr(fresh, key))
+
+    def adopt(self, fresh: Node) -> None:
+        """Become ``fresh``, this node's rebuilt twin, except for the edits the user made: an ``editable()`` property
+        stays as it is only when it differs from what the builder gave last time."""
+        self.locked = fresh.locked
+        built, mine, theirs = getattr(self, "_built", {}), self.editable(), fresh.editable()
+        for key, value in theirs.items():
+            if key in built and mine[key] != built[key]:
+                continue  # edited by the user: keep it
+            if mine[key] != value:
+                self._take(key, fresh)
+        self._built = theirs
 
     def __repr__(self):
         return f"{type(self).__name__}({self.name!r})"
@@ -201,20 +227,26 @@ class Group(Node):
 
 
 class ProceduralGroup(Group):
-    """A group whose children ``builder(group, **params)`` creates; changing a parameter rebuilds them all.
+    """A group whose children ``builder(group, **params)`` creates; changing a parameter rebuilds them.
 
     ``builder`` is a callable or a ``"module:function"`` path; its parameters after the first (the group) are the
-    group's editable parameters, read like shape parameters. The children are not saved with the scene: they are
-    rebuilt from the parameters.
+    group's editable parameters, read like shape parameters (``ranges`` overrides their slider ranges).
+    ``context`` is any object the builder needs besides the parameters (``group.context``, e.g. an app's data
+    source); a group with one can't be saved. The children are not saved: they are rebuilt from the parameters.
+
+    A rebuild keeps the children it makes again: a new child with the same name path and type as an old one is
+    replaced by that old node, which keeps the user's edits (visibility, material, shape, transform) and takes only
+    what the builder computes (``Node.adopt``: instance matrices, info). So selection and undo history stay valid.
     """
 
     kind = "procedural"
 
-    def __init__(self, name: str, builder, params: dict | None = None, **kw):
+    def __init__(self, name: str, builder, params: dict | None = None, *, ranges: dict | None = None,
+                 context=None, **kw):
         super().__init__(name, **kw)
-        self.builder = builder
+        self.builder, self.context, self.ranges = builder, context, dict(ranges or {})
         self.func = resolve(builder)
-        self.specs = shape_params(self.func, skip=1)
+        self.specs = shape_params(self.func, self.ranges, skip=1)
         unknown = set(params or {}) - {p.name for p in self.specs}
         if unknown:
             raise KeyError(f"unknown parameters {sorted(unknown)} for builder {self.func.__name__}")
@@ -222,15 +254,43 @@ class ProceduralGroup(Group):
 
     def settings(self) -> dict:
         """The group, its builder and parameters; not the children (they are rebuilt)."""
+        if self.context is not None:
+            raise ValueError(f"{self.name} builds from a context object, so it can't be saved as plain data")
         d = super().settings()
         d.pop("children", None)
-        return {**d, "builder": reference(self.builder), "params": dict(self.params)}
+        d = {**d, "builder": reference(self.builder), "params": dict(self.params)}
+        if self.ranges:
+            d["ranges"] = {k: list(v) for k, v in self.ranges.items()}
+        return d
+
+    def _paths(self, node: Node, prefix: tuple = ()):
+        for c in node.children:
+            yield prefix + (c.name,), c
+            yield from self._paths(c, prefix + (c.name,))
 
     def rebuild(self) -> None:
-        """Remove the children and let the builder make them again from the current parameters."""
+        """Let the builder make the children again from the current parameters, keeping the ones it remakes."""
+        old = dict(self._paths(self))
         for child in list(self.children):
             self.scene.remove(child)
         self.func(self, **self.params)
+        self._reconcile(self, (), old)
+        self.scene.refresh(self)
+
+    def _reconcile(self, parent: Node, prefix: tuple, old: dict) -> None:
+        for i, fresh in enumerate(list(parent.children)):
+            path = prefix + (fresh.name,)
+            twin = old.get(path)
+            node = fresh
+            if twin is None or type(twin) is not type(fresh):
+                fresh._built = fresh.editable()  # what the builder gave: later rebuilds compare edits to it
+            else:
+                twin.adopt(fresh)
+                twin.children, twin.parent, twin.scene = fresh.children, parent, parent.scene
+                for c in twin.children:
+                    c.parent = twin
+                parent.children[i] = node = twin
+            self._reconcile(node, path, old)
 
 
 class MeshObject(Node):
@@ -238,9 +298,10 @@ class MeshObject(Node):
 
     kind = "mesh"
 
-    def __init__(self, name: str, shape: Shape, material: str, **kw):
+    def __init__(self, name: str, shape: Shape, material: str, *, info=None, **kw):
+        """``info(i) -> dict`` (optional): extra Info rows for instance ``i``, after the object rows."""
         super().__init__(name, **kw)
-        self.shape, self.material = shape, material
+        self.shape, self.material, self.info_hook = shape, material, info
         self.instances: Instances | None = None  # made when the node joins a scene
 
     def attach(self, scene: Scene) -> None:
@@ -277,7 +338,27 @@ class MeshObject(Node):
     def info(self, i: int) -> dict:
         """Info rows: the object, its shape and parameters."""
         params = ", ".join(f"{k}={v:g}" if isinstance(v, float) else f"{k}={v}" for k, v in self.shape.params.items())
-        return {"Object": self.name, "Type": self.kind, "Shape": f"{self.shape.name}({params})"}
+        rows = {"Object": self.name, "Type": self.kind, "Shape": f"{self.shape.name}({params})"}
+        return {**rows, **self.info_hook(i)} if self.info_hook else rows
+
+    def editable(self) -> dict:
+        """Visibility, transform, material and shape (function and parameters)."""
+        source = self.shape.source if isinstance(self.shape.source, str) else self.shape.func
+        return {**super().editable(), "material": self.material, "shape": (source, dict(self.shape.params))}
+
+    def _take(self, key: str, fresh: Node) -> None:
+        if key == "material":
+            self.set_material(fresh.material)
+        elif key == "shape":
+            self.shape = fresh.shape
+            self.instances.mesh = fresh.instances.mesh
+        else:
+            super()._take(key, fresh)
+
+    def adopt(self, fresh: Node) -> None:
+        """Also take the rebuilt twin's info hook."""
+        super().adopt(fresh)
+        self.info_hook = fresh.info_hook
 
 
 class InstancedObject(MeshObject):
@@ -296,6 +377,11 @@ class InstancedObject(MeshObject):
     def settings(self) -> dict:
         """The object and its instance matrices (as nested lists)."""
         return {**super().settings(), "instances": self.matrices.tolist()}
+
+    def adopt(self, fresh: Node) -> None:
+        """Take the rebuilt twin's instance matrices too."""
+        super().adopt(fresh)
+        self.matrices = fresh.matrices
 
     def set_instances(self, matrices) -> None:
         """Replace the instance matrices (N, 4, 4) and upload."""
@@ -427,12 +513,13 @@ class Scene:
 
 def node_from_settings(d: dict) -> Node:
     """A node (with its subtree) from ``Node.settings()`` data; add it to a scene to draw it."""
-    kw = {"visible": d.get("visible", True), "transform": Transform(**d.get("transform", {}))}
+    kw = {"visible": d.get("visible", True), "transform": Transform(**d.get("transform", {})),
+          "locked": d.get("locked", False)}
     kind = d["kind"]
     if kind == "group":
         node = Group(d["name"], **kw)
     elif kind == "procedural":
-        return ProceduralGroup(d["name"], d["builder"], d.get("params"), **kw)
+        return ProceduralGroup(d["name"], d["builder"], d.get("params"), ranges=d.get("ranges"), **kw)
     elif kind == "mesh":
         node = MeshObject(d["name"], Shape(d["shape"]["func"], d["shape"].get("params")), d["material"], **kw)
     elif kind == "instances":

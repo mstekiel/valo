@@ -1,6 +1,6 @@
-"""SpinW studio's editor: valo's SceneEditor (Scene / Object / Materials windows, undo for everything) plus Export
-plot options and a compass with the crystal axes a, b, c. The Structure group's Object window is the parameters tab:
-lattice, extent and moment length."""
+"""SpinW studio's editor: the valo studio (Scene / Object / Materials / Code windows, undo for everything) plus
+Export plot options and a compass with the crystal axes a, b, c. The Structure group's Object window is the
+parameters tab: lattice, extent and moment length. Shapes of your own (File > New shape) can sit next to it."""
 
 from __future__ import annotations
 
@@ -10,13 +10,13 @@ from pathlib import Path
 import numpy as np
 from imgui_bundle import imgui
 
-from valo import ICON, Scene, SceneEditor, plain, py_literal
+from valo import ICON, Scene, StudioEditor, plain, py_literal
 
 from .scene import STRUCTURE, options, source_of
 
 
-class SpinwEditor(SceneEditor):
-    """The SceneEditor of a spinw_studio scene; starts with the Structure (its parameters) selected."""
+class SpinwEditor(StudioEditor):
+    """The studio for a spinw_studio scene; starts with the Structure (its parameters) selected."""
 
     title = "SpinW studio"
 
@@ -63,13 +63,12 @@ PLOT_OPTIONS = {py_literal(self.plot_options())}
         self.render_status = f"exported {path}"
         return path
 
-    def menus(self):
-        """A File menu item for exporting plot options (valo adds Render below it)."""
-        return {"File": self._file_menu}
-
-    def _file_menu(self) -> None:
+    def file_menu(self) -> None:
+        """The studio's File items plus Export plot options (valo adds Render below them)."""
         if imgui.menu_item_simple(f"{ICON.FILE_EXPORT} Export plot options..."):
             self.export_plot_options()
+        imgui.separator()
+        super().file_menu()
 
     # -- compass: the crystal axes next to x, y, z
     def compass_axes(self):

@@ -85,7 +85,11 @@ class StructureSource:
             self.system = self.original if same else with_lattice(self.original, *params)
         else:
             adapter.set_lattice(self.sw, *params)
-            self.system = adapter.system_view(self.sw)
+            system = adapter.system_view(self.sw)
+            if not np.allclose(lattice_params(system.A), params, rtol=1e-6, atol=1e-6):
+                raise ValueError("adapter.set_lattice ran, but adapter.lattice_matrix(sw) still gives the old cell: "
+                                 "set_lattice must change what lattice_matrix reads")
+            self.system = system
         return self.system
 
 

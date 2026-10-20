@@ -86,8 +86,6 @@ def test_adapter_reads_sw_and_checks_the_contract(monkeypatch):
     view = adapter.system_view(fake_sw())
     assert view.labels == ["Fe"] and view.atoms[2].uvw == (0, 0.5, 0.5) and view.atoms[0].spin == 2.5
     assert np.allclose(view.A, A_LFO)
-    with pytest.raises(NotImplementedError, match="fill in from spinwaves: set_lattice"):
-        adapter.set_lattice(fake_sw(), 5, 5, 5, 90, 90, 90)
     monkeypatch.setattr(adapter, "atom_moments_xyz", lambda sw: np.zeros((3, 3)))
     with pytest.raises(ValueError, match=r"atom_moments_xyz must return .* shape \(4, 3\)"):
         adapter.system_view(fake_sw())
@@ -209,9 +207,17 @@ def test_lattice_edits_go_through_the_adapter(viewer, monkeypatch):
     sw = fake_sw()
     editor = show(viewer, sw)
     structure = editor.scene.find("Structure")
+
+    def unfilled(sw, *p):
+        raise NotImplementedError("fill in from spinwaves: set_lattice(...)")
+
+    monkeypatch.setattr(adapter, "set_lattice", unfilled)
     editor.set_procedural_param(structure, "a", 6.0)  # the stub isn't filled: an error, and nothing changes
     assert "set_lattice" in editor.errors["Structure"] and structure.params["a"] == pytest.approx(5.3)
     assert np.allclose(sw.crystal.A, A_LFO)
+    monkeypatch.setattr(adapter, "set_lattice", lambda sw, *p: setattr(sw.crystal, "a", p[0]))  # A unchanged
+    editor.set_procedural_param(structure, "a", 6.0)
+    assert "still gives the old cell" in editor.errors["Structure"] and structure.params["a"] == pytest.approx(5.3)
     monkeypatch.setattr(adapter, "set_lattice", lambda sw, *p: setattr(sw.crystal, "A", lattice_matrix(*p)))
     editor.set_procedural_param(structure, "a", 6.0)
     assert sw.crystal.A[0, 0] == pytest.approx(6.0) and editor.system.A[0, 0] == pytest.approx(6.0)

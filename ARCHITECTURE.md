@@ -44,6 +44,15 @@ viewer.show(scene, SceneEditor(scene))
 - **Shapes**: a `Shape` is a function (callable, `"module:function"`, or a sculpt file) plus parameters; the
   editable ones (float/int/bool with defaults; ranges from `func.ranges` / `RANGES`) come from its signature
   (`meshes/params.py`, shared with MeshSculptor and procedural builders). Sculpt-file shapes hot-reload.
+- **Rebuilds keep children:** a procedural rebuild matches the new children to the old ones by name path and
+  type, and keeps the old nodes. A property the user changed from what the builder gave (visibility, transform,
+  material, shape) stays; the rest (instance matrices, info) comes from the builder. So selection and undo history
+  survive a rebuild. A failed build restores the old children, and SceneEditor shows the error.
+- **App structures:** `ProceduralGroup(..., ranges=, context=)`: per-instance slider ranges, and a non-saved
+  context object for the builder (an app's data source). A scene with one can render but not export.
+  `locked=True` nodes can be hidden and edited but not deleted, renamed, duplicated or moved; nothing is added
+  inside a procedural group. `MeshObject(info=)` adds per-instance Info rows. `examples/spinw_studio/` is
+  built this way.
 - **Names** of nodes and materials are unique per scene (" 2" suffix), so they work as references.
 - **GPU**: each object owns an `Instances` whose `owner` is the object; `scene.batches()` draws the visible ones.
   A click on any instance selects (and highlights) the whole object; `viewer.highlighted` tints a group's objects.
@@ -51,7 +60,7 @@ viewer.show(scene, SceneEditor(scene))
   functions as `"module:function"` paths (so they must be importable), procedural groups as builder + parameters
   only. So Export render script works for any Scene.
 - **`SceneEditor`** (`valo/scene_editor.py`): undoable actions for the tree (add, add_shape, delete, duplicate,
-  rename, reparent, visibility), an object (transform, shape / builder parameters, material) and the library
+  rename, reparent, visibility), an object (transform, base shape, shape / builder parameters, material) and the library
   (new, duplicate, delete unused); windows **Scene** (tree with type and eye toggle, context menu, drag onto a
   group to reparent, "+ Add"), **Object** (parameters, transform, material, `meshes.check` diagnostics) and
   **Materials**. `examples/mesh_gallery/` is the reference app.
@@ -196,6 +205,7 @@ engine:  geometry, materials, undo              (leaves: numpy only, materials h
 tools:   tools/sculptor → app, meshes  (the `valo-sculpt` command)
 apps:    examples/crystal_studio: studio → crystal → valo
          examples/mesh_gallery:   gallery → valo (Scene, SceneEditor)
+         examples/spinw_studio:   api → editor, scene → model, adapter; scene / editor → valo (Scene, SceneEditor)
 ```
 `render` draws anything with a `batches()` method; nothing in `valo/` imports from `examples/`.
 
@@ -214,7 +224,7 @@ apps:    examples/crystal_studio: studio → crystal → valo
 | Image export | done: `valo.render` / File → Render. Video: render frames with `valo.render` in a loop. |
 | Scripting / export for an app's scene | app: `settings()` + `from_settings(d, gpu=None)` on the scene class (in an importable module). |
 | Objects with parameters in the Scene / Object windows | app: build a `valo.Scene` and show it with `SceneEditor` (or a subclass adding windows). |
-| A parameter that regenerates part of the scene | app: a `ProceduralGroup` with a builder `fn(group, **params)` in an importable module. |
+| A parameter that regenerates part of the scene | app: a `ProceduralGroup` with a builder `fn(group, **params)` in an importable module (data the builder needs: `context=`; fixed parts: `locked=True`). |
 | New panel or window | app: an action method on its `Editor` subclass (with undo) + an entry in `windows()`. |
 | New crystal structure (CIF, POSCAR, other lattice), more species | `examples/crystal_studio/crystal.py`: centres + species per site; keep `batches()`. |
 | A new app | `examples/<name>/` with a scene, an `Editor` subclass, a `main()` and a test. |

@@ -2,7 +2,7 @@
 
     data.py        MeshData (position + unit normal per vertex, uint32 triangles)
     ops.py         transform, merge
-    builders.py    revolve, parametric, heightfield    (what sculpt files use)
+    builders.py    revolve, parametric, heightfield, tube    (what shape files use)
     primitives.py  sphere, icosphere, cube, plane, cylinder, cone, torus, capsule, arrow, STANDARD
     check.py       check → MeshReport                  (winding, normals, watertight, volume)
     sculpt.py      Sculpt: load / build / save a sculpt file
@@ -13,7 +13,7 @@ unless a function says otherwise.
 """
 
 from . import library
-from .builders import heightfield, parametric, revolve
+from .builders import heightfield, parametric, revolve, tube
 from .check import MeshReport, check
 from .data import MeshData
 from .ops import merge, transform
@@ -22,4 +22,4 @@ from .sculpt import Sculpt
 
 __all__ = ["STANDARD", "MeshData", "MeshReport", "Sculpt", "arrow", "capsule", "check", "cone", "cube", "cylinder",
            "heightfield", "icosphere", "library", "merge", "parametric", "plane", "revolve", "sphere", "torus",
-           "transform"]
+           "transform", "tube"]

@@ -245,3 +245,41 @@ def test_transform_matrix_is_scale_then_rotate_then_translate():
     t = {"translate": [1, 2, 3], "rotate_deg": [10, 20, 30], "scale": [1, 2, 3]}
     assert np.allclose(from_dict(t), transform_matrix(t["translate"], t["rotate_deg"], t["scale"]))
 
+
+def test_tube_along_a_straight_line_is_a_capped_cylinder():
+    m = meshes.tube([(0, 0, 0), (0, 0, 2.0)], radius=0.5, segments=64)
+    report = meshes.check(m)
+    assert report.ok and report.watertight
+    polygon = 64 * np.sin(2 * np.pi / 64) / (2 * np.pi)  # area of the 64-gon / area of the circle
+    assert report.volume == pytest.approx(np.pi * 0.25 * 2.0 * polygon, rel=1e-6)
+    side = m.positions[np.abs(m.normals[:, 2]) < 0.5]
+    assert np.allclose(np.linalg.norm(side[:, :2], axis=1), 0.5, atol=1e-6)
+
+
+@pytest.mark.parametrize("closed", [False, True])
+def test_tube_follows_a_curve_without_twisting(closed):
+    a = np.linspace(0, 2 * np.pi * (1 if closed else 3), 240, endpoint=not closed)
+    path = np.c_[np.cos(a), np.sin(a), 0 * a if closed else 0.15 * a]  # a ring, or a spring of 3 turns
+    m = meshes.tube(path, radius=0.1, segments=24, closed=closed)
+    report = meshes.check(m)
+    assert report.ok and report.watertight
+    if closed:  # a torus: 2π²Rr², up to the polygons
+        assert report.volume == pytest.approx(2 * np.pi**2 * 0.01, rel=0.02)
+    rows = len(path) + closed  # a loop repeats its first ring
+    rings = m.positions[: 25 * rows].reshape(25, rows, 3)  # side vertices: angle × path point
+    centre = path if not closed else np.r_[path, path[:1]]
+    assert np.allclose(np.linalg.norm(rings - centre, axis=-1), 0.1, atol=1e-5)  # every ring around its point
+    first = rings[0] - centre  # the seam line (angle 0) turns smoothly: no twist jumps along the path
+    turn = np.einsum("ij,ij->i", first[1:], first[:-1]) / 0.01
+    assert turn.min() > 0.95
+
+
+def test_tube_radius_can_vary_and_bad_paths_are_explained():
+    m = meshes.tube([(0, 0, 0), (0, 0, 1), (0, 0, 2)], radius=[0.2, 0.4, 0.2], segments=32)
+    assert meshes.check(m).ok
+    with pytest.raises(ValueError, match="at least 2"):
+        meshes.tube([(0, 0, 0)])
+    with pytest.raises(ValueError, match="repeats a point"):
+        meshes.tube([(0, 0, 0), (0, 0, 0), (1, 0, 0)])
+    with pytest.raises(ValueError, match="radius"):
+        meshes.tube([(0, 0, 0), (1, 0, 0)], radius=0)

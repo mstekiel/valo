@@ -141,7 +141,7 @@ def test_shape_files_changed_elsewhere_reload_and_names_are_checked(studio, tmp_
 
     os.utime(tmp_path / "vase.py", (0, (tmp_path / "vase.py").stat().st_mtime + 10))
     studio._polled = 0.0
-    with rc_context({"studio.poll_s": 0.05, "sculptor.poll_s": 0.05}):
+    with rc_context({"studio.poll_s": 0.05}):
         studio.poll()
     assert "height: float = 2.0" in studio.code and not studio.dirty
     for bad in ("1abc", "_hidden", "has space"):

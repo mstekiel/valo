@@ -176,15 +176,6 @@ class KeysConfig(Section):
 
 
 @dataclass
-class SculptorConfig(Section):
-    """MeshSculptor."""
-
-    NAME = "sculptor"
-    poll_s: float = opt(0.3, "File poll interval", 0.05, 5.0, "s")
-    max_normal_arrows: int = opt(2000, "Max normal arrows", 10, 100000)
-
-
-@dataclass
 class StudioConfig(Section):
     """valo studio: shape files, hot reload, the procedural mesh library."""
 
@@ -196,7 +187,7 @@ class StudioConfig(Section):
 
 
 SECTIONS = {cls.NAME: cls for cls in (CameraConfig, LightingConfig, RenderConfig, HighlightConfig, PickingConfig,
-                                      UIConfig, KeysConfig, SculptorConfig, StudioConfig)}
+                                      UIConfig, KeysConfig, StudioConfig)}
 
 
 class RC:

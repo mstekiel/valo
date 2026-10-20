@@ -370,9 +370,9 @@ class SceneEditor(Editor):
 
     # -- hot reload (a file change is not an edit: not recorded for undo)
     def poll(self) -> None:
-        """Every ``rc.sculptor.poll_s`` seconds, reload the shapes whose sculpt files changed on disk."""
+        """Every ``rc.studio.poll_s`` seconds, reload the shapes whose sculpt files changed on disk."""
         now = time.monotonic()
-        if now - self._polled < rc.sculptor.poll_s:
+        if now - self._polled < rc.studio.poll_s:
             return
         self._polled = now
         for obj in self.scene.objects():

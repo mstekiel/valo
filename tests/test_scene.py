@@ -368,7 +368,7 @@ def test_shapes_from_sculpt_files_reload_when_the_file_changes(viewer, tmp_path)
         path.write_text(text, encoding="utf-8")
         os.utime(path, (path.stat().st_atime, path.stat().st_mtime + step))  # filesystems with coarse mtimes
         editor._polled = 0.0
-        with rc_context({"sculptor.poll_s": 0.05}):
+        with rc_context({"studio.poll_s": 0.05}):
             editor.poll()
 
     change(SCULPT.replace("2 * size if tall else size", "3 * size"), 10)

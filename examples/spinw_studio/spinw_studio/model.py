@@ -6,6 +6,7 @@ Coordinates: crystal (fractional) **uvw** and Cartesian **xyz** in Å, with ``r_
     SystemView(A, atoms=(AtomSite(...), ...))   ← built by adapter.system_view(sw) from your SpinW object
     expand(system, bounds)                      → every atom (with lattice translations) inside a uvw box
     cell_edges(A)                               → the 12 edges of the unit cell [0, 1]³ in xyz
+    lattice_params(A) / lattice_matrix(...)     ↔ (a, b, c in Å, alpha, beta, gamma in degrees)
     validate_options(plot_options)              → plot_options merged with DEFAULTS, checked
 """
 
@@ -57,6 +58,40 @@ class SystemView:
 def to_xyz(A, uvw) -> np.ndarray:
     """Cartesian positions (N, 3) in Å of crystal coordinates ``uvw`` (N, 3): r_xyz = A @ r_uvw."""
     return np.asarray(uvw, float).reshape(-1, 3) @ np.asarray(A, float).T
+
+
+# -- lattice parameters ----------------------------------------------------------------------------
+
+
+def lattice_params(A) -> tuple[float, float, float, float, float, float]:
+    """(a, b, c, alpha, beta, gamma) of the lattice matrix A: lengths of its columns in Å, and the angles between
+    b and c, a and c, a and b in degrees."""
+    A = np.asarray(A, float)
+    lengths = np.linalg.norm(A, axis=0)
+
+    def angle(i, j):
+        return math.degrees(math.acos(np.clip(A[:, i] @ A[:, j] / (lengths[i] * lengths[j]), -1.0, 1.0)))
+
+    return (*map(float, lengths), angle(1, 2), angle(0, 2), angle(0, 1))
+
+
+def lattice_matrix(a: float, b: float, c: float, alpha: float, beta: float, gamma: float) -> np.ndarray:
+    """The lattice matrix (columns a, b, c in xyz, Å) in the standard orientation: a along x, b in the xy plane.
+    Angles in degrees; raises ValueError if they don't make a cell."""
+    ca, cb, cg = (math.cos(math.radians(x)) for x in (alpha, beta, gamma))
+    sg = math.sin(math.radians(gamma))
+    cy = (ca - cb * cg) / sg
+    cz2 = 1.0 - cb * cb - cy * cy
+    if not (a > 0 and b > 0 and c > 0) or sg <= 0 or cz2 <= 0:
+        raise ValueError(f"no unit cell has a, b, c = {a}, {b}, {c} Å and angles {alpha}, {beta}, {gamma} deg")
+    return np.array([[a, b * cg, c * cb], [0.0, b * sg, c * cy], [0.0, 0.0, c * math.sqrt(cz2)]])
+
+
+def with_lattice(system: SystemView, a, b, c, alpha, beta, gamma) -> SystemView:
+    """``system`` with other lattice parameters, keeping each atom's uvw and the cell's orientation in space (the
+    display-only path: for a SystemView there is no SpinW object to change)."""
+    rotation = system.A @ np.linalg.inv(lattice_matrix(*lattice_params(system.A)))  # standard → this orientation
+    return SystemView(rotation @ lattice_matrix(a, b, c, alpha, beta, gamma), system.atoms, system.name)
 
 
 # -- extent ----------------------------------------------------------------------------------------

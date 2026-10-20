@@ -3,6 +3,8 @@
 Everything runs on a hand-made SystemView, so spinwaves is not needed.
 """
 
+from types import SimpleNamespace
+
 import numpy as np
 import pytest
 from spinw_studio import adapter
@@ -12,9 +14,12 @@ from spinw_studio.model import (
     cell_edges,
     default_radius,
     expand,
+    lattice_matrix,
+    lattice_params,
     parse_color,
     to_xyz,
     validate_options,
+    with_lattice,
 )
 
 A_LFO = np.diag([5.3, 5.6, 7.5])
@@ -71,18 +76,34 @@ def test_system_view_rejects_a_bad_lattice_matrix():
         lfo_like(A=np.zeros((3, 3)))
 
 
-def test_adapter_stubs_say_what_to_fill_and_the_contract_is_checked(monkeypatch):
-    with pytest.raises(NotImplementedError, match="fill in from spinwaves"):
-        adapter.system_view(object())
-    monkeypatch.setattr(adapter, "lattice_matrix", lambda sw: A_LFO)
-    monkeypatch.setattr(adapter, "atom_labels", lambda sw: ["Fe"] * 4)
-    monkeypatch.setattr(adapter, "atom_positions_uvw", lambda sw: np.array(FE_UVW))
-    monkeypatch.setattr(adapter, "atom_moments_xyz", lambda sw: np.array(FE_M))
-    view = adapter.system_view(object())
-    assert view.labels == ["Fe"] and view.atoms[2].uvw == (0, 0.5, 0.5) and view.atoms[0].spin == 0.0
+def fake_sw(A=A_LFO):
+    """A duck-typed stand-in for a SpinW object, shaped like what adapter.py reads."""
+    atoms = [SimpleNamespace(label="Fe", r=u, m=m, s=2.5) for u, m in zip(FE_UVW, FE_M, strict=True)]
+    return SimpleNamespace(crystal=SimpleNamespace(A=np.array(A, float), atoms_all=atoms))
+
+
+def test_adapter_reads_sw_and_checks_the_contract(monkeypatch):
+    view = adapter.system_view(fake_sw())
+    assert view.labels == ["Fe"] and view.atoms[2].uvw == (0, 0.5, 0.5) and view.atoms[0].spin == 2.5
+    assert np.allclose(view.A, A_LFO)
+    with pytest.raises(NotImplementedError, match="fill in from spinwaves: set_lattice"):
+        adapter.set_lattice(fake_sw(), 5, 5, 5, 90, 90, 90)
     monkeypatch.setattr(adapter, "atom_moments_xyz", lambda sw: np.zeros((3, 3)))
     with pytest.raises(ValueError, match=r"atom_moments_xyz must return .* shape \(4, 3\)"):
-        adapter.system_view(object())
+        adapter.system_view(fake_sw())
+
+
+def test_lattice_parameters_and_matrix_agree():
+    params = (5.0, 6.0, 7.0, 80.0, 95.0, 110.0)
+    A = lattice_matrix(*params)
+    assert lattice_params(A) == pytest.approx(params) and np.allclose(A[1:, 0], 0) and A[2, 1] == 0
+    assert lattice_params(A_LFO) == pytest.approx((5.3, 5.6, 7.5, 90, 90, 90))
+    with pytest.raises(ValueError, match="no unit cell"):
+        lattice_matrix(5, 5, 5, 10, 10, 170)
+    turned = np.array([[0, -1, 0], [1, 0, 0], [0, 0, 1.0]]) @ A_LFO  # a along +y
+    view = with_lattice(lfo_like(A=turned), 6.0, 5.6, 7.5, 90, 90, 90)
+    assert np.allclose(view.A[:, 0], [0, 6.0, 0]) and view.atoms == lfo_like().atoms  # orientation and uvw kept
+    assert np.allclose(with_lattice(lfo_like(A=turned), *lattice_params(turned)).A, turned)
 
 
 # -- the studio, offscreen (GPU) ------------------------------------------------------------------

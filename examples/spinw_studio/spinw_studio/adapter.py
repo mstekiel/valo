@@ -8,7 +8,8 @@ Conventions (see model.py): crystal coordinates uvw (fractional), Cartesian xyz 
 lattice vectors a, b, c as the COLUMNS of A. Moments are returned in Cartesian xyz: convert them here, from
 whatever frame spinwaves stores them in.
 
-Required stubs raise NotImplementedError until filled; optional ones return neutral defaults.
+Required stubs raise NotImplementedError until filled; optional ones return neutral defaults. ``set_lattice`` is
+the one stub that changes ``sw``: the studio calls it when you edit the lattice parameters.
 """
 
 from __future__ import annotations
@@ -76,6 +77,20 @@ def atom_extra(sw, i: int) -> dict[str, str]:
 def system_name(sw) -> str:
     """A short name for the window title and exported files. Optional: empty by default."""
     return ""
+
+
+# -- changing sw: the lattice parameters edited in the studio --------------------------------------------
+
+
+def set_lattice(sw, a: float, b: float, c: float, alpha: float, beta: float, gamma: float) -> None:
+    """Give ``sw`` new lattice parameters: a, b, c in Å, alpha, beta, gamma in degrees (alpha between b and c).
+
+    Change ``sw`` IN PLACE so that afterwards ``lattice_matrix(sw)`` returns the new A, with every atom keeping its
+    crystal coordinates uvw. Called by the studio's Structure parameters; until filled, editing them shows this
+    error and changes nothing.
+    """
+    raise NotImplementedError("fill in from spinwaves: set_lattice(sw, a, b, c, alpha, beta, gamma) changes sw's "
+                              "lattice in place (Å, degrees), so lattice_matrix(sw) returns the new A")
 
 
 # -- the contract check ----------------------------------------------------------------------------

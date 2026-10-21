@@ -119,6 +119,22 @@ class Editor:
             n = max((dx * dx + dy * dy) ** 0.5, 1e-6)
             draw.add_text(imgui.ImVec2(end[0] + 7 * dx / n - 4, end[1] + 7 * dy / n - 8), col, label)
 
+    def draw_boxes(self) -> None:
+        """The bounding boxes of the selected and hovered objects (``viewer.boxes()``), drawn by ImGui over the 3D
+        view: ``rc.highlight`` colours (sRGB) and line width, back edges fainter."""
+        if not (self.viewer and self.scene_rect):
+            return
+        h = rc.highlight
+        draw = imgui.get_foreground_draw_list()
+        x, y, w, hh = self.scene_rect
+        draw.push_clip_rect(imgui.ImVec2(x, y), imgui.ImVec2(x + w, y + hh))  # stay inside the 3D view
+        for box, kind in self.viewer.boxes():
+            rgb = h.selected_color if kind == "selected" else h.hover_color
+            front, back = (imgui.get_color_u32(imgui.ImVec4(*rgb, a)) for a in (1.0, h.back_alpha))
+            for start, end, behind in box_layout(self.viewer.camera, box, self.scene_rect):
+                draw.add_line(imgui.ImVec2(*start), imgui.ImVec2(*end), back if behind else front, h.box_width)
+        draw.pop_clip_rect()
+
     def menus(self) -> dict[str, Callable[[], None]]:
         """Extra menus before Edit and View, name → function drawing the items (e.g. a File menu)."""
         return {}
@@ -378,6 +394,7 @@ class Editor:
         central = internal.dock_builder_get_central_node(dock_id)
         self.scene_rect = (central.pos.x, central.pos.y, central.size.x, central.size.y)
         self.draw_compass()
+        self.draw_boxes()
 
         for name, draw in wins.items():
             if not self.visible.setdefault(name, True):

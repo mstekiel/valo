@@ -411,54 +411,70 @@ def test_pick_finds_the_batch_and_instance_under_a_pixel(viewer):
     assert viewer.renderer.pick(viewer.viewport, scene, cam, -5, -5) is None  # outside the viewport
 
 
-def test_hovered_object_is_highlighted_and_nothing_else(viewer):
-    from valo import Editor, OrbitCamera, rc_context
+def two_balls(viewer):
+    from valo import Editor, OrbitCamera
 
     m = viewer.renderer.material("M", "lambert", base_color=(0.5, 0.5, 0.5))
     balls = viewer.renderer.spheres(m)
     balls.set([[-1.2, 0, 0], [1.2, 0, 0]], 0.6)
     viewer.show(SimpleNamespace(batches=lambda: [balls.batch()]), Editor())
     viewer.camera = cam = OrbitCamera(azimuth=-90.0, elevation=0.0, distance=6.0)
-    viewer.snapshot()
+    viewer.selection, viewer.outlined, viewer.pointer = None, [], None
+    plain = viewer.snapshot().astype(int)
     x0, y0, w, h = viewer.viewport
-    clip = cam.matrices(w / h)[0] @ np.array([-1.2, 0, 0, 1.0])
+
+    def at(p):  # framebuffer pixel of world point p, relative to the scene region
+        clip = cam.matrices(w / h)[0] @ np.r_[p, 1.0]
+        return int((clip[0] / clip[3] + 1) / 2 * w), int((1 - clip[1] / clip[3]) / 2 * h)
+
+    return balls, plain, at
+
+
+def changed(viewer, plain):
+    return np.abs(viewer.snapshot().astype(int) - plain).max(-1) > 3
+
+
+def test_the_hovered_object_gets_a_box_not_a_tint(viewer):
+    from valo import rc_context
+
+    balls, plain, at = two_balls(viewer)
+    cx, cy = at([-1.2, 0, 0])
+    x0, y0, w, h = viewer.viewport
     r = viewer.canvas.get_pixel_ratio()
-    sx, sy = x0 + (clip[0] / clip[3] + 1) / 2 * w, y0 + (1 - clip[1] / clip[3]) / 2 * h
-    viewer.pointer = (sx / r, sy / r)
-    with rc_context({"highlight.strength": 0.0}):
-        plain = viewer.snapshot().astype(int)
-    lit = viewer.snapshot().astype(int)
+    viewer.pointer = ((x0 + cx) / r, (y0 + cy) / r)
+    viewer.snapshot()  # picks what is under the pointer
+    diff = changed(viewer, plain)
     assert viewer.hover and viewer.hover.instance_index == 0
-    changed = np.abs(lit - plain).max(-1) > 3
-    assert changed.sum() > 200
-    assert not changed[:, w // 2 :].any()  # the other sphere (right half) and the background stay as they were
-    viewer.pointer = None
+    assert diff.sum() > 50 and not diff[:, w // 2 :].any()  # lines around the left ball only
+    assert not diff[cy - 5 : cy + 5, cx - 5 : cx + 5].any()  # its own pixels are not tinted
+    with rc_context({"highlight.enabled": False}):
+        assert not changed(viewer, plain).any()
+    viewer.pointer, viewer.hover = None, None
 
 
-def test_selecting_an_owned_instance_highlights_the_whole_object(viewer):
-    from valo import Editor, OrbitCamera
+def test_the_selection_gets_a_box_in_its_own_colour(viewer):
+    from valo.geometry import box_corners
     from valo.render import Pick
 
-    m = viewer.renderer.material("M", "lambert", base_color=(0.5, 0.5, 0.5))
-    balls = viewer.renderer.spheres(m)
-    balls.set([[-1.2, 0, 0], [1.2, 0, 0]], 0.6)
-    viewer.show(SimpleNamespace(batches=lambda: [balls.batch()]), Editor())
-    viewer.camera = OrbitCamera(azimuth=-90.0, elevation=0.0, distance=6.0)
-    plain = viewer.snapshot().astype(int)
+    balls, plain, at = two_balls(viewer)
     w = plain.shape[1]
-
-    def changed():  # (left sphere tinted, right sphere tinted)
-        diff = np.abs(viewer.snapshot().astype(int) - plain).max(-1) > 3
-        return diff[:, : w // 2].sum() > 200, diff[:, w // 2 :].sum() > 200
-
     viewer.selection = Pick(0, 0, balls, np.zeros(3))
-    assert changed() == (True, False)  # no owner: just the clicked instance
-    balls.owner = object()
-    assert changed() == (True, True)  # an object's instance: the whole object
-    viewer.selection, viewer.highlighted = None, [balls]
-    assert changed() == (True, True)
-    viewer.highlighted = []
-    assert changed() == (False, False)
+    diff = changed(viewer, plain)
+    assert diff[:, : w // 2].sum() > 50 and not diff[:, w // 2 :].any()  # no owner: the clicked instance's box
+    img = viewer.snapshot().astype(int)
+    lines = img[diff]
+    assert (lines[:, 0] - lines[:, 2]).mean() > 30  # orange (selected_color), not the grey hover colour
+    both = np.eye(4)
+    both[:3, 3], both[0, 0], both[1, 1], both[2, 2] = (0, 0, 0), 3.6, 1.2, 1.2
+    balls.owner = SimpleNamespace(bounding_box=lambda: both)  # an object owning both balls
+    diff = changed(viewer, plain)
+    assert diff[:, : w // 2].any() and diff[:, w // 2 :].any()  # one box around the whole object
+    viewer.selection, viewer.outlined = None, [balls.owner]
+    assert changed(viewer, plain).any()
+    viewer.outlined = []
+    assert not changed(viewer, plain).any()
+    del balls.owner
+    assert box_corners([0, 0, 0], [1, 2, 3]).shape == (8, 3)
 
 
 def test_info_rows_show_how_the_instance_was_placed(viewer):

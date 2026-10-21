@@ -16,6 +16,7 @@ from imgui_bundle.imgui import internal
 from wgpu.utils.imgui import ImguiRenderer
 
 from .config import rc
+from .geometry import bounding_box, box_corners
 from .lighting import Lighting
 from .render import VIEWS, OrbitCamera, get_device, renderer
 from .ui import Editor
@@ -61,7 +62,7 @@ class Viewer:
         self.pointer = None  # last pointer position, logical px
         self.hover = None  # Pick under the pointer (render.Pick) or None
         self.selection = None  # Pick chosen by a click, or None
-        self.highlighted: list = []  # Instances tinted whole, like a selection (e.g. a scene editor's selected group)
+        self.outlined: list = []  # selected things to box (anything with bounding_box(), e.g. a scene editor's node)
         self._last_click = None  # (time, x, y) of the last click, for double-click
         self.gui_error: str | None = None  # traceback of the last exception in the editor's gui (it was recovered)
         self._last_frame = time.perf_counter()
@@ -126,7 +127,7 @@ class Viewer:
             self.camera.azimuth = (self.camera.azimuth + rc.camera.auto_rotate_speed * dt) % 360
         for _ in range(3):  # the layout is known only after the ImGui frame: redraw if the scene rect moved
             self.viewport = self._scene_viewport(texture)
-            self.renderer.render(texture, self.viewport, self.scene, self.camera, self.lighting, self._highlights())
+            self.renderer.render(texture, self.viewport, self.scene, self.camera, self.lighting)
             self.hover = self._pick_under_pointer()
             if not ed:
                 return
@@ -134,27 +135,34 @@ class Viewer:
             if self._scene_viewport(texture) == self.viewport:
                 return
 
-    def _highlights(self) -> list:
-        """(batch, instance, rgb) tints for the renderer: the selection (the whole object when its Instances has an
-        ``owner``), the ``highlighted`` Instances, and the hovered instance (last frame's pick)."""
-        h = rc.highlight
-        if not h.enabled:
-            return []
-        index = {id(getattr(b, "source", None)): i for i, b in enumerate(self.scene.batches())}
-        keys = []
-        sel = self.selection
-        if sel is not None:
-            whole = getattr(sel.source, "owner", None) is not None and id(sel.source) in index
-            keys.append(((index[id(sel.source)], None) if whole else (sel.batch_index, sel.instance_index),
-                         h.selected_strength))
-        keys += [((index[id(s)], None), h.selected_strength) for s in self.highlighted if id(s) in index]
-        if self.hover is not None:
-            keys.append(((self.hover.batch_index, self.hover.instance_index), h.strength))
-        out, seen = [], set()
-        for key, strength in keys:
-            if key not in seen and (key[0], None) not in seen:
-                seen.add(key)
-                out.append((*key, tuple(c * strength for c in h.color)))
+    @staticmethod
+    def _pick_box(pick) -> tuple[object, np.ndarray | None]:
+        """(what the pick stands for, its box matrix): the owner's box when the picked instances belong to an object
+        with ``bounding_box()``, else the box of the picked instance (its mesh bounds, turned with it)."""
+        src = pick.source
+        owner = getattr(src, "owner", None)
+        if owner is not None and hasattr(owner, "bounding_box"):
+            return owner, owner.bounding_box()
+        if src is None or pick.instance_index >= len(getattr(src, "matrices", ())):
+            return None, None
+        m = src.matrices[pick.instance_index]
+        corners = (m @ np.c_[box_corners(*src.mesh.bounds), np.ones(8)].T).T[:, :3]
+        return (id(src), pick.instance_index), bounding_box(corners, m)
+
+    def boxes(self) -> list[tuple[np.ndarray, str]]:
+        """The bounding boxes to draw, (box matrix, "selected" | "hover"): the ``outlined`` things (else the clicked
+        selection), and the object under the pointer unless it is already selected (``rc.highlight.enabled``)."""
+        out, selected = [], set()
+        sources = [(n, n.bounding_box()) for n in self.outlined] if self.outlined else (
+            [self._pick_box(self.selection)] if self.selection is not None else [])
+        for key, box in sources:
+            if box is not None:
+                out.append((box, "selected"))
+                selected.add(id(key) if not isinstance(key, tuple) else key)
+        if rc.highlight.enabled and self.hover is not None:
+            key, box = self._pick_box(self.hover)
+            if box is not None and (id(key) if not isinstance(key, tuple) else key) not in selected:
+                out.append((box, "hover"))
         return out
 
     def _pick_under_pointer(self):

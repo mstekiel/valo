@@ -209,6 +209,7 @@ EDITOR_ACTIONS = {  # name → (action(editor, material), changes the image)
     "ambient intensity": (lambda ed, m: ed.set_light("ambient", 1.2), True),
     "sky colour": (lambda ed, m: ed.set_light("sky", (1.0, 0.0, 0.0)), True),
     "flat ambient": (lambda ed, m: ed.set_flat_ambient((0.0, 0.0, 1.0)), True),
+    "flat ambient switch": (lambda ed, m: ed.set_ambient_flat(True), True),  # ground = sky
     "material parameter": (lambda ed, m: ed.set_param(m, "base_color", (0.0, 1.0, 0.0)), True),
     "material reset": (lambda ed, m: ed.reset(m), True),
 }

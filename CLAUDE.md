@@ -9,7 +9,7 @@ Apps built on it live in `examples/`. Design and extension points: `ARCHITECTURE
 |---|---|
 | Install | `uv sync` |
 | Run the studio | `uv run valo-studio [examples/shapes/vase.py]` (procedural meshes in code; Save to library → `data/procedural_meshes/`) |
-| Run an example app | `uv run python examples/crystal_studio/studio.py` |
+| Run the example app | `uv run --group spinw python examples/spinw_studio/lfo_spinw.py` (needs the local spinwaves) |
 | Test | `uv run pytest` (engine + examples; GPU tests render offscreen and skip without an adapter); `-m "not gpu"` for the fast part, `--cov` for coverage |
 | Lint / format | `uv run ruff check --fix .` |
 | Add a dependency | `uv add <pkg>` (ask the user first) |
@@ -35,7 +35,6 @@ only from `valo` (and `valo.meshes`). Blender's split: data (`scene`, `meshes`),
 
 | App | Files |
 |---|---|
-| `crystal_studio` | `crystal.py` (rock-salt model, species, material library), `studio.py` (`CrystalEditor` + `main`), `test_studio.py` |
 | `spinw_studio` | spinwaves systems in valo: `spinw_studio/` package (`adapter`, `model`, `scene` = a locked procedural `valo.Scene`, `editor` = a `StudioEditor`, `api`), `lfo_spinw.py`, `test_spinw_studio.py`. **Read its `README.md` (the defining document) before changing it**; it needs `uv sync --group spinw` only to run the real script |
 
 ## Rules that keep it working

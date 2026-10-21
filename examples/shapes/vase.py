@@ -9,6 +9,7 @@ RANGES = {"height": (0.3, 3.0), "belly": (0.0, 0.6), "neck": (0.05, 0.5), "segme
 
 
 def mesh(height: float = 1.2, base: float = 0.3, belly: float = 0.25, neck: float = 0.15, segments: int = 48):
+    """A vase: a profile of radius against height revolved around Z (lengths in scene units)."""
     z = np.linspace(0, height, 32)
     t = z / height
     rho = base + belly * np.sin(np.pi * t) ** 2 - (base - neck) * t**2  # wide belly, narrow neck

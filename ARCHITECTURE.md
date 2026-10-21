@@ -1,7 +1,7 @@
 # valo architecture (skeleton)
 
-Grown from the wgpu-py exploration examples (example 06, "crystal studio"). `valo/` is a standalone
-engine; apps such as `examples/crystal_studio/` are built on its public API (`valo/__init__.py`).
+Grown from the wgpu-py exploration examples. `valo/` is a standalone engine; apps such as
+`examples/spinw_studio/` are built on its public API (`valo/__init__.py`).
 Deliberately small: structure is added when a feature needs it, not before.
 
 ## Package layout
@@ -210,7 +210,7 @@ the objects, so `Lighting()` starts from `rc.lighting`, but the Lighting window 
   `from_settings(d, gpu=None)` can be rebuilt from data. The Editor's File → Render window then exports a
   **runnable script**: `SETTINGS` written by `offline.py_literal`, plus a main that calls `from_settings` and
   `valo.render`. Its picture is pixel-identical to the studio's Render PNG. Any app can Render PNG; Export needs
-  the protocol. `examples/crystal_studio/crystal.py`'s `__main__` shows scripting from scratch.
+  the protocol. `valo.Scene` implements it, so every studio scene exports.
 
 ## One frame
 
@@ -239,8 +239,7 @@ scene    → math, meshes, gpu, config           (nodes own gpu.Instances; Scene
 offline  → scene, gpu, config
 ui       → scene, gpu, meshes, math, offline, config
 studio   → ui, scene, meshes, math, config
-apps:    examples/crystal_studio: studio → crystal → valo
-         examples/spinw_studio:   api → editor, scene → model, adapter; scene / editor → valo (Scene, StudioEditor)
+apps:    examples/spinw_studio:   api → editor, scene → model, adapter; scene / editor → valo (Scene, StudioEditor)
 ```
 The renderer draws anything with a `batches()` method; nothing in `valo/` imports from `examples/`.
 
@@ -262,7 +261,6 @@ The renderer draws anything with a `batches()` method; nothing in `valo/` import
 | Objects with parameters in the Scene / Object windows | app: build a `valo.Scene` and show it with `SceneEditor` (or a subclass adding windows). |
 | A parameter that regenerates part of the scene | app: a `ProceduralGroup` with a builder `fn(group, **params)` in an importable module (data the builder needs: `context=`; fixed parts: `locked=True`). |
 | New panel or window | app: an action method on its `Editor` subclass (with undo) + an entry in `windows()`. |
-| New crystal structure (CIF, POSCAR, other lattice), more species | `examples/crystal_studio/crystal.py`: centres + species per site; keep `batches()`. |
 | A new app | `examples/<name>/` with a scene, an `Editor` subclass, a `main()` and a test. |
 | A real application (domain library → valo) | follow `examples/spinw_studio/`: an adapter turning the library's objects into plain data, a pure model, then scene / editor on valo's public API (its README states the layering rules). |
 

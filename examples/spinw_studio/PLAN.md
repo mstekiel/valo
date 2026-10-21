@@ -23,7 +23,7 @@ The prototype renders the **atoms** of a spinwaves system:
 - the unit-cell edges;
 - a compass showing Cartesian (xyz) and crystal (abc) axes.
 
-The extent (in crystal coordinates) and the materials are adjustable, as in crystal_studio. **Couplings come later.**
+The extent (in crystal coordinates) and the materials are adjustable. **Couplings come later.**
 
 **Coordinates:** crystal coordinates **uvw** (fractional) next to Cartesian **xyz** (Å), with
 **r_xyz = A · r_uvw**. The columns of A are the lattice vectors a, b, c in xyz.
@@ -35,7 +35,7 @@ The extent (in crystal coordinates) and the materials are adjustable, as in crys
 | Entry point | the **script calls spinw_studio**: `from spinw_studio import plot_structure`. spinwaves never imports spinw_studio. |
 | Window | **blocks** until closed, like `plt.show()` |
 | Extent | **continuous uvw ranges**: your `boundaries` = ((umin, umax), (vmin, vmax), (wmin, wmax)); every translated atom inside is shown (−0.1…1.1 shows the boundary atoms) |
-| Materials | **one per atom label** ("Fe"), editable like crystal_studio (library, duplicate, assign) |
+| Materials | **one per atom label** ("Fe"), editable in the Materials window (library, duplicate, assign) |
 | Moments | **arrows on atoms**: one instanced arrow batch per label, along m, show/hide + length |
 | Compass | **corner inset**: rotates with the camera; x, y, z plus a, b, c labelled |
 | Cell edges | **one cell [0,1]³, thin cylinders** (12 instanced cylinders, editable thickness and material) |

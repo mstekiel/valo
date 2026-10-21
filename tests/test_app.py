@@ -5,20 +5,10 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
+from valo.testing import changed, click, framebuffer_point, hover, image_point, open_every_menu, press, release_pointer
+
 pytestmark = pytest.mark.gpu
-
-
-@pytest.fixture(scope="module")
-def viewer():
-    pytest.importorskip("wgpu")
-    from rendercanvas.offscreen import RenderCanvas
-
-    from valo import Viewer
-
-    try:
-        return Viewer(RenderCanvas(size=(640, 400), pixel_ratio=1))
-    except Exception as exc:  # no adapter on this machine
-        pytest.skip(f"no GPU adapter: {exc}")
+VIEWER_SIZE = (640, 400)
 
 
 def test_empty_viewer_draws_the_background(viewer):
@@ -394,11 +384,9 @@ def test_pick_finds_the_batch_and_instance_under_a_pixel(viewer):
     viewer.show(scene)
     viewer.camera = cam = OrbitCamera(azimuth=-90.0, elevation=0.0, distance=8.0)  # looking along +Y
     viewer.snapshot()
-    x0, y0, w, h = viewer.viewport
 
     def pixel(p):
-        clip = cam.matrices(w / h)[0] @ np.r_[p, 1.0]
-        return x0 + (clip[0] / clip[3] + 1) / 2 * w, y0 + (1 - clip[1] / clip[3]) / 2 * h
+        return framebuffer_point(viewer, p)
 
     for point, batch, instance in (([1.5, 0, 0], 0, 2), ([-1.5, 0, 0], 0, 0), ([0, 0, 1.5], 1, 0)):
         hit = viewer.renderer.pick(viewer.viewport, scene, cam, *pixel(point))
@@ -418,48 +406,35 @@ def two_balls(viewer):
     balls = viewer.renderer.spheres(m)
     balls.set([[-1.2, 0, 0], [1.2, 0, 0]], 0.6)
     viewer.show(SimpleNamespace(batches=lambda: [balls.batch()]), Editor())
-    viewer.camera = cam = OrbitCamera(azimuth=-90.0, elevation=0.0, distance=6.0)
-    viewer.selection, viewer.outlined, viewer.pointer = None, [], None
-    plain = viewer.snapshot().astype(int)
-    x0, y0, w, h = viewer.viewport
-
-    def at(p):  # framebuffer pixel of world point p, relative to the scene region
-        clip = cam.matrices(w / h)[0] @ np.r_[p, 1.0]
-        return int((clip[0] / clip[3] + 1) / 2 * w), int((1 - clip[1] / clip[3]) / 2 * h)
-
-    return balls, plain, at
-
-
-def changed(viewer, plain):
-    return np.abs(viewer.snapshot().astype(int) - plain).max(-1) > 3
+    viewer.camera = OrbitCamera(azimuth=-90.0, elevation=0.0, distance=6.0)
+    viewer.selection, viewer.outlined = None, []
+    release_pointer(viewer)
+    return balls, viewer.snapshot()
 
 
 def test_the_hovered_object_gets_a_box_not_a_tint(viewer):
     from valo import rc_context
 
-    balls, plain, at = two_balls(viewer)
-    cx, cy = at([-1.2, 0, 0])
-    x0, y0, w, h = viewer.viewport
-    r = viewer.canvas.get_pixel_ratio()
-    viewer.pointer = ((x0 + cx) / r, (y0 + cy) / r)
-    viewer.snapshot()  # picks what is under the pointer
-    diff = changed(viewer, plain)
-    assert viewer.hover and viewer.hover.instance_index == 0
+    balls, plain = two_balls(viewer)
+    w = plain.shape[1]
+    assert hover(viewer, [-1.2, 0, 0]).instance_index == 0
+    diff = changed(plain, viewer.snapshot())
+    cx, cy = image_point(viewer, [-1.2, 0, 0])
     assert diff.sum() > 50 and not diff[:, w // 2 :].any()  # lines around the left ball only
     assert not diff[cy - 5 : cy + 5, cx - 5 : cx + 5].any()  # its own pixels are not tinted
     with rc_context({"highlight.enabled": False}):
-        assert not changed(viewer, plain).any()
-    viewer.pointer, viewer.hover = None, None
+        assert not changed(plain, viewer.snapshot()).any()
+    release_pointer(viewer)
 
 
 def test_the_selection_gets_a_box_in_its_own_colour(viewer):
     from valo.geometry import box_corners
     from valo.render import Pick
 
-    balls, plain, at = two_balls(viewer)
+    balls, plain = two_balls(viewer)
     w = plain.shape[1]
     viewer.selection = Pick(0, 0, balls, np.zeros(3))
-    diff = changed(viewer, plain)
+    diff = changed(plain, viewer.snapshot())
     assert diff[:, : w // 2].sum() > 50 and not diff[:, w // 2 :].any()  # no owner: the clicked instance's box
     img = viewer.snapshot().astype(int)
     lines = img[diff]
@@ -467,12 +442,12 @@ def test_the_selection_gets_a_box_in_its_own_colour(viewer):
     both = np.eye(4)
     both[:3, 3], both[0, 0], both[1, 1], both[2, 2] = (0, 0, 0), 3.6, 1.2, 1.2
     balls.owner = SimpleNamespace(bounding_box=lambda: both)  # an object owning both balls
-    diff = changed(viewer, plain)
+    diff = changed(plain, viewer.snapshot())
     assert diff[:, : w // 2].any() and diff[:, w // 2 :].any()  # one box around the whole object
     viewer.selection, viewer.outlined = None, [balls.owner]
-    assert changed(viewer, plain).any()
+    assert changed(plain, viewer.snapshot()).any()
     viewer.outlined = []
-    assert not changed(viewer, plain).any()
+    assert not changed(plain, viewer.snapshot()).any()
     del balls.owner
     assert box_corners([0, 0, 0], [1, 2, 3]).shape == (8, 3)
 
@@ -504,22 +479,15 @@ def test_click_selects_keys_navigate_and_double_click_centres(viewer):
     viewer.show(SimpleNamespace(batches=lambda: [balls.batch()], bounding_radius=lambda: 2.0), Editor())
     viewer.camera = cam = OrbitCamera(azimuth=-90.0, elevation=0.0, distance=8.0)
     viewer.snapshot()
-    x0, y0, w, h = viewer.viewport
-    r = viewer.canvas.get_pixel_ratio()
-    clip = cam.matrices(w / h)[0] @ np.array([1.5, 0, 0, 1.0])
-    at = ((x0 + (clip[0] / clip[3] + 1) / 2 * w) / r, (y0 + (1 - clip[1] / clip[3]) / 2 * h) / r)
 
     def key(name, *mods):
-        viewer.on_key({"event_type": "key_down", "key": name, "modifiers": mods})
+        press(viewer, name, *mods)
 
-    def click():
-        viewer.on_pointer({"event_type": "pointer_move", "x": at[0], "y": at[1]})
-        viewer.snapshot()  # picks what is under the pointer
-        viewer.on_pointer({"event_type": "pointer_down", "button": 1, "x": at[0], "y": at[1], "modifiers": ()})
-        viewer.on_pointer({"event_type": "pointer_up", "button": 1, "x": at[0], "y": at[1], "modifiers": ()})
+    def click_ball():
+        click(viewer, [1.5, 0, 0])
 
     with rc_context({"camera.center_duration": 0.0}):
-        click()
+        click_ball()
         assert viewer.selection.instance_index == 1
         key("f")  # frame the selection: centre on that sphere, zoomed to fit it
         assert cam.target == pytest.approx((1.5, 0.0, 0.0)) and cam.distance < 8.0
@@ -541,8 +509,8 @@ def test_click_selects_keys_navigate_and_double_click_centres(viewer):
 
     viewer.camera = cam = OrbitCamera(azimuth=-90.0, elevation=0.0, distance=8.0)
     with rc_context({"camera.center_duration": 0.0}):
-        click()
-        click()  # a double-click centres on the point under the pointer
+        click_ball()
+        click_ball()  # a double-click centres on the point under the pointer
         assert cam.target[0] == pytest.approx(1.5, abs=0.1) and cam.target[1] < 0  # front of the sphere
     viewer.selection = None
 
@@ -654,21 +622,6 @@ def test_compass_turns_with_the_camera_and_draws_in_its_corner(viewer):
     changed = np.abs(drawn - plain).max(-1) > 20
     h, w = changed.shape
     assert changed[h // 2 :, : w // 3].sum() > 30 and not changed[: h // 2].any()  # only bottom-left
-
-
-def open_every_menu(viewer) -> int:
-    """Click along the menu bar, closing each menu again; returns how many clicks opened one."""
-    from imgui_bundle import imgui
-
-    viewer.snapshot()
-    x, y, w, h = viewer.editor.scene_rect
-    opened, viewer.gui_error = 0, None
-    for mx in range(4, 240, 6):
-        viewer.ui_click(mx, 10)
-        imgui.set_current_context(viewer.imgui.imgui_context)
-        opened += imgui.is_popup_open("", imgui.PopupFlags_.any_popup_id)
-        viewer.ui_click(x + w / 2, y + h / 2)  # click into the scene: closes the menu
-    return opened
 
 
 def menu_editor(kind, viewer, tmp_path):

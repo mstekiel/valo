@@ -20,7 +20,7 @@ def offscreen_viewer(size: tuple[int, int] = (900, 560)):
     """A Viewer on an offscreen canvas of ``size`` logical pixels (pixel ratio 1), or None without a GPU adapter."""
     from rendercanvas.offscreen import RenderCanvas
 
-    from .app import Viewer
+    from .ui.viewer import Viewer
 
     try:
         return Viewer(RenderCanvas(size=size, pixel_ratio=1))

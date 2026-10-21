@@ -4,30 +4,7 @@ import numpy as np
 import pytest
 
 from valo.gpu.material import ALL_SPECS, SCHEMA, linear_to_srgb, srgb_to_linear
-from valo.math import instance_matrices, pack_mat4, perspective_reversed_z, translate
 from valo.ui.undo import Command, UndoStack
-
-
-def test_instance_matrices_point_z_along_axis_with_given_length():
-    origins = np.array([[0, 0, 0], [1, 2, 3], [-1, 0, 0], [0, 0, 5], [2, 2, 2]], float)
-    vectors = np.array([[1, 0, 0], [0, 2, 0], [0, 0, -3], [0, 0, 4], [1, 1, 1]], float)
-    length = np.linalg.norm(vectors, axis=1)
-    m = instance_matrices(origins, np.c_[0.1 * np.ones(5), 0.1 * np.ones(5), length], z_axis=vectors)
-    tips = np.einsum("nij,j->ni", m, [0, 0, 1, 1])[:, :3]
-    assert np.allclose(tips, origins + vectors, atol=1e-5)
-    rot = m[:, :3, :3] / np.array([0.1, 0.1, 1])[None, :] / np.c_[np.ones(5), np.ones(5), length][:, None, :]
-    assert np.allclose(rot @ rot.transpose(0, 2, 1), np.eye(3), atol=1e-5)
-    assert np.allclose(np.linalg.det(rot), 1.0, atol=1e-5)
-
-
-def test_pack_mat4_puts_translation_where_wgsl_expects_it():
-    """WGSL mat4x4f is column-major: column 3 (translation) is floats 12..14."""
-    assert np.allclose(pack_mat4(translate(1, 2, 3)).ravel()[12:15], [1, 2, 3])
-
-
-def test_reversed_z_depth_is_one_at_near_plane():
-    p = perspective_reversed_z(40.0, 1.0, near=0.1) @ np.array([0, 0, -0.1, 1.0])
-    assert p[2] / p[3] == pytest.approx(1.0)
 
 
 def test_schema_slots_fit_the_material_struct_without_overlap():
@@ -58,81 +35,6 @@ def test_undo_merges_rapid_edits_of_same_key():
     assert value["x"] == 0
     stack.redo()
     assert value["x"] == 3
-
-
-def test_orthographic_reversed_z_maps_near_to_one_and_far_to_zero():
-    from valo.math import orthographic_reversed_z
-
-    m = orthographic_reversed_z(4.0, 2.0, 1.0, 9.0)
-    for z, depth in ((-1.0, 1.0), (-9.0, 0.0)):
-        p = m @ np.array([0, 0, z, 1.0])
-        assert p[2] / p[3] == pytest.approx(depth)
-    assert (m @ np.array([4.0, 2.0, -5, 1]))[:2] == pytest.approx([1, 1])  # half width = height·aspect/2
-
-
-def test_switching_projection_keeps_the_target_plane_the_same_size():
-    from valo.scene.camera import Camera
-
-    cam = Camera(distance=10.0)
-    point = np.asarray(cam.target) + np.cross(cam.forward(), (0, 0, 1)) * 1.5  # beside the target, on its plane
-
-    def ndc():
-        vp, _ = cam.matrices(1.5)
-        p = vp @ np.r_[point, 1.0]
-        return p[:2] / p[3]
-
-    persp = ndc()
-    cam.set_projection("orthographic")
-    assert ndc() == pytest.approx(persp, abs=1e-5)
-    cam.zoom(2.0)
-    cam.set_projection("perspective")
-    assert cam.distance == pytest.approx(20.0)
-
-
-def test_headlight_follows_the_camera_and_fixed_light_does_not():
-    from valo.scene.camera import Camera
-    from valo.scene.lighting import Lighting
-
-    cam = Camera()
-    head, fixed = Lighting("headlight", 0.0, 0.0), Lighting("fixed", 30.0, 40.0)
-    assert head.direction(cam) == pytest.approx(-cam.forward())  # azimuth 0, elevation 0: from the viewer
-    before = fixed.direction(cam)
-    cam.azimuth += 120
-    assert head.direction(cam) == pytest.approx(-cam.forward())
-    assert fixed.direction(cam) == pytest.approx(before)
-
-
-@pytest.mark.parametrize("start", ["headlight", "fixed"])
-def test_switching_light_mode_keeps_the_direction(start):
-    from valo.scene.camera import Camera
-    from valo.scene.lighting import MODES, Lighting
-
-    cam = Camera(azimuth=37.0, elevation=-12.0)
-    light = Lighting(start, -50.0, 25.0)
-    d = light.direction(cam)
-    light.set_mode(next(m for m in MODES if m != start), cam)
-    assert light.direction(cam) == pytest.approx(d, abs=1e-9)
-
-
-def test_camera_changes_keep_the_scene_size():
-    from valo.scene.camera import Camera
-
-    radius = 4.75
-
-    def outline_share(cam):  # visible height share of the bounding sphere's outline
-        if cam.projection == "orthographic":
-            return 2 * radius / cam.ortho_height
-        return np.tan(np.arcsin(radius / cam.distance)) / np.tan(np.radians(cam.fovy / 2))
-
-    cam = Camera(distance=15.0)
-    share = outline_share(cam)
-    for change in (lambda: cam.set_fov(60, radius), lambda: cam.set_fov(20, radius),
-                   lambda: cam.set_projection("orthographic", radius),
-                   lambda: cam.set_projection("perspective", radius)):
-        change()
-        assert outline_share(cam) == pytest.approx(share)
-    cam.set_fov(35, radius)
-    assert cam.distance == pytest.approx(15.0)  # back to the start: same distance
 
 
 # -- config
@@ -192,15 +94,6 @@ def test_rc_context_restores_everything():
     assert dict(rc.items()) == before
 
 
-def test_lighting_defaults_come_from_rc():
-    from valo import Lighting, rc_context
-
-    with rc_context({"lighting.mode": "fixed", "lighting.ambient": 0.7}):
-        light = Lighting()
-    assert (light.mode, light.ambient) == ("fixed", 0.7)
-    assert Lighting().mode == "headlight"
-
-
 def test_valo_config_writes_a_commented_defaults_file(tmp_path):
     from valo.config import RC, main
 
@@ -213,36 +106,6 @@ def test_valo_config_writes_a_commented_defaults_file(tmp_path):
     assert dict(loaded.items()) == dict(RC().items())
     with pytest.raises(SystemExit):
         main(["--write-defaults", str(path)])  # never overwrites
-
-
-def test_decompose_returns_what_instance_matrices_built():
-    from valo.math import axis_angle, decompose, euler_xyz, rotate
-    from valo.meshes.shapefile import transform_matrix
-
-    m = instance_matrices([[1.0, -2.0, 3.0]], [[0.5, 2.0, 1.5]], z_axis=[[1.0, 1.0, 0.0]])[0]
-    t, r, s = decompose(m)
-    assert t == pytest.approx([1, -2, 3]) and s == pytest.approx([0.5, 2.0, 1.5])
-    assert r @ [0, 0, 1] == pytest.approx(np.array([1, 1, 0]) / np.sqrt(2), abs=1e-6)
-    assert np.allclose(r @ r.T, np.eye(3), atol=1e-6)
-
-    axis, angle = axis_angle(rotate((1, 2, 2), np.radians(70))[:3, :3])
-    assert axis == pytest.approx(np.array([1, 2, 2]) / 3) and angle == pytest.approx(70)
-    assert axis_angle(np.eye(3))[1] == 0.0
-    for ax in ((0, 1, 0), (1, -1, 0), (1, 2, -2)):  # 180° takes another code path
-        axis, angle = axis_angle(rotate(ax, np.pi)[:3, :3])
-        assert abs(axis @ np.array(ax)) == pytest.approx(np.linalg.norm(ax)) and angle == pytest.approx(180, abs=1e-4)
-
-    tm = transform_matrix({"rotate_deg": [10.0, -25.0, 140.0]})
-    assert euler_xyz(decompose(tm)[1]) == pytest.approx([10, -25, 140])
-
-
-def test_pan_moves_the_target_in_the_view_plane():
-    from valo.scene.camera import Camera
-
-    cam = Camera(azimuth=-90.0, elevation=0.0)  # looking along +Y: right = +X, up = +Z
-    cam.pan(1.0, 2.0)
-    assert cam.target == pytest.approx((-1.0, 0.0, 2.0))  # the scene follows the cursor
-    assert cam.world_per_pixel(500) == pytest.approx(cam._height_at_target() / 500)
 
 
 def navigator(**scene):

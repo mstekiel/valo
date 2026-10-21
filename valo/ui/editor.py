@@ -10,31 +10,31 @@ History window, and the default layout (app windows tabbed in a right column, Hi
 from __future__ import annotations
 
 import copy
-import time
 from collections.abc import Callable
-from dataclasses import fields
-from pathlib import Path
 
 from imgui_bundle import imgui
 from imgui_bundle.imgui import internal
 
-from ..config import SECTIONS, USER_FILE, rc
-from ..materials import SCHEMA, Material, linear_to_srgb, srgb_to_linear
-from ..offline import export_script, image_settings, plain, render
+from ..config import rc
+from ..materials import SCHEMA, Material
+from ..offline import image_settings
 from .overlays import Overlays
-from .style import ICON, apply_style
+from .style import ICON
 from .undo import Command, UndoStack
 from .widgets import Widgets
 from .windows.camera import CameraWindow
 from .windows.history import HistoryWindow
 from .windows.info import InfoWindow
 from .windows.lighting import LightingWindow
+from .windows.preferences import PreferencesWindow
+from .windows.render import RenderWindow
 
 UI_SCALES = (0.85, 1.0, 1.15, 1.3, 1.5, 1.75, 2.0)
 SHARED_WINDOWS = ("Info", "Camera", "Lighting", "History")  # added by the base class, docked in the lower part
 
 
-class Editor(InfoWindow, HistoryWindow, CameraWindow, LightingWindow, Overlays, Widgets):
+class Editor(CameraWindow, LightingWindow, InfoWindow, HistoryWindow, RenderWindow, PreferencesWindow, Overlays,
+             Widgets):
     """Base class for an app's editor: undoable actions, dockable windows and the shared UI."""
     title = "valo"
     right_column: float | None = None  # share of the window width for the right dock column (None: rc.ui)
@@ -262,121 +262,8 @@ class Editor(InfoWindow, HistoryWindow, CameraWindow, LightingWindow, Overlays, 
         imgui.end_main_menu_bar()
 
     # -- offline render and export (they read the scene; they don't edit it, so no undo)
-    def render_settings(self) -> dict:
-        """Camera, lighting and image options as plain data, plus the scene's ``settings()`` when it has them."""
-        viewer = self.viewer
-        out = {"camera": viewer.camera.settings(), "lighting": viewer.lighting.settings(),
-               "image": image_settings(None, **self.render_options)}
-        if self.can_export():
-            out = {"scene": viewer.scene.settings(), **out}
-        return plain(out)
 
-    def _output(self, suffix: str) -> Path:
-        name = type(self.viewer.scene).__name__.lower()
-        return Path.cwd() / f"render_{name}_{time.strftime('%Y%m%d-%H%M%S')}{suffix}"
-
-    def render_image(self, path=None) -> Path:
-        """Render the scene offline as it is on screen (with the Render window's image options) and save a PNG."""
-        path = Path(path) if path else self._output(".png")
-        settings = self.render_settings()
-        render(self.viewer.scene, settings, path=path)
-        self.render_status = f"saved {path}"
-        return path
-
-    def export_script(self, path=None) -> Path:
-        """Write a runnable script that re-renders this picture offline (needs a scene with ``settings()``)."""
-        path = Path(path) if path else self._output(".py")
-        export_script(path, self.viewer.scene, self.render_settings())
-        self.render_status = f"exported {path}"
-        return path
-
-    def can_export(self) -> bool:
-        """True when the scene can describe itself (``settings()`` / ``from_settings()``)."""
-        scene = self.viewer.scene if self.viewer else None
-        return hasattr(scene, "settings") and hasattr(type(scene), "from_settings")
-
-    def render_window(self) -> None:
-        """Image options for offline rendering, and the Render / Export buttons."""
-        opt = self.render_options
-        changed, size = imgui.input_int2("Size (px)", list(opt["size"]))
-        if changed:
-            opt["size"] = [max(16, min(16384, int(c))) for c in size]
-        _, opt["samples"] = imgui.slider_int("Supersampling", int(opt["samples"]), 1, 4, "%dx")
-        _, opt["transparent"] = imgui.checkbox("Transparent background", bool(opt["transparent"]))
-        if not opt["transparent"]:
-            changed, col = imgui.color_edit3("Background", [linear_to_srgb(c) for c in opt["background"]],
-                                             imgui.ColorEditFlags_.no_inputs)
-            if changed:
-                opt["background"] = [srgb_to_linear(c) for c in col]
-        imgui.text_disabled("Camera and lighting: as in the 3D view")
-        if imgui.button(f"{ICON.IMAGE} Render PNG"):
-            self.render_image()
-        imgui.same_line()
-        imgui.begin_disabled(not self.can_export())
-        if imgui.button(f"{ICON.FILE_CODE} Export render script"):
-            self.export_script()
-        imgui.end_disabled()
-        if self.render_status:
-            imgui.push_text_wrap_pos(0.0)
-            imgui.text_disabled(self.render_status)
-            imgui.pop_text_wrap_pos()
 
     # -- preferences (configuration, not scene editing: not undoable)
-    def set_preference(self, key: str, value) -> None:
-        """Set config key ``key`` (e.g. "camera.orbit_speed") and apply it where it takes effect immediately."""
-        rc[key] = value
-        if key in ("ui.scale", "ui.accent"):
-            self.set_ui_scale(rc.ui.scale)
-
-    def preferences_window(self) -> None:
-        """Every ``rc`` key, with widgets generated from the config schema, plus Save and Reset."""
-        imgui.push_text_wrap_pos(0.0)
-        imgui.text_disabled("Defaults and preferences; changes apply now. Font size applies on restart.")
-        imgui.pop_text_wrap_pos()
-        if imgui.button(f"{ICON.FLOPPY_DISK} Save to {USER_FILE.name}"):
-            self.status_message = f"saved {rc.save()}"
-        imgui.same_line()
-        if imgui.button(f"{ICON.ARROW_ROTATE_LEFT} Reset all"):
-            rc.reset()
-            self.set_ui_scale(rc.ui.scale)
-        if getattr(self, "status_message", ""):
-            imgui.text_disabled(self.status_message)
-        for name in SECTIONS:
-            section = getattr(rc, name)
-            if not imgui.collapsing_header(f"{SECTIONS[name].__doc__.split(':')[0].rstrip('.')}  ##{name}"):
-                continue
-            for f in fields(section):
-                changed, value = _pref_widget(f, getattr(section, f.name))
-                if changed:
-                    self.set_preference(f"{name}.{f.name}", value)
-                if f.metadata["help"] and imgui.is_item_hovered():
-                    imgui.set_tooltip(f.metadata["help"])
-
-    def set_ui_scale(self, scale: float) -> None:
-        """Scale text and spacing of the whole UI."""
-        self.ui_scale = scale
-        apply_style(scale)
-
-
-def _pref_widget(f, value) -> tuple[bool, object]:
-    """One generated widget for a config field: checkbox, slider, colour, combo or text."""
-    m, label = f.metadata, f"{f.metadata['label']}##{f.name}"
-    unit = f" {m['unit']}" if m["unit"] and m["unit"] != "x" else ""
-    if isinstance(value, bool):
-        return imgui.checkbox(label, value)
-    if isinstance(value, int):
-        return imgui.slider_int(label, value, m["lo"], m["hi"], f"%d{unit}")
-    if isinstance(value, float):
-        return imgui.slider_float(label, value, m["lo"], m["hi"], f"%.3g{unit}")
-    if isinstance(value, tuple) and len(value) == 3:
-        if m["hi"] == 255:  # sRGB 0-255
-            changed, col = imgui.color_edit3(label, [c / 255 for c in value], imgui.ColorEditFlags_.no_inputs)
-            return changed, tuple(round(c * 255) for c in col)
-        changed, col = imgui.color_edit3(label, [linear_to_srgb(c) for c in value], imgui.ColorEditFlags_.no_inputs)
-        return changed, tuple(srgb_to_linear(c) for c in col)
-    if m["choices"]:
-        changed, i = imgui.combo(label, list(m["choices"]).index(value), list(m["choices"]))
-        return changed, m["choices"][i]
-    return imgui.input_text(label, value)
 
 

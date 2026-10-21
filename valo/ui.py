@@ -642,3 +642,49 @@ def compass_layout(camera, axes, center, size: float) -> list[tuple]:
         end = (center[0] + size * float(d @ right), center[1] - size * float(d @ up))
         out.append((label, tuple(center), end, tuple(rgb), float(d @ forward) < 0))
     return sorted(out, key=lambda a: a[4])
+
+
+BOX_EDGES = [(a, b) for a in range(8) for b in range(a + 1, 8) if bin(a ^ b).count("1") == 1]  # corner index 4x+2y+z
+
+
+def box_layout(camera, box, rect) -> list[tuple]:
+    """The 12 edges of box matrix ``box`` (unit cube [-0.5, 0.5]^3 → world) as drawn by ``camera`` into ``rect`` =
+    (x, y, w, h) logical pixels: (start, end, back) with ``back`` True for the edges behind the box (both faces
+    meeting there turn away from the camera). Edges are clipped at the camera's near side (perspective)."""
+    from .geometry import box_corners
+
+    x, y, w, h = rect
+    view_proj, eye = camera.matrices(w / h)
+    box = np.asarray(box, float)
+    corners = (box @ np.c_[box_corners([-0.5] * 3, [0.5] * 3), np.ones(8)].T).T  # world, homogeneous
+    clip = (view_proj @ corners.T).T
+    axes = box[:3, :3].T  # rows: the box's x, y, z edge vectors in world space
+    centre = box[:3, 3]
+    normals = [np.cross(axes[(a + 1) % 3], axes[(a + 2) % 3]) for a in range(3)]  # outward of the +a face
+    perspective = camera.projection == "perspective"
+
+    def away(axis, side):  # does the face on ``side`` (±1) of ``axis`` turn away from the camera?
+        n = side * normals[axis]
+        towards = (centre + side * axes[axis] / 2 - eye) if perspective else camera.forward()
+        return float(n @ towards) > 1e-12
+
+    def screen(c):
+        return (x + (c[0] / c[3] + 1) / 2 * w, y + (1 - c[1] / c[3]) / 2 * h)
+
+    out = []
+    near = 1e-4
+    for a, b in BOX_EDGES:
+        axis = 2 - (a ^ b).bit_length() + 1  # the bit that differs: 4 → x, 2 → y, 1 → z
+        others = [k for k in range(3) if k != axis]
+        sides = [1 if (a >> (2 - k)) & 1 else -1 for k in others]
+        back = all(away(k, s) for k, s in zip(others, sides, strict=True))
+        p, q = clip[a], clip[b]
+        if perspective:
+            if p[3] < near and q[3] < near:
+                continue  # behind the camera
+            if p[3] < near or q[3] < near:  # clip at the near side
+                t = (near - p[3]) / (q[3] - p[3])
+                cut = p + t * (q - p)
+                p, q = (cut, q) if p[3] < near else (p, cut)
+        out.append((screen(p), screen(q), back))
+    return out

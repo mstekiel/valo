@@ -126,6 +126,12 @@ class HighlightConfig(Section):
     color: tuple = opt((1.0, 0.8, 0.25), "Colour", 0.0, 1.0, "linear RGB")
     strength: float = opt(0.35, "Hover strength", 0.0, 2.0)
     selected_strength: float = opt(0.6, "Selection strength", 0.0, 2.0)
+    selected_color: tuple = opt((1.0, 0.55, 0.1), "Selection box colour", 0.0, 1.0, "sRGB",
+                                help="Bounding box of the selected object")
+    hover_color: tuple = opt((0.8, 0.8, 0.8), "Hover box colour", 0.0, 1.0, "sRGB",
+                             help="Bounding box of the object under the mouse")
+    box_width: float = opt(1.5, "Box line width", 0.5, 6.0, "px")
+    back_alpha: float = opt(0.35, "Back edges opacity", 0.0, 1.0, help="Edges behind the box are drawn fainter")
 
 
 @dataclass

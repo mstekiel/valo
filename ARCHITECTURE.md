@@ -116,13 +116,17 @@ valo-studio my.py      mesh(a=1.0, n=32)                  (your edited values st
 - **A shape file** is plain Python (contract in `valo/meshes/shapefile.py`): a `mesh(...)` function whose parameters
   all have defaults (`float`, `int`, `bool`), optionally `RANGES`, `MATERIAL`, `TRANSFORM`. Build with
   `meshes.revolve` ((ρ, z) profile; repeat a point for a hard edge), `meshes.parametric` (P(u, v), outward is
-  ∂u × ∂v), `meshes.heightfield` (z = f(x, y)) or `meshes.tube` (around a 3D path: springs, wires, rings). Starter shapes: `examples/shapes/`.
+  ∂u × ∂v), `meshes.heightfield` (z = f(x, y)) or `meshes.tube` (around a 3D path: springs, wires, rings). Starter shapes: the built-in library meshes (below).
 - **Saving the code** re-reads the file for every object built from it (`Shape.reload`). On an error the last good
   mesh stays and the error, cut to your file's frames, shows under the code.
 - **Save to library** writes the file with the object's values as defaults, its material as `MATERIAL` and its
   transform baked into `TRANSFORM` (AST rewrite, `ShapeFile.save`) to `rc.studio.procedural_meshes` (default
   `data/procedural_meshes/`); the object's own transform becomes identity. `valo.library.mesh("<name>")` reads
   it back. One undo step.
+- **Two library folders** (`meshes/library.py`): built-in meshes ship in the package (`valo/data/procedural_meshes/`,
+  `library.BUILTIN_DIR`, read only); the user folder is `rc.studio.procedural_meshes`, relative to the working
+  directory. `library.names()` lists both, a user file hides a built-in one of the same name, and New shape / Save
+  to library always write to the user folder (`library.save_path`), so an installed valo never writes into itself.
 - **Diagnostics:** the Object window shows `meshes.check` (winding, unit normals, watertight + volume); "Show
   normals" draws the selected object's normals through `Scene.overlays`. The tests check every library entry.
 

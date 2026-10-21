@@ -8,7 +8,7 @@ Apps built on it live in `examples/`. Design and extension points: `ARCHITECTURE
 | | |
 |---|---|
 | Install | `uv sync` |
-| Run the studio | `uv run valo-studio [examples/shapes/vase.py]` (procedural meshes in code; Save to library → `data/procedural_meshes/`) |
+| Run the studio | `uv run valo-studio [valo/data/procedural_meshes/vase.py]` (procedural meshes in code; Save to library → `./data/procedural_meshes/`) |
 | Run the example app | `uv run --group spinw python examples/spinw_studio/lfo_spinw.py` (needs the local spinwaves) |
 | Test | `uv run pytest` (engine + examples; GPU tests render offscreen and skip without an adapter); `-m "not gpu"` for the fast part, `--cov` for coverage |
 | Lint / format | `uv run ruff check --fix .` |
@@ -22,7 +22,7 @@ only from `valo` (and `valo.meshes`). Blender's split: data (`scene`, `meshes`),
 | Module | Owns | GPU? |
 |---|---|---|
 | `math/` | `transforms.py`: matrices (`pack_mat4`, projections, `instance_matrices`, `decompose`); `bounds.py`: `box_corners`, `bounding_box` | no |
-| `meshes/` | pure numpy, import from `valo.meshes`: `data` (`MeshData`), `ops` (`transform`, `merge`), `builders` (`revolve`, `parametric`, `heightfield`, `tube`), `primitives` (`STANDARD`), `params` (`shape_params`), `check` (`MeshReport`), `shapefile` (`ShapeFile`: load / build / save a shape file), `library` (`data/procedural_meshes/`) | no |
+| `meshes/` | pure numpy, import from `valo.meshes`: `data` (`MeshData`), `ops` (`transform`, `merge`), `builders` (`revolve`, `parametric`, `heightfield`, `tube`), `primitives` (`STANDARD`), `params` (`shape_params`), `check` (`MeshReport`), `shapefile` (`ShapeFile`: load / build / save a shape file), `library` (built-in `valo/data/procedural_meshes/` + the user folder `rc.studio.procedural_meshes`; saves go to the user one) | no |
 | `gpu/` | the draw engine: `shaders` (all WGSL), `material` (`Material`, `SCHEMA`, colour conversion), `mesh` (`GpuMesh`), `instances` (`Instances`, `Spheres`, `Batch`), `renderer` (`Renderer`: passes, `pick`, `renderer()`) | yes |
 | `scene/` | the data model: `camera` (`Camera`: view state, projections, `VIEWS`), `lighting` (`Lighting`), `shape` (`Shape`), `nodes` (`Transform`, `Group`, `ProceduralGroup`, `MeshObject`, `InstancedObject`, bounding boxes), `scene` (`Scene`: tree, material library, `batches()`, `settings()`) | via a Renderer |
 | `offline.py` | `valo.render` (images without a window), `export_script`, `py_literal` | yes |

@@ -51,9 +51,9 @@ uv run --isolated --no-project --with dist/valo-<version>-py3-none-any.whl valo-
   - `dist-info/licenses/LICENSE` is there;
   - `METADATA` has the new version.
 - **Check the sdist** (`tar tzf dist/valo-<version>.tar.gz`): no `.venv`, `out/`, `.coverage`, `__pycache__`, `.claude/` or `CLAUDE.md`.
-- **Known limit, to report:** the procedural mesh library (`data/procedural_meshes/`) lives in the repo, not in the
-  wheel. In an installed valo it resolves next to site-packages. Report this as part of the release notes until it
-  is fixed.
+- **Check the built-in meshes:** the wheel has `valo/data/procedural_meshes/*.py`, and from a folder outside the
+  repo, `uv run --isolated --no-project --with dist/valo-<version>-py3-none-any.whl python -c "from valo.meshes import library; print(library.names(), library.mesh('vase').positions.shape)"`
+  lists them and builds one.
 
 ## 5. Release commit and tag
 ```bash

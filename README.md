@@ -7,7 +7,7 @@ Dear ImGui for a docking UI. Apps hand the `Viewer` a scene of instanced, shaded
 ```powershell
 uv sync
 uv run valo-studio                                # the studio: scene, objects, materials, procedural meshes in code
-uv run valo-studio examples/shapes/vase.py        # ...opening a shape file
+uv run valo-studio valo/data/procedural_meshes/vase.py   # ...opening a shape file
 uv run pytest                                     # engine + example tests (GPU tests render offscreen)
 ```
 
@@ -17,7 +17,9 @@ transform, material) and Materials windows, with undo for everything.
 
 In the studio, File > New shape starts a procedural mesh in the Code window. Every save (Ctrl+S) re-reads its
 parameters into the Object tab; files changed in another editor reload too. "Save to library" writes
-`data/procedural_meshes/<name>.py`, and apps use it as `valo.library.mesh("<name>")`.
+`data/procedural_meshes/<name>.py` in the working directory (your library; set `studio.procedural_meshes` in
+`valorc.toml` to move it), and apps use it as `valo.library.mesh("<name>")`. Built-in meshes (vase, helix, shell,
+wave) ship with valo and show in the same list.
 
 | Mouse / key | Action |
 |---|---|

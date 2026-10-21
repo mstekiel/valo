@@ -15,7 +15,7 @@ First public release.
   - `valo.Scene`: an object tree (groups, procedural groups, mesh and instanced objects) with a material library,
     settings round trip and hot reload of shape files;
   - `valo.meshes`: primitives, `revolve`, `parametric`, `heightfield`, `tube`, mesh checks, shape files and the
-    procedural mesh library;
+    procedural mesh library (built-in meshes shipped with valo, plus your own folder for saves);
   - `valo.render`: offline images of any size, with supersampling, transparency and background, plus exported
     render scripts.
 - **Editors**: Dear ImGui docking UI with undo/redo for every action; Scene, Object, Materials, Camera, Lighting,

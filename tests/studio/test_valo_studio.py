@@ -2,6 +2,7 @@
 Needs a GPU adapter."""
 
 import shutil
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -116,6 +117,19 @@ def test_save_to_library_bakes_the_object_state_into_the_file(viewer, studio):
     assert studio.code_path == path  # the Code window follows the object to its new file
     with pytest.raises(FileExistsError):
         studio.save_to_library(studio.open_shape(library.path("blob")), "tall_blob")
+
+
+def test_saving_a_builtin_mesh_writes_a_user_copy(studio, tmp_library):
+    library.BUILTIN_DIR.mkdir()
+    builtin = shutil.copy(VASE, library.BUILTIN_DIR / "vase.py")
+    original = Path(builtin).read_text(encoding="utf-8")
+    obj = studio.open_shape(library.path("vase"))
+    studio.set_transform(obj, "scale", (1, 1, 2))
+    path = studio.save_to_library(obj, "vase")
+    assert path == tmp_library / "vase.py" == library.path("vase")  # the user's copy now hides the built-in one
+    assert Path(builtin).read_text(encoding="utf-8") == original
+    with pytest.raises(FileExistsError):
+        studio.new_shape("vase")
 
 
 def test_shape_files_changed_elsewhere_reload_and_names_are_checked(studio, tmp_path):

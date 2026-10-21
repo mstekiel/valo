@@ -12,7 +12,7 @@ under the code. Files changed by another editor reload too.
 
 **Save to library** writes the file with the object's parameter values as new defaults, its material as
 ``MATERIAL`` and its transform baked into ``TRANSFORM`` to the procedural mesh library
-(``rc.studio.procedural_meshes``, default ``data/procedural_meshes/``).
+(``rc.studio.procedural_meshes``, default ``data/procedural_meshes/`` in the working directory).
 
 Domain studios (spinw_studio, ...) subclass ``StudioEditor``.
 """
@@ -178,9 +178,9 @@ class StudioEditor(CodeWindow, NormalsOverlay, SceneEditor):
         from it and open it in the Code window; returns the object. (Undo removes the object; the file stays.)"""
         if not name.isidentifier() or name.startswith("_"):
             raise ValueError(f"{name!r} is not a valid shape name (letters, digits, _; not starting with _)")
-        path = library.path(name)
-        if path.exists():
-            raise FileExistsError(f"{path} exists; open it, or choose another name")
+        if library.path(name).exists():
+            raise FileExistsError(f"{library.path(name)} exists; open it, or choose another name")
+        path = library.save_path(name)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(TEMPLATE.format(name=name), encoding="utf-8")
         return self.open_shape(path)
@@ -193,7 +193,7 @@ class StudioEditor(CodeWindow, NormalsOverlay, SceneEditor):
             raise ValueError(f"{obj.name} isn't built from a shape file")
         if not name.isidentifier() or name.startswith("_"):
             raise ValueError(f"{name!r} is not a valid library name (letters, digits, _; not starting with _)")
-        target = library.path(name)
+        target = library.save_path(name)  # the user folder, also for a built-in mesh's name
         if target.exists() and not overwrite and not _same(target, obj.shape.source):
             raise FileExistsError(f"{target.name} exists in the library")
         shape_file = obj.shape.file

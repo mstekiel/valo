@@ -95,7 +95,7 @@ LAYERS = {
 }
 OUTSIDE = {"config", "testing", "__init__"}
 # old paths re-exporting the new ones, until the end of the refactor
-SHIMS = {"geometry", "materials", "meshes.sculpt", "render", "lighting"}
+SHIMS = {"geometry", "materials", "meshes.sculpt", "render", "lighting", "undo", "ui_style"}
 KNOWN_VIOLATIONS: set[tuple[str, str]] = set()  # (module, layer it may not import): none left
 
 

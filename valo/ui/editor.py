@@ -25,8 +25,8 @@ from ..lighting import MODES
 from ..materials import SCHEMA, SHADINGS, Material, linear_to_srgb, srgb_to_linear
 from ..offline import export_script, image_settings, plain, render
 from ..render import PROJECTIONS, VIEWS
-from ..ui_style import ICON, apply_style
-from ..undo import Command, UndoStack
+from .style import ICON, apply_style
+from .undo import Command, UndoStack
 
 UI_SCALES = (0.85, 1.0, 1.15, 1.3, 1.5, 1.75, 2.0)
 SHARED_WINDOWS = ("Info", "Camera", "Lighting", "History")  # added by the base class, docked in the lower part

@@ -179,6 +179,8 @@ class GpuMesh:
         self.ib = device.create_buffer_with_data(data=data.indices, usage=wgpu.BufferUsage.INDEX)
         self.count = len(data.indices)
         self.radius = float(np.linalg.norm(data.positions, axis=1).max()) if len(data.positions) else 0.0
+        p = data.positions if len(data.positions) else np.zeros((1, 3))
+        self.bounds = (p.min(0).astype(float), p.max(0).astype(float))  # mesh-space box: (min xyz, max xyz)
 
     def draw(self, rpass, instances: int = 1, first_instance: int = 0):
         """Draw instances ``first_instance`` .. ``first_instance + instances - 1`` in the current render pass."""

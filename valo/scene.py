@@ -26,7 +26,7 @@ from pathlib import Path
 
 import numpy as np
 
-from .geometry import transform_matrix
+from .geometry import bounding_box, box_corners, transform_matrix
 from .materials import Material
 from .meshes.data import MeshData
 from .meshes.params import ShapeParam, shape_params
@@ -188,6 +188,16 @@ class Node:
 
     def refresh(self) -> None:
         """Re-upload what depends on the world transform (objects override)."""
+
+    def bounding_box(self) -> np.ndarray | None:
+        """The box around everything shown at or below this node, in this node's frame (it turns and scales with
+        it), as a box matrix mapping the unit cube [-0.5, 0.5]^3 onto it in world space; None if nothing is shown."""
+        corners = []
+        for n in self.walk():
+            if isinstance(n, MeshObject) and n.instances is not None and n.instances.count and n.shown():
+                local = np.c_[box_corners(*n.instances.mesh.bounds), np.ones(8)]  # (8, 4)
+                corners.append(np.einsum("nij,kj->nki", n.instances.matrices, local)[..., :3].reshape(-1, 3))
+        return bounding_box(np.concatenate(corners), self.world_matrix()) if corners else None
 
     def settings(self) -> dict:
         """The node and its subtree as plain data (``node_from_settings`` rebuilds it)."""

@@ -464,3 +464,28 @@ def test_a_shape_that_fails_to_build_leaves_the_scene_as_it_was(viewer):
         scene.add(ProceduralGroup("BadGroup", broken_builder))
     assert scene.settings() == before and np.array_equal(viewer.snapshot(), image)  # still draws
     assert viewer.gui_error is None
+
+
+def unit_cube_corners(box):
+    from valo.geometry import box_corners
+
+    return (box @ np.c_[box_corners([-0.5] * 3, [0.5] * 3), np.ones(8)].T).T[:, :3]
+
+
+def test_bounding_boxes_live_in_the_nodes_frame(scene):
+    from valo import Group, InstancedObject, Shape, Transform
+
+    tilted = Transform((1, 2, 3), (30, 0, 45), (1, 2, 1))
+    c = scene.add(cube("C", 0.5, transform=tilted))
+    assert np.allclose(c.bounding_box(), tilted.matrix() @ np.diag([0.5, 0.5, 0.5, 1]), atol=1e-6)  # turns with it
+
+    g = scene.add(Group("G", transform=Transform(rotate_deg=(0, 0, 90))))
+    scene.add(cube("A", 1.0, transform=Transform((2, 0, 0))), parent=g)
+    row = scene.add(InstancedObject("Row", Shape(meshes.cube, {"size": 0.2}), "Matte",
+                                    np.stack([transform_matrix((0, y, 0)) for y in (-1, 0, 3)])), parent=g)
+    lo, hi = (np.linalg.inv(g.world_matrix()) @ np.c_[unit_cube_corners(g.bounding_box()), np.ones(8)].T)[:3].T[[0, -1]]
+    assert np.allclose(lo, [-0.1, -1.1, -0.5]) and np.allclose(hi, [2.5, 3.1, 0.5])  # in the group's own axes
+    corners = unit_cube_corners(row.bounding_box())
+    assert np.allclose(np.ptp(corners, axis=0), [4.2, 0.2, 0.2])  # the rotated row lies along x in the world
+    g.visible = False
+    assert g.bounding_box() is None and row.bounding_box() is None

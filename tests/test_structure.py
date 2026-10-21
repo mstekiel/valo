@@ -184,11 +184,11 @@ def _called(table) -> set[str]:
 
 
 def test_every_editor_action_is_in_an_undo_table():
-    import test_app
+    import test_editor
     import test_scene
     import test_valo_studio
 
-    tested = _called(test_app.EDITOR_ACTIONS) | _called(test_scene.SCENE_ACTIONS) | _called(
+    tested = _called(test_editor.EDITOR_ACTIONS) | _called(test_scene.SCENE_ACTIONS) | _called(
         test_valo_studio.STUDIO_ACTIONS)
     public = {n for cls in (valo.Editor, valo.SceneEditor, valo.StudioEditor) for n in vars(cls)
               if not n.startswith("_")}

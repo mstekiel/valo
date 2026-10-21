@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 
 from valo import Transform, meshes
-from valo.geometry import transform_matrix
+from valo.math import transform_matrix
 from valo.testing import click, press, release_pointer
 
 pytestmark = pytest.mark.gpu
@@ -192,7 +192,7 @@ def mesh(size: float = 0.5, tall: bool = False):
 
 
 def test_settings_round_trip_rebuilds_the_identical_image(scene, tmp_path):
-    from valo import Group, InstancedObject, MeshObject, OrbitCamera, ProceduralGroup, Scene, Shape, Transform, render
+    from valo import Group, InstancedObject, MeshObject, Camera, ProceduralGroup, Scene, Shape, Transform, render
 
     path = tmp_path / "box.py"
     path.write_text(SCULPT, encoding="utf-8")
@@ -212,7 +212,7 @@ def test_settings_round_trip_rebuilds_the_identical_image(scene, tmp_path):
 
     again = Scene.from_settings(d)
     assert again.settings() == d
-    cam = OrbitCamera(distance=8.0, elevation=30.0)
+    cam = Camera(distance=8.0, elevation=30.0)
     assert np.array_equal(render(scene, size=(160, 120), camera=cam), render(again, size=(160, 120), camera=cam))
 
 
@@ -232,7 +232,7 @@ def test_unknown_kinds_and_unimportable_functions_are_reported():
 
 def edited_scene(viewer):
     """A scene with a group, plain and instanced objects, a procedural ring and an unused material, in an editor."""
-    from valo import Group, InstancedObject, OrbitCamera, ProceduralGroup, Scene, SceneEditor, Shape, Transform
+    from valo import Group, InstancedObject, Camera, ProceduralGroup, Scene, SceneEditor, Shape, Transform
 
     scene = Scene()
     scene.material("Matte", "lambert", base_color=(0.6, 0.6, 0.6))
@@ -245,7 +245,7 @@ def edited_scene(viewer):
     scene.add(ProceduralGroup("Ring", ring, {"n": 3, "radius": 2.5}))
     editor = SceneEditor(scene)
     viewer.show(scene, editor)
-    viewer.camera = OrbitCamera(distance=9.0, elevation=30.0)
+    viewer.camera = Camera(distance=9.0, elevation=30.0)
     return scene, editor
 
 
@@ -454,7 +454,7 @@ def test_a_shape_that_fails_to_build_leaves_the_scene_as_it_was(viewer):
 
 
 def unit_cube_corners(box):
-    from valo.geometry import box_corners
+    from valo.math import box_corners
 
     return (box @ np.c_[box_corners([-0.5] * 3, [0.5] * 3), np.ones(8)].T).T[:, :3]
 

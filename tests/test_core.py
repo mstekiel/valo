@@ -3,9 +3,9 @@
 import numpy as np
 import pytest
 
-from valo.geometry import instance_matrices, pack_mat4, perspective_reversed_z, translate
-from valo.materials import ALL_SPECS, SCHEMA, linear_to_srgb, srgb_to_linear
-from valo.undo import Command, UndoStack
+from valo.math import instance_matrices, pack_mat4, perspective_reversed_z, translate
+from valo.gpu.material import ALL_SPECS, SCHEMA, linear_to_srgb, srgb_to_linear
+from valo.ui.undo import Command, UndoStack
 
 
 def test_instance_matrices_point_z_along_axis_with_given_length():
@@ -61,7 +61,7 @@ def test_undo_merges_rapid_edits_of_same_key():
 
 
 def test_orthographic_reversed_z_maps_near_to_one_and_far_to_zero():
-    from valo.geometry import orthographic_reversed_z
+    from valo.math import orthographic_reversed_z
 
     m = orthographic_reversed_z(4.0, 2.0, 1.0, 9.0)
     for z, depth in ((-1.0, 1.0), (-9.0, 0.0)):
@@ -71,9 +71,9 @@ def test_orthographic_reversed_z_maps_near_to_one_and_far_to_zero():
 
 
 def test_switching_projection_keeps_the_target_plane_the_same_size():
-    from valo.render import OrbitCamera
+    from valo.scene.camera import Camera
 
-    cam = OrbitCamera(distance=10.0)
+    cam = Camera(distance=10.0)
     point = np.asarray(cam.target) + np.cross(cam.forward(), (0, 0, 1)) * 1.5  # beside the target, on its plane
 
     def ndc():
@@ -90,10 +90,10 @@ def test_switching_projection_keeps_the_target_plane_the_same_size():
 
 
 def test_headlight_follows_the_camera_and_fixed_light_does_not():
-    from valo.lighting import Lighting
-    from valo.render import OrbitCamera
+    from valo.scene.lighting import Lighting
+    from valo.scene.camera import Camera
 
-    cam = OrbitCamera()
+    cam = Camera()
     head, fixed = Lighting("headlight", 0.0, 0.0), Lighting("fixed", 30.0, 40.0)
     assert head.direction(cam) == pytest.approx(-cam.forward())  # azimuth 0, elevation 0: from the viewer
     before = fixed.direction(cam)
@@ -104,10 +104,10 @@ def test_headlight_follows_the_camera_and_fixed_light_does_not():
 
 @pytest.mark.parametrize("start", ["headlight", "fixed"])
 def test_switching_light_mode_keeps_the_direction(start):
-    from valo.lighting import MODES, Lighting
-    from valo.render import OrbitCamera
+    from valo.scene.lighting import MODES, Lighting
+    from valo.scene.camera import Camera
 
-    cam = OrbitCamera(azimuth=37.0, elevation=-12.0)
+    cam = Camera(azimuth=37.0, elevation=-12.0)
     light = Lighting(start, -50.0, 25.0)
     d = light.direction(cam)
     light.set_mode(next(m for m in MODES if m != start), cam)
@@ -115,7 +115,7 @@ def test_switching_light_mode_keeps_the_direction(start):
 
 
 def test_camera_changes_keep_the_scene_size():
-    from valo.render import OrbitCamera
+    from valo.scene.camera import Camera
 
     radius = 4.75
 
@@ -124,7 +124,7 @@ def test_camera_changes_keep_the_scene_size():
             return 2 * radius / cam.ortho_height
         return np.tan(np.arcsin(radius / cam.distance)) / np.tan(np.radians(cam.fovy / 2))
 
-    cam = OrbitCamera(distance=15.0)
+    cam = Camera(distance=15.0)
     share = outline_share(cam)
     for change in (lambda: cam.set_fov(60, radius), lambda: cam.set_fov(20, radius),
                    lambda: cam.set_projection("orthographic", radius),
@@ -216,8 +216,8 @@ def test_valo_config_writes_a_commented_defaults_file(tmp_path):
 
 
 def test_decompose_returns_what_instance_matrices_built():
-    from valo.geometry import axis_angle, decompose, euler_xyz, rotate
-    from valo.meshes.sculpt import transform_matrix
+    from valo.math import axis_angle, decompose, euler_xyz, rotate
+    from valo.meshes.shapefile import transform_matrix
 
     m = instance_matrices([[1.0, -2.0, 3.0]], [[0.5, 2.0, 1.5]], z_axis=[[1.0, 1.0, 0.0]])[0]
     t, r, s = decompose(m)
@@ -237,9 +237,9 @@ def test_decompose_returns_what_instance_matrices_built():
 
 
 def test_pan_moves_the_target_in_the_view_plane():
-    from valo.render import OrbitCamera
+    from valo.scene.camera import Camera
 
-    cam = OrbitCamera(azimuth=-90.0, elevation=0.0)  # looking along +Y: right = +X, up = +Z
+    cam = Camera(azimuth=-90.0, elevation=0.0)  # looking along +Y: right = +X, up = +Z
     cam.pan(1.0, 2.0)
     assert cam.target == pytest.approx((-1.0, 0.0, 2.0))  # the scene follows the cursor
     assert cam.world_per_pixel(500) == pytest.approx(cam._height_at_target() / 500)
@@ -318,10 +318,10 @@ def test_py_literal_writes_readable_valid_python():
 
 
 def test_box_layout_projects_the_12_edges_and_marks_the_back_ones():
-    from valo import OrbitCamera
+    from valo import Camera
     from valo.ui import box_layout
 
-    cam = OrbitCamera(azimuth=-60.0, elevation=25.0, distance=6.0)  # looking at the origin from front-right, above
+    cam = Camera(azimuth=-60.0, elevation=25.0, distance=6.0)  # looking at the origin from front-right, above
     edges = box_layout(cam, np.eye(4), (0, 0, 800, 600))
     assert len(edges) == 12 and sum(back for *_, back in edges) == 3  # the 3 edges at the hidden corner
     xs = [p[0] for s, e, _ in edges for p in (s, e)]

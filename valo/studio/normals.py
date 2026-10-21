@@ -6,7 +6,7 @@ import numpy as np
 from imgui_bundle import imgui
 
 from ..config import rc
-from ..geometry import instance_matrices
+from ..math import instance_matrices
 from ..scene import MeshObject
 
 

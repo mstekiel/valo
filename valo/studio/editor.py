@@ -26,7 +26,7 @@ import numpy as np
 from imgui_bundle import portable_file_dialogs
 
 from .. import meshes
-from ..geometry import decompose, euler_xyz
+from ..math import decompose, euler_xyz
 from ..meshes import library
 from ..meshes.shapefile import IDENTITY, transform_matrix
 from ..scene import MeshObject, Scene, Shape, Transform

@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 
 from valo import meshes
-from valo.geometry import scale
+from valo.math import scale
 
 R, L = 0.25, 1.0  # capsule defaults
 CLOSED_VOLUMES = {  # analytic volume of each closed standard mesh with default arguments
@@ -111,10 +111,10 @@ def mesh(height: float = 1.0, radius=0.5, segments: int = 24, capped: bool = Tru
 
 
 def test_sculpt_reads_parameters_kinds_and_ranges(tmp_path):
-    from valo.meshes import Sculpt
+    from valo.meshes import ShapeFile
 
     (tmp_path / "s.py").write_text(SCULPT, encoding="utf-8")
-    s = Sculpt.load(tmp_path / "s.py")
+    s = ShapeFile.load(tmp_path / "s.py")
     assert [(p.name, p.kind, p.default) for p in s.params] == [
         ("height", "float", 1.0), ("radius", "float", 0.5), ("segments", "int", 24), ("capped", "bool", True)]
     assert (s.params[0].lo, s.params[0].hi) == (0.1, 4.0)  # from RANGES
@@ -123,14 +123,14 @@ def test_sculpt_reads_parameters_kinds_and_ranges(tmp_path):
 
 
 def test_sculpt_save_round_trip_keeps_comments_and_bakes_transform(tmp_path):
-    from valo.meshes import Sculpt
+    from valo.meshes import ShapeFile
 
     (tmp_path / "s.py").write_text(SCULPT, encoding="utf-8")
-    s = Sculpt.load(tmp_path / "s.py")
+    s = ShapeFile.load(tmp_path / "s.py")
     params = {"height": 2.5, "radius": 0.25, "segments": 40, "capped": False}
     material = {"shading": "toon", "base_color": [0.1, 0.2, 0.3], "bands": 4.0}
     tf = {"translate": [0.0, 0.0, 1.0], "rotate_deg": [90.0, 0.0, 0.0], "scale": [2.0, 2.0, 2.0]}
-    saved = Sculpt.load(s.save(tmp_path / "lib" / "tuned.py", params, material, tf))
+    saved = ShapeFile.load(s.save(tmp_path / "lib" / "tuned.py", params, material, tf))
 
     assert saved.defaults() == params
     assert saved.material == material and saved.transform == tf
@@ -140,19 +140,19 @@ def test_sculpt_save_round_trip_keeps_comments_and_bakes_transform(tmp_path):
     tip = saved.build({"capped": True})  # baked rotation turns +Z (the height) into −Y
     assert tip.positions[:, 1].min() == pytest.approx(-2 * 2.5, abs=1e-5)
 
-    again = Sculpt.load(saved.save(tmp_path / "lib" / "tuned.py", {"height": 1.5}, material, tf))
+    again = ShapeFile.load(saved.save(tmp_path / "lib" / "tuned.py", {"height": 1.5}, material, tf))
     assert again.defaults()["height"] == 1.5 and again.source.count("MATERIAL =") == 1
 
 
 def test_sculpt_errors_are_clear(tmp_path):
-    from valo.meshes import Sculpt
+    from valo.meshes import ShapeFile
 
     (tmp_path / "a.py").write_text("def mesh(n):\n    pass\n", encoding="utf-8")
     with pytest.raises(TypeError, match="needs a default"):
-        Sculpt.load(tmp_path / "a.py")
+        ShapeFile.load(tmp_path / "a.py")
     (tmp_path / "b.py").write_text("x = 1\n", encoding="utf-8")
     with pytest.raises(AttributeError, match="no mesh"):
-        Sculpt.load(tmp_path / "b.py")
+        ShapeFile.load(tmp_path / "b.py")
 
 
 def _library_names():
@@ -188,9 +188,9 @@ def test_merge_offsets_indices():
 @pytest.mark.parametrize("path", sorted((Path(__file__).parents[1] / "examples" / "shapes").glob("*.py")),
                          ids=lambda p: p.stem)
 def test_starter_sculpts_build_clean_meshes(path):
-    from valo.meshes import Sculpt
+    from valo.meshes import ShapeFile
 
-    report = meshes.check(Sculpt.load(path).build())
+    report = meshes.check(ShapeFile.load(path).build())
     assert report.ok and report.triangles > 0, report.lines()
 
 
@@ -237,8 +237,8 @@ def test_shape_params_need_defaults_and_simple_types():
 
 
 def test_transform_matrix_is_scale_then_rotate_then_translate():
-    from valo.geometry import transform_matrix
-    from valo.meshes.sculpt import transform_matrix as from_dict
+    from valo.math import transform_matrix
+    from valo.meshes.shapefile import transform_matrix as from_dict
 
     m = transform_matrix((1, 2, 3), (0, 0, 90), (2, 1, 1))
     assert np.allclose(m @ [1, 0, 0, 1], [1, 4, 3, 1])  # x scaled to 2, turned onto +y, moved

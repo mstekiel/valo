@@ -21,16 +21,17 @@ import numpy as np
 import wgpu
 
 from .config import rc
-from .lighting import Lighting
-from .render import OrbitCamera, renderer
+from .gpu import renderer
+from .scene.camera import Camera
+from .scene.lighting import Lighting
 
 IMAGE_KEYS = ("size", "samples", "transparent", "background")
 
 
-def default_camera(scene) -> OrbitCamera:
+def default_camera(scene) -> Camera:
     """The starting camera for ``scene``: rc field of view, aimed at ``scene.center()`` and fitted to
     ``scene.bounding_radius()`` when the scene has them."""
-    cam = OrbitCamera(fovy=rc.camera.fov)
+    cam = Camera(fovy=rc.camera.fov)
     if hasattr(scene, "center"):
         cam.target = tuple(float(c) for c in scene.center())
     if hasattr(scene, "bounding_radius"):
@@ -52,13 +53,13 @@ def image_settings(settings: dict | None = None, **overrides) -> dict:
 
 
 def render(scene, settings: dict | None = None, *, size=None, samples=None, transparent=None, background=None,
-           camera: OrbitCamera | None = None, lighting: Lighting | None = None, path=None) -> np.ndarray:
+           camera: Camera | None = None, lighting: Lighting | None = None, path=None) -> np.ndarray:
     """Render ``scene`` offline and return the image, (height, width, 4) uint8 sRGB with alpha; save it as a
     PNG if ``path`` is given. See the module docstring for ``settings`` and the defaults."""
     settings = settings or {}
     image = image_settings(settings, size=size, samples=samples, transparent=transparent, background=background)
     if camera is None:
-        camera = OrbitCamera.from_settings(settings["camera"]) if "camera" in settings else default_camera(scene)
+        camera = Camera.from_settings(settings["camera"]) if "camera" in settings else default_camera(scene)
     if lighting is None:
         lighting = Lighting.from_settings(settings.get("lighting", {}))
     r = renderer()
@@ -132,7 +133,7 @@ def export_script(path, scene, settings: dict) -> Path:
 Run it:  uv run python {path.name}     (writes {path.with_suffix(".png").name} next to this file)
 Edit SETTINGS to change the picture:
   scene     {cls.__name__}.settings() / from_settings() data
-  camera    OrbitCamera fields (azimuth, elevation in degrees, distance, target, fovy, projection, ortho_height)
+  camera    Camera fields (azimuth, elevation in degrees, distance, target, fovy, projection, ortho_height)
   lighting  Lighting fields (mode "headlight" or "fixed", angles in degrees, colours linear RGB)
   image     size [width, height] px, samples 1-4 (supersampling), transparent, background (linear RGB or None)
 """

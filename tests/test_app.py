@@ -56,7 +56,7 @@ def test_any_mesh_draws_instanced_with_its_own_transforms(viewer):
 def test_vector_fonts_with_icons_are_loaded(viewer):
     from imgui_bundle import imgui
 
-    from valo.ui_style import ICON, mono_font
+    from valo.ui.style import ICON, mono_font
 
     imgui.set_current_context(viewer.imgui.imgui_context)
     io = imgui.get_io()
@@ -68,7 +68,7 @@ def test_vector_fonts_with_icons_are_loaded(viewer):
 def test_style_scale_is_absolute_not_compounding(viewer):
     from imgui_bundle import imgui
 
-    from valo.ui_style import apply_style
+    from valo.ui.style import apply_style
 
     imgui.set_current_context(viewer.imgui.imgui_context)
     style = imgui.get_style()
@@ -82,7 +82,7 @@ def test_style_scale_is_absolute_not_compounding(viewer):
 def test_scene_renders_into_an_offset_viewport_rect(viewer):
     import wgpu
 
-    from valo import Lighting, OrbitCamera
+    from valo import Lighting, Camera
 
     m = viewer.renderer.material("Matte", "lambert", base_color=(0.9, 0.9, 0.9), ambient=1.0)
     ball = viewer.renderer.spheres(m)
@@ -91,7 +91,7 @@ def test_scene_renders_into_an_offset_viewport_rect(viewer):
     fmt = viewer.context._config["format"]
     tex = viewer.device.create_texture(size=(400, 300, 1), format=fmt,
                                        usage=wgpu.TextureUsage.RENDER_ATTACHMENT | wgpu.TextureUsage.COPY_SRC)
-    viewer.renderer.render(tex, (100, 50, 200, 150), scene, OrbitCamera(distance=3.0), Lighting())
+    viewer.renderer.render(tex, (100, 50, 200, 150), scene, Camera(distance=3.0), Lighting())
     data = viewer.device.queue.read_texture({"texture": tex}, {"bytes_per_row": 400 * 4}, (400, 300, 1))
     img = np.frombuffer(data, np.uint8).reshape(300, 400, 4)[:, :, :3]
     inside = np.zeros((300, 400), bool)
@@ -136,13 +136,13 @@ def test_layout_is_saved_on_close(tmp_path):
 
 def test_orthographic_shading_is_the_same_for_identical_spheres(viewer):
     """In orthographic mode the view vector is the same everywhere, so two identical spheres shade identically."""
-    from valo import OrbitCamera
+    from valo import Camera
 
     m = viewer.renderer.material("Shiny", "pbr", base_color=(0.9, 0.9, 0.9), metallic=1.0, roughness=0.2)
     balls = viewer.renderer.spheres(m)
     balls.set([[-1.2, 0, 0], [1.2, 0, 0]], 0.5)
     viewer.show(SimpleNamespace(batches=lambda: [balls.batch()]))
-    viewer.camera = cam = OrbitCamera(azimuth=90.0, elevation=0.0, distance=3.0)
+    viewer.camera = cam = Camera(azimuth=90.0, elevation=0.0, distance=3.0)
 
     centres = np.array([[-1.2, 0, 0, 1], [1.2, 0, 0, 1]])
 
@@ -161,14 +161,14 @@ def test_orthographic_shading_is_the_same_for_identical_spheres(viewer):
 
 
 def test_global_ambient_lights_the_unlit_side(viewer):
-    from valo import OrbitCamera
-    from valo.lighting import Lighting
+    from valo import Camera
+    from valo.scene.lighting import Lighting
 
     m = viewer.renderer.material("Matte", "lambert", base_color=(0.8, 0.8, 0.8))
     ball = viewer.renderer.spheres(m)
     ball.set([[0, 0, 0]], 0.8)
     viewer.show(SimpleNamespace(batches=lambda: [ball.batch()]))
-    viewer.camera = OrbitCamera(azimuth=0.0, elevation=0.0, distance=4.0)
+    viewer.camera = Camera(azimuth=0.0, elevation=0.0, distance=4.0)
     viewer.lighting = Lighting("headlight", azimuth=180.0, elevation=0.0)  # from behind: the visible side is unlit
     lit = viewer.snapshot()
     viewer.lighting.ambient = 0.0
@@ -181,14 +181,14 @@ def test_global_ambient_lights_the_unlit_side(viewer):
 
 @pytest.mark.parametrize(("mode", "changes"), [("headlight", False), ("fixed", True)])
 def test_orbiting_changes_the_shading_only_with_a_fixed_light(viewer, mode, changes):
-    from valo import OrbitCamera
-    from valo.lighting import Lighting
+    from valo import Camera
+    from valo.scene.lighting import Lighting
 
     m = viewer.renderer.material("Matte", "lambert", base_color=(0.8, 0.8, 0.8))
     ball = viewer.renderer.spheres(m)
     ball.set([[0, 0, 0]], 0.8)
     viewer.show(SimpleNamespace(batches=lambda: [ball.batch()]))
-    viewer.camera, viewer.lighting = OrbitCamera(elevation=0.0, distance=4.0), Lighting(mode, -40.0, 20.0)
+    viewer.camera, viewer.lighting = Camera(elevation=0.0, distance=4.0), Lighting(mode, -40.0, 20.0)
     first = viewer.snapshot()
     viewer.camera.azimuth += 180  # a sphere looks the same from behind, unless the light stayed put
     differs = np.abs(viewer.snapshot().astype(int) - first).max() > 30
@@ -215,13 +215,13 @@ EDITOR_ACTIONS = {  # name → (action(editor, material), changes the image)
 def test_editor_action_undoes_exactly(viewer, name):
     import copy
 
-    from valo import Editor, Lighting, OrbitCamera, meshes
+    from valo import Editor, Lighting, Camera, meshes
 
     action, visible = EDITOR_ACTIONS[name]
     m = viewer.renderer.material("Shiny", "blinn_phong", base_color=(0.7, 0.3, 0.2), shininess=200.0)
     cube = viewer.renderer.instances(meshes.cube(), m)
     cube.set(np.eye(4)[None])
-    viewer.camera, viewer.lighting = OrbitCamera(), Lighting()
+    viewer.camera, viewer.lighting = Camera(), Lighting()
     editor = Editor()
     editor.watch(m)
     viewer.show(SimpleNamespace(batches=lambda: [cube.batch()], bounding_radius=lambda: 0.9), editor)
@@ -246,9 +246,9 @@ def test_editor_action_undoes_exactly(viewer, name):
 
 
 def test_mouse_orbits_and_zooms_only_over_the_scene(viewer):
-    from valo import Editor, OrbitCamera
+    from valo import Editor, Camera
 
-    viewer.camera = cam = OrbitCamera()
+    viewer.camera = cam = Camera()
     viewer.show(SimpleNamespace(batches=list), Editor())
     viewer.snapshot()  # lays out the dock, so the scene rect is known
     x, y, w, h = viewer.editor.scene_rect
@@ -325,9 +325,9 @@ def test_flat_ambient_can_be_switched_off_again(viewer):
 
 
 def test_orbit_speed_comes_from_rc(viewer):
-    from valo import Editor, OrbitCamera, rc_context
+    from valo import Editor, Camera, rc_context
 
-    viewer.camera = cam = OrbitCamera()
+    viewer.camera = cam = Camera()
     viewer.show(SimpleNamespace(batches=list), Editor())
     viewer.snapshot()
     x, y, w, h = viewer.editor.scene_rect
@@ -370,7 +370,7 @@ def test_batches_carry_their_instances_and_matrices(viewer):
 
 
 def test_pick_finds_the_batch_and_instance_under_a_pixel(viewer):
-    from valo import OrbitCamera, instance_matrices, meshes
+    from valo import Camera, instance_matrices, meshes
 
     m = viewer.renderer.material("M", "lambert")
     balls = viewer.renderer.spheres(m)
@@ -379,7 +379,7 @@ def test_pick_finds_the_batch_and_instance_under_a_pixel(viewer):
     cubes.set(instance_matrices([[0, 0, 1.5]], 0.8))
     scene = SimpleNamespace(batches=lambda: [balls.batch(), cubes.batch()])
     viewer.show(scene)
-    viewer.camera = cam = OrbitCamera(azimuth=-90.0, elevation=0.0, distance=8.0)  # looking along +Y
+    viewer.camera = cam = Camera(azimuth=-90.0, elevation=0.0, distance=8.0)  # looking along +Y
     viewer.snapshot()
 
     def pixel(p):
@@ -397,13 +397,13 @@ def test_pick_finds_the_batch_and_instance_under_a_pixel(viewer):
 
 
 def two_balls(viewer):
-    from valo import Editor, OrbitCamera
+    from valo import Editor, Camera
 
     m = viewer.renderer.material("M", "lambert", base_color=(0.5, 0.5, 0.5))
     balls = viewer.renderer.spheres(m)
     balls.set([[-1.2, 0, 0], [1.2, 0, 0]], 0.6)
     viewer.show(SimpleNamespace(batches=lambda: [balls.batch()]), Editor())
-    viewer.camera = OrbitCamera(azimuth=-90.0, elevation=0.0, distance=6.0)
+    viewer.camera = Camera(azimuth=-90.0, elevation=0.0, distance=6.0)
     viewer.selection, viewer.outlined = None, []
     release_pointer(viewer)
     return balls, viewer.snapshot()
@@ -425,8 +425,8 @@ def test_the_hovered_object_gets_a_box_not_a_tint(viewer):
 
 
 def test_the_selection_gets_a_box_in_its_own_colour(viewer):
-    from valo.geometry import box_corners
-    from valo.render import Pick
+    from valo.math import box_corners
+    from valo.gpu import Pick
 
     balls, plain = two_balls(viewer)
     w = plain.shape[1]
@@ -451,7 +451,7 @@ def test_the_selection_gets_a_box_in_its_own_colour(viewer):
 
 def test_info_rows_show_how_the_instance_was_placed(viewer):
     from valo import instance_matrices, meshes
-    from valo.render import Pick
+    from valo.gpu import Pick
     from valo.ui import pick_info
 
     m = viewer.renderer.material("Steel", "pbr")
@@ -468,13 +468,13 @@ def test_info_rows_show_how_the_instance_was_placed(viewer):
 
 
 def test_click_selects_keys_navigate_and_double_click_centres(viewer):
-    from valo import Editor, OrbitCamera, rc_context
+    from valo import Editor, Camera, rc_context
 
     m = viewer.renderer.material("M", "lambert")
     balls = viewer.renderer.spheres(m)
     balls.set([[-1.5, 0, 0], [1.5, 0, 0]], 0.5)
     viewer.show(SimpleNamespace(batches=lambda: [balls.batch()], bounding_radius=lambda: 2.0), Editor())
-    viewer.camera = cam = OrbitCamera(azimuth=-90.0, elevation=0.0, distance=8.0)
+    viewer.camera = cam = Camera(azimuth=-90.0, elevation=0.0, distance=8.0)
     viewer.snapshot()
 
     def key(name, *mods):
@@ -504,7 +504,7 @@ def test_click_selects_keys_navigate_and_double_click_centres(viewer):
         assert cam.target != target  # Shift+arrow pans
         assert len(viewer.editor.undo_stack.done) == 0  # navigation is never recorded (like Blender)
 
-    viewer.camera = cam = OrbitCamera(azimuth=-90.0, elevation=0.0, distance=8.0)
+    viewer.camera = cam = Camera(azimuth=-90.0, elevation=0.0, distance=8.0)
     with rc_context({"camera.center_duration": 0.0}):
         click_ball()
         click_ball()  # a double-click centres on the point under the pointer
@@ -572,18 +572,18 @@ def test_supersampling_smooths_the_outline(ball_scene):
 
 
 def test_offline_render_matches_the_viewer_and_settings_round_trip(viewer, ball_scene):
-    from valo import Lighting, OrbitCamera, render
+    from valo import Lighting, Camera, render
 
     viewer.show(ball_scene)
-    viewer.camera, viewer.lighting = OrbitCamera(azimuth=30.0, distance=5.0), Lighting(mode="fixed")
+    viewer.camera, viewer.lighting = Camera(azimuth=30.0, distance=5.0), Lighting(mode="fixed")
     shown = viewer.snapshot()
     h, w = shown.shape[:2]
     settings = {"camera": viewer.camera.settings(), "lighting": viewer.lighting.settings()}
     img = render(ball_scene, settings, size=(w, h), samples=1)
     assert np.array_equal(img[..., :3], shown)  # the same picture as on screen
-    assert OrbitCamera.from_settings(settings["camera"]) == viewer.camera
+    assert Camera.from_settings(settings["camera"]) == viewer.camera
     with pytest.raises(KeyError, match="did you mean 'azimuth'"):
-        OrbitCamera.from_settings({"azimut": 3})
+        Camera.from_settings({"azimut": 3})
     viewer.lighting = Lighting()
 
 
@@ -602,10 +602,10 @@ def test_any_app_can_render_an_image_but_export_needs_scene_settings(viewer, bal
 
 
 def test_compass_turns_with_the_camera_and_draws_in_its_corner(viewer):
-    from valo import Editor, OrbitCamera, rc_context
+    from valo import Editor, Camera, rc_context
     from valo.ui import compass_layout
 
-    cam = OrbitCamera(azimuth=-90.0, elevation=0.0)  # looking along +Y: right = +X, up = +Z
+    cam = Camera(azimuth=-90.0, elevation=0.0)  # looking along +Y: right = +X, up = +Z
     axes = Editor().compass_axes()
     layout = {label: (end, near) for label, _, end, _, near in compass_layout(cam, axes, (100, 100), 40)}
     assert layout["x"][0] == pytest.approx((140, 100)) and layout["z"][0] == pytest.approx((100, 60))

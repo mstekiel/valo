@@ -18,41 +18,35 @@ See ``examples/`` for complete apps.
 """
 
 from . import meshes
-from .app import Viewer
 from .config import rc, rc_context
-from .geometry import instance_matrices
-from .lighting import Lighting
-from .materials import SCHEMA, SHADINGS, Material, linear_to_srgb, srgb_to_linear
+from .gpu import SCHEMA, SHADINGS, Instances, Material, Renderer, Spheres, linear_to_srgb, renderer, srgb_to_linear
+from .math import instance_matrices
 from .meshes import (
-           MeshData,
-           Sculpt,  # noqa: F401 - deprecated alias of ShapeFile, removed at the end of the refactor
-           ShapeFile,
-           library,
+    MeshData,
+    Sculpt,  # noqa: F401 - deprecated alias of ShapeFile, removed in the next commit
+    ShapeFile,
+    library,
 )
 from .offline import plain, py_literal, render, save_png
-from .render import (
-           Instances,
-           OrbitCamera,  # noqa: F401 - deprecated name of Camera, removed at the end of the refactor
-           Renderer,
-           Spheres,
-           renderer,
-)
 from .scene import (
-           Camera,
-           Group,
-           InstancedObject,
-           MeshObject,
-           ProceduralGroup,
-           Scene,
-           Shape,
-           Transform,
-           node_from_settings,
+    Camera,
+    Group,
+    InstancedObject,
+    Lighting,
+    MeshObject,
+    ProceduralGroup,
+    Scene,
+    Shape,
+    Transform,
+    node_from_settings,
 )
-from .scene_editor import SceneEditor
+from .scene import Camera as OrbitCamera  # noqa: F401 - deprecated name of Camera, removed in the next commit
 from .studio import StudioEditor
 from .ui import Editor
-from .ui_style import ICON, mono_font
-from .undo import Command, UndoStack
+from .ui.scene_editor import SceneEditor
+from .ui.style import ICON, mono_font
+from .ui.undo import Command, UndoStack
+from .ui.viewer import Viewer
 
 __all__ = ["ICON", "SCHEMA", "SHADINGS", "Camera", "Command", "Editor", "Group", "InstancedObject", "Instances",
            "Lighting", "Material", "MeshData", "MeshObject", "ProceduralGroup", "Renderer", "Scene", "SceneEditor",

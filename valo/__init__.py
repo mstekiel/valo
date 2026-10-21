@@ -30,16 +30,32 @@ from .meshes import (
            library,
 )
 from .offline import plain, py_literal, render, save_png
-from .render import Instances, OrbitCamera, Renderer, Spheres, renderer
-from .scene import Group, InstancedObject, MeshObject, ProceduralGroup, Scene, Shape, Transform, node_from_settings
+from .render import (
+           Instances,
+           OrbitCamera,  # noqa: F401 - deprecated name of Camera, removed at the end of the refactor
+           Renderer,
+           Spheres,
+           renderer,
+)
+from .scene import (
+           Camera,
+           Group,
+           InstancedObject,
+           MeshObject,
+           ProceduralGroup,
+           Scene,
+           Shape,
+           Transform,
+           node_from_settings,
+)
 from .scene_editor import SceneEditor
 from .studio import StudioEditor
 from .ui import Editor
 from .ui_style import ICON, mono_font
 from .undo import Command, UndoStack
 
-__all__ = ["ICON", "SCHEMA", "SHADINGS", "Command", "Editor", "Group", "InstancedObject", "Instances", "Lighting",
-           "Material", "MeshData", "MeshObject", "OrbitCamera", "ProceduralGroup", "Renderer", "Scene", "SceneEditor",
+__all__ = ["ICON", "SCHEMA", "SHADINGS", "Camera", "Command", "Editor", "Group", "InstancedObject", "Instances",
+           "Lighting", "Material", "MeshData", "MeshObject", "ProceduralGroup", "Renderer", "Scene", "SceneEditor",
            "StudioEditor", "ShapeFile", "Shape", "Spheres", "Transform", "UndoStack", "Viewer", "instance_matrices",
            "library", "linear_to_srgb", "meshes", "mono_font", "node_from_settings", "plain", "py_literal", "rc",
            "rc_context", "render", "renderer", "save_png", "srgb_to_linear"]

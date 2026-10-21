@@ -14,8 +14,8 @@ VALO = Path(valo.__file__).parent
 
 # -- the public API ------------------------------------------------------------------------------------------------
 
-API = ["ICON", "SCHEMA", "SHADINGS", "Command", "Editor", "Group", "InstancedObject", "Instances", "Lighting",
-       "Material", "MeshData", "MeshObject", "OrbitCamera", "ProceduralGroup", "Renderer", "Scene", "SceneEditor",
+API = ["ICON", "SCHEMA", "SHADINGS", "Camera", "Command", "Editor", "Group", "InstancedObject", "Instances", "Lighting",
+       "Material", "MeshData", "MeshObject", "ProceduralGroup", "Renderer", "Scene", "SceneEditor",
        "StudioEditor", "ShapeFile", "Shape", "Spheres", "Transform", "UndoStack", "Viewer", "instance_matrices",
        "library", "linear_to_srgb", "meshes", "mono_font", "node_from_settings", "plain", "py_literal", "rc",
        "rc_context", "render", "renderer", "save_png", "srgb_to_linear"]
@@ -37,7 +37,7 @@ SIGNATURES = {
     "InstancedObject": "(name, shape, material, instances=None, **kw)",
     "ProceduralGroup": "(name, builder, params=None, *, ranges=None, context=None, **kw)",
     "Group": "(name, *, visible=True, transform=None, locked=False)",
-    "OrbitCamera": "(azimuth=-55.0, elevation=25.0, distance=14.0, target=(0.0, 0.0, 0.0), fovy=35.0, "
+    "Camera": "(azimuth=-55.0, elevation=25.0, distance=14.0, target=(0.0, 0.0, 0.0), fovy=35.0, "
                    "projection='perspective', ortho_height=10.0, _anim=None)",
     "render": "(scene, settings=None, *, size=None, samples=None, transparent=None, background=None, camera=None, "
               "lighting=None, path=None)",
@@ -94,7 +94,7 @@ LAYERS = {
     "studio": 5,
 }
 OUTSIDE = {"config", "testing", "__init__"}
-SHIMS = {"geometry", "materials", "meshes.sculpt"}  # old paths re-exporting the new ones, until the end
+SHIMS = {"geometry", "materials", "meshes.sculpt", "render"}  # old paths re-exporting the new ones, until the end
 KNOWN_VIOLATIONS: set[tuple[str, str]] = set()  # (module, layer it may not import): none left
 
 

@@ -62,7 +62,7 @@ class Viewer:
         self.viewport = (0, 0, 1, 1)  # (x, y, w, h) of the scene in framebuffer pixels
         self.navigator = Navigator(self)  # moves self.camera: mouse, keys, presets, transitions
         self.pointer = None  # last pointer position, logical px
-        self.hover = None  # Pick under the pointer (render.Pick) or None
+        self.hover = None  # Pick under the pointer (gpu.Pick) or None
         self.selection = None  # Pick chosen by a click, or None
         self.outlined: list = []  # selected things to box (anything with bounding_box(), e.g. a scene editor's node)
         self._last_click = None  # (time, x, y) of the last click, for double-click

@@ -109,7 +109,7 @@ class StudioEditor(CodeWindow, NormalsOverlay, SceneEditor):
 
     def users(self, path) -> list[MeshObject]:
         """The objects built from shape file ``path``."""
-        return [o for o in self.scene.objects() if o.shape.sculpt is not None and _same(o.shape.source, path)]
+        return [o for o in self.scene.objects() if o.shape.file is not None and _same(o.shape.source, path)]
 
     @property
     def code_error(self) -> str | None:
@@ -146,8 +146,8 @@ class StudioEditor(CodeWindow, NormalsOverlay, SceneEditor):
         material named after the file (unless ``material`` is given). See ``SceneEditor.add_shape``."""
         shape = Shape(source)
         with self.one_step(f"Add {shape.name.capitalize()}"):
-            if material is None and shape.sculpt is not None and shape.sculpt.material:
-                preset = dict(shape.sculpt.material)
+            if material is None and shape.file is not None and shape.file.material:
+                preset = dict(shape.file.material)
                 material = self.new_material(shape.name, preset.pop("shading", "pbr"), **preset).name
             return super().add_shape(source, parent, material)
 
@@ -189,19 +189,19 @@ class StudioEditor(CodeWindow, NormalsOverlay, SceneEditor):
         """Write ``obj``'s shape file to the library as ``<name>.py`` with its parameter values as defaults, its
         material as ``MATERIAL`` and its transform baked into ``TRANSFORM``; the object then uses that file with an
         identity transform, so it looks the same. Undoable (undo restores the file and the object). Returns the path."""
-        if obj.shape.sculpt is None:
+        if obj.shape.file is None:
             raise ValueError(f"{obj.name} isn't built from a shape file")
         if not name.isidentifier() or name.startswith("_"):
             raise ValueError(f"{name!r} is not a valid library name (letters, digits, _; not starting with _)")
         target = library.path(name)
         if target.exists() and not overwrite and not _same(target, obj.shape.source):
             raise FileExistsError(f"{target.name} exists in the library")
-        sculpt = obj.shape.sculpt
-        t, r, s = decompose(obj.transform.matrix() @ transform_matrix(sculpt.transform))
+        shape_file = obj.shape.file
+        t, r, s = decompose(obj.transform.matrix() @ transform_matrix(shape_file.transform))
         baked = {"translate": t.tolist(), "rotate_deg": [round(a, 6) for a in euler_xyz(r)], "scale": s.tolist()}
         baked = {k: v if not np.allclose(v, IDENTITY[k]) else IDENTITY[k] for k, v in baked.items()}
         old = (target.read_text(encoding="utf-8") if target.exists() else None, obj.shape, obj.transform)
-        text = sculpt.rewrite(obj.shape.params, self.scene.materials[obj.material].to_dict(), baked)
+        text = shape_file.rewrite(obj.shape.params, self.scene.materials[obj.material].to_dict(), baked)
         new_shape = []  # made once, then reused by redo
 
         def put(file_text, shape, transform):
@@ -241,7 +241,7 @@ class StudioEditor(CodeWindow, NormalsOverlay, SceneEditor):
     def gui(self) -> None:
         """Show the selected object's shape file in the Code window (when nothing is unsaved), then draw."""
         sel = self.selected
-        if (isinstance(sel, MeshObject) and sel.shape.sculpt is not None and not self.dirty
+        if (isinstance(sel, MeshObject) and sel.shape.file is not None and not self.dirty
                 and not _same(sel.shape.source, self.code_path)):
             self.open_code(sel.shape.source)
         self._poll_browsing()

@@ -39,7 +39,7 @@ class OutlinerWindow:
                     self.add_shape(func, self._insert_parent())
             imgui.end_menu()
         names = library.names()
-        if imgui.begin_menu(f"{ICON.BOOK} Library sculpt", bool(names)):
+        if imgui.begin_menu(f"{ICON.BOOK} Library shape", bool(names)):
             for name in names:
                 if imgui.menu_item_simple(name):
                     self.add_shape(library.path(name), self._insert_parent())

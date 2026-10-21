@@ -12,7 +12,7 @@ An app builds a scene (anything with ``batches()``) from the Viewer's renderer a
     viewer.run()
 
 Or, at a higher level, a ``valo.Scene``: a tree of named objects, each a shape function with parameters, a
-transform and a material from the scene's library (see ``valo/scene.py``).
+transform and a material from the scene's library (see ``valo.scene``).
 
 See ``examples/`` for complete apps.
 """

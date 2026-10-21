@@ -46,7 +46,7 @@ class CodeWindow:
         if imgui.menu_item_simple(f"{ICON.FOLDER_OPEN} Open shape file..."):
             self.browse_shape()
         obj = self.selected
-        can_save = isinstance(obj, MeshObject) and obj.shape.sculpt is not None
+        can_save = isinstance(obj, MeshObject) and obj.shape.file is not None
         if imgui.menu_item(f"{ICON.BOOK} Save to library as...", "", False, can_save)[0]:
             self._dialog, self._confirm_overwrite = ("save", Path(str(obj.shape.source)).stem), False
         imgui.separator()

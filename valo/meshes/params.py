@@ -1,8 +1,8 @@
 """Shape parameters: the editable arguments of a shape function, read from its signature.
 
-A shape function (``valo.meshes.primitives.sphere``, a sculpt file's ``mesh``, an app's builder) declares its
+A shape function (``valo.meshes.primitives.sphere``, a shape file's ``mesh``, an app's builder) declares its
 parameters with defaults and ``float`` / ``int`` / ``bool`` annotations; ``shape_params`` turns them into
-``ShapeParam`` records that panels show as sliders and checkboxes. Ranges come from a ``ranges`` dict (a sculpt
+``ShapeParam`` records that panels show as sliders and checkboxes. Ranges come from a ``ranges`` dict (a shape
 file's ``RANGES``, or a ``func.ranges`` attribute) or a default around the default value.
 """
 

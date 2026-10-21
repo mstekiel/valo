@@ -119,7 +119,7 @@ def axis_angle(rotation) -> tuple[np.ndarray, float]:
 
 
 def euler_xyz(rotation) -> np.ndarray:
-    """Angles (degrees) applied x, then y, then z, i.e. R = Rz · Ry · Rx (the sculpt TRANSFORM convention)."""
+    """Angles (degrees) applied x, then y, then z, i.e. R = Rz · Ry · Rx (the shape-file TRANSFORM convention)."""
     r = np.asarray(rotation, float)
     y = math.asin(float(np.clip(-r[2, 0], -1.0, 1.0)))
     if abs(r[2, 0]) < 1 - 1e-9:

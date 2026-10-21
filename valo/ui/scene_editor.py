@@ -68,7 +68,7 @@ class SceneEditor(OutlinerWindow, ObjectWindow, MaterialsWindow, Editor):
         self._last_pick = None  # the viewer's selection last frame: a new 3D click selects its object
         self._renaming: tuple[Node, str] | None = None
         self._reports: dict[int, tuple] = {}  # id(object) → (gpu mesh, MeshReport), made again after a change
-        self.errors: dict[str, str] = {}  # object name → traceback of its sculpt file's last failed reload
+        self.errors: dict[str, str] = {}  # object name → traceback of its shape file's last failed reload
         self._polled = 0.0
         for m in scene.materials.values():
             self.watch(m)
@@ -137,7 +137,7 @@ class SceneEditor(OutlinerWindow, ObjectWindow, MaterialsWindow, Editor):
         return parent, index
 
     def add_shape(self, source, parent: Group | None = None, material: str | None = None) -> MeshObject:
-        """Add a MeshObject made by ``source`` (a callable, ``"module:function"`` or sculpt file) with default
+        """Add a MeshObject made by ``source`` (a callable, ``"module:function"`` or shape file) with default
         parameters and ``material`` (default: the library's first, or a new one); returns it."""
         shape = Shape(source)
         with self.one_step(f"Add {shape.name.capitalize()}"):
@@ -245,7 +245,7 @@ class SceneEditor(OutlinerWindow, ObjectWindow, MaterialsWindow, Editor):
         self._push(f"{node.name}: {field}", apply(old), apply(new), merge_key=(id(node), field))
 
     def set_shape(self, obj: MeshObject, source) -> None:
-        """Make ``obj`` from another shape ``source`` (callable, ``"module:function"`` or sculpt file), with its
+        """Make ``obj`` from another shape ``source`` (callable, ``"module:function"`` or shape file), with its
         default parameters; instances, material and transform stay."""
         old, new = obj.shape, Shape(source)
 
@@ -367,7 +367,7 @@ class SceneEditor(OutlinerWindow, ObjectWindow, MaterialsWindow, Editor):
 
     # -- hot reload (a file change is not an edit: not recorded for undo)
     def poll(self) -> None:
-        """Every ``rc.studio.poll_s`` seconds, reload the shapes whose sculpt files changed on disk."""
+        """Every ``rc.studio.poll_s`` seconds, reload the shapes whose shape files changed on disk."""
         now = time.monotonic()
         if now - self._polled < rc.studio.poll_s:
             return
@@ -377,7 +377,7 @@ class SceneEditor(OutlinerWindow, ObjectWindow, MaterialsWindow, Editor):
                 self.reload_shape(obj)
 
     def reload_shape(self, obj: MeshObject) -> None:
-        """Re-read ``obj``'s sculpt file and rebuild its mesh; on an error keep the last good mesh and remember the
+        """Re-read ``obj``'s shape file and rebuild its mesh; on an error keep the last good mesh and remember the
         traceback in ``errors`` (shown in the Object window)."""
         try:
             obj.shape.reload()

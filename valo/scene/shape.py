@@ -34,13 +34,13 @@ def reference(func) -> str:
 class Shape:
     """A mesh made by a function from parameters: ``build()`` returns its MeshData.
 
-    ``source`` is a callable, a ``"module:function"`` path or the path of a sculpt file (``.py`` with ``mesh(...)``,
+    ``source`` is a callable, a ``"module:function"`` path or the path of a shape file (``.py`` with ``mesh(...)``,
     whose own TRANSFORM is baked in, as in the library). ``specs`` lists the editable parameters.
     """
 
     def __init__(self, source, params: dict | None = None):
         self.source = source
-        self.sculpt = None
+        self.file = None
         self._load()
         known = {p.name for p in self.specs}
         unknown = set(params or {}) - known
@@ -53,33 +53,33 @@ class Shape:
             from ..meshes.shapefile import ShapeFile
 
             mtime = Path(self.source).stat().st_mtime  # before reading: a write during the read shows next time
-            self.sculpt = ShapeFile.load(self.source)
-            self.func, self.specs, self.mtime = self.sculpt.build, self.sculpt.params, mtime
+            self.file = ShapeFile.load(self.source)
+            self.func, self.specs, self.mtime = self.file.build, self.file.params, mtime
         else:
             self.func = resolve(self.source)
             self.specs: list[ShapeParam] = shape_params(self.func)
 
     @property
     def name(self) -> str:
-        """A short label: the function name or the sculpt file's stem."""
-        return Path(str(self.source)).stem if self.sculpt else getattr(self.func, "__name__", str(self.source))
+        """A short label: the function name or the shape file's stem."""
+        return Path(str(self.source)).stem if self.file else getattr(self.func, "__name__", str(self.source))
 
     def build(self) -> MeshData:
         """The mesh for the current parameters."""
-        data = self.func(self.params) if self.sculpt else self.func(**self.params)
+        data = self.func(self.params) if self.file else self.func(**self.params)
         if not isinstance(data, MeshData):
             raise TypeError(f"{self.name} returned {type(data).__name__}, expected MeshData")
         return data
 
     def stale(self) -> bool:
-        """True when the shape's sculpt file changed on disk since it was read (always False for functions)."""
+        """True when the shape's shape file changed on disk since it was read (always False for functions)."""
         try:
-            return self.sculpt is not None and Path(self.source).stat().st_mtime != self.mtime
+            return self.file is not None and Path(self.source).stat().st_mtime != self.mtime
         except OSError:
             return False
 
     def reload(self) -> None:
-        """Re-read a sculpt file. A parameter you changed from its default keeps your value (if it still exists with
+        """Re-read a shape file. A parameter you changed from its default keeps your value (if it still exists with
         the same kind); the others take the file's new defaults, so editing a default in the code shows at once."""
         old = {p.name: p for p in self.specs}
         values = self.params
@@ -94,4 +94,4 @@ class Shape:
 
     def settings(self) -> dict:
         """As plain data: the function reference (or file) and the parameters."""
-        return {"func": str(self.source) if self.sculpt else reference(self.source), "params": dict(self.params)}
+        return {"func": str(self.source) if self.file else reference(self.source), "params": dict(self.params)}

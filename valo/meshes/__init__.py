@@ -6,7 +6,7 @@
     primitives.py  sphere, icosphere, cube, plane, cylinder, cone, torus, capsule, arrow, STANDARD
     check.py       check → MeshReport                  (winding, normals, watertight, volume)
     shapefile.py   ShapeFile: load / build / save a shape file
-    library/       saved sculpts: library.names(), library.mesh(name, **params)
+    library.py     the procedural mesh library: library.names(), library.mesh(name, **params)
 
 Conventions: triangles counter-clockwise seen from outside; Z-up; unit-sized and centred at the origin
 unless a function says otherwise.

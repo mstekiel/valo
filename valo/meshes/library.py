@@ -1,5 +1,9 @@
-"""valo's library of procedural meshes: shape files saved by the studio, in ``rc.studio.procedural_meshes``
-(default ``data/procedural_meshes/`` in the project folder; a relative path is resolved against that folder).
+"""valo's library of procedural meshes: shape files in two folders, read together.
+
+- **Built-in** (``BUILTIN_DIR``, ``valo/data/procedural_meshes/``): starter meshes shipped with valo; only read.
+- **User** (``directory()``, from ``rc.studio.procedural_meshes``, default ``data/procedural_meshes``; a relative
+  path is relative to the current working directory): the studio's New shape and Save to library write here. A user
+  file hides a built-in one of the same name.
 
 Every ``*.py`` file there is an entry, named after the file::
 
@@ -17,21 +21,33 @@ from ..config import rc
 from .data import MeshData
 from .shapefile import ShapeFile
 
-PROJECT_DIR = Path(__file__).resolve().parents[2]  # the folder holding the valo package
+BUILTIN_DIR = Path(__file__).resolve().parents[1] / "data" / "procedural_meshes"  # shipped inside the package
 
 
 def directory() -> Path:
-    """The library folder: ``rc.studio.procedural_meshes``, relative paths resolved against the project folder."""
-    return PROJECT_DIR / Path(rc.studio.procedural_meshes).expanduser()
+    """The user library folder: ``rc.studio.procedural_meshes`` (``~`` expanded; relative to the working directory)."""
+    return Path(rc.studio.procedural_meshes).expanduser().resolve()
+
+
+def _entries(folder: Path) -> dict[str, Path]:
+    return {p.stem: p for p in folder.glob("*.py") if not p.name.startswith("_")}
 
 
 def names() -> list[str]:
-    """Names of all saved library meshes, sorted."""
-    return sorted(p.stem for p in directory().glob("*.py") if not p.name.startswith("_"))
+    """Names of all library meshes, built-in and user, sorted."""
+    return sorted({**_entries(BUILTIN_DIR), **_entries(directory())})
 
 
 def path(name: str) -> Path:
-    """File path of library entry ``name`` (it may not exist yet)."""
+    """File of library entry ``name``: the user's, else the built-in one, else where a new one would be saved."""
+    for folder in (directory(), BUILTIN_DIR):
+        if (folder / f"{name}.py").exists():
+            return folder / f"{name}.py"
+    return save_path(name)
+
+
+def save_path(name: str) -> Path:
+    """Where entry ``name`` is saved: always the user folder, so saving never writes into the installed package."""
     return directory() / f"{name}.py"
 
 

@@ -17,9 +17,12 @@ def viewer(request):
 
 @pytest.fixture
 def tmp_library(tmp_path, monkeypatch):
-    """The procedural mesh library redirected to an empty temporary folder (never the real data/ one); its path."""
+    """The procedural mesh library redirected to empty temporary folders (never the real ones): the user folder
+    (returned) and the built-in one (``library.BUILTIN_DIR``)."""
     from valo import rc
+    from valo.meshes import library
 
     folder = tmp_path / "library"
+    monkeypatch.setattr(library, "BUILTIN_DIR", tmp_path / "builtin")
     monkeypatch.setattr(rc.studio, "procedural_meshes", str(folder))
     return folder

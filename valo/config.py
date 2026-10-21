@@ -186,7 +186,8 @@ class StudioConfig(Section):
     poll_s: float = opt(0.3, "File poll interval", 0.05, 5.0, "s", help="How often shape files are checked for changes")
     max_normal_arrows: int = opt(2000, "Max normal arrows", 10, 100000, help="Normals overlay: at most this many")
     procedural_meshes: str = opt("data/procedural_meshes", "Procedural mesh library",
-                                 help="Folder of saved shape files; relative to the project folder")
+                                 help="Your folder of saved shape files (New shape, Save to library); "
+                                      "relative to the working directory, ~ allowed. Built-in meshes ship with valo")
 
 
 SECTIONS = {cls.NAME: cls for cls in (CameraConfig, LightingConfig, RenderConfig, HighlightConfig, PickingConfig,

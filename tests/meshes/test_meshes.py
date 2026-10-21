@@ -198,7 +198,7 @@ def test_library_material_comes_from_the_saved_preset(tmp_path, monkeypatch):
     from valo import rc
     from valo.meshes import library
 
-    assert library.directory() == library.PROJECT_DIR / "data" / "procedural_meshes"  # the default
+    monkeypatch.setattr(library, "BUILTIN_DIR", tmp_path / "builtin")
     monkeypatch.setattr(rc.studio, "procedural_meshes", str(tmp_path))
     (tmp_path / "blob.py").write_text(SCULPT.replace('RANGES = {"height": (0.1, 4.0)}',
                                                      'MATERIAL = {"shading": "toon", "bands": 5.0}'), encoding="utf-8")
@@ -283,3 +283,23 @@ def test_tube_radius_can_vary_and_bad_paths_are_explained():
         meshes.tube([(0, 0, 0), (0, 0, 0), (1, 0, 0)])
     with pytest.raises(ValueError, match="radius"):
         meshes.tube([(0, 0, 0), (1, 0, 0)], radius=0)
+
+
+def test_library_merges_builtin_and_user_folders(tmp_path, monkeypatch):
+    from valo import rc
+    from valo.meshes import library
+
+    builtin, user = tmp_path / "builtin", tmp_path / "project" / "data" / "procedural_meshes"
+    builtin.mkdir()
+    user.mkdir(parents=True)
+    monkeypatch.setattr(library, "BUILTIN_DIR", builtin)
+    monkeypatch.chdir(tmp_path / "project")  # a relative rc path is relative to the working directory
+    monkeypatch.setattr(rc.studio, "procedural_meshes", "data/procedural_meshes")
+    for path in (builtin / "vase.py", builtin / "wave.py", user / "vase.py", user / "blob.py"):
+        path.write_text(SCULPT, encoding="utf-8")
+    assert library.directory() == user.resolve()
+    assert library.names() == ["blob", "vase", "wave"]
+    assert library.path("vase") == user.resolve() / "vase.py"  # the user's copy hides the built-in one
+    assert library.path("wave") == builtin / "wave.py"
+    assert library.path("new") == library.save_path("new") == user.resolve() / "new.py"
+    assert library.save_path("wave") == user.resolve() / "wave.py"  # saving never writes into the package

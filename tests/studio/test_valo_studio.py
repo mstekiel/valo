@@ -2,16 +2,16 @@
 Needs a GPU adapter."""
 
 import shutil
-from pathlib import Path
 
 import numpy as np
 import pytest
 
+from valo.meshes import library
 from valo.testing import open_every_menu
 
 pytestmark = pytest.mark.gpu
 VIEWER_SIZE = (1280, 720)  # room for the Code column
-VASE = Path(__file__).parents[2] / "examples" / "shapes" / "vase.py"
+VASE = library.BUILTIN_DIR / "vase.py"
 
 
 @pytest.fixture

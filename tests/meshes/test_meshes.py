@@ -1,6 +1,5 @@
 """Mesh tests (pure numpy): primitives, builders, check(), sculpt files and the library."""
 
-from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
@@ -8,6 +7,7 @@ import pytest
 
 from valo import meshes
 from valo.math import scale
+from valo.meshes import library
 
 R, L = 0.25, 1.0  # capsule defaults
 CLOSED_VOLUMES = {  # analytic volume of each closed standard mesh with default arguments
@@ -185,9 +185,9 @@ def test_merge_offsets_indices():
 
 
 
-@pytest.mark.parametrize("path", sorted((Path(__file__).parents[2] / "examples" / "shapes").glob("*.py")),
+@pytest.mark.parametrize("path", sorted(library.BUILTIN_DIR.glob("*.py")),
                          ids=lambda p: p.stem)
-def test_starter_sculpts_build_clean_meshes(path):
+def test_builtin_library_meshes_build_clean_meshes(path):
     from valo.meshes import ShapeFile
 
     report = meshes.check(ShapeFile.load(path).build())

@@ -86,7 +86,7 @@ def test_entry_points_keep_how_they_are_called(name):
 # Lower layers never import higher ones: math ← meshes ← gpu ← scene ← (offline, ui) ← studio; config, testing and the
 # package __init__ are outside the order. Keys are module paths inside valo (packages as "meshes" prefixes).
 LAYERS = {"math": 0, "meshes": 1, "gpu": 2, "scene": 3, "offline": 4, "ui": 4, "studio": 5}
-OUTSIDE = {"config", "testing", "__init__"}
+OUTSIDE = {"config", "testing", "__init__", "data"}  # data: built-in shape files, written like apps
 KNOWN_VIOLATIONS: set[tuple[str, str]] = set()  # (module, layer it may not import): none left
 
 

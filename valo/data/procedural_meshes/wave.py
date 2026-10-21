@@ -1,4 +1,4 @@
-"""A ripple on a square sheet: z = f(x, y). Open it with: uv run valo-studio examples/shapes/wave.py"""
+"""A ripple on a square sheet: z = f(x, y). A built-in library mesh."""
 
 import numpy as np
 

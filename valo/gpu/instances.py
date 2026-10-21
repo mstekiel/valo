@@ -43,7 +43,7 @@ class Instances:
         self.set(np.zeros((0, 4, 4)))
 
     def set(self, matrices) -> None:
-        """Upload (N, 4, 4) math-convention model matrices, e.g. from ``geometry.instance_matrices``."""
+        """Upload (N, 4, 4) math-convention model matrices, e.g. from ``valo.math.instance_matrices``."""
         matrices = np.asarray(matrices, np.float32).reshape(-1, 4, 4)
         self.matrices = matrices.copy()  # CPU copy: picking, info and centring read it
         self.count = len(matrices)

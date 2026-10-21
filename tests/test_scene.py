@@ -192,7 +192,7 @@ def mesh(size: float = 0.5, tall: bool = False):
 
 
 def test_settings_round_trip_rebuilds_the_identical_image(scene, tmp_path):
-    from valo import Group, InstancedObject, MeshObject, Camera, ProceduralGroup, Scene, Shape, Transform, render
+    from valo import Camera, Group, InstancedObject, MeshObject, ProceduralGroup, Scene, Shape, Transform, render
 
     path = tmp_path / "box.py"
     path.write_text(SCULPT, encoding="utf-8")
@@ -232,7 +232,7 @@ def test_unknown_kinds_and_unimportable_functions_are_reported():
 
 def edited_scene(viewer):
     """A scene with a group, plain and instanced objects, a procedural ring and an unused material, in an editor."""
-    from valo import Group, InstancedObject, Camera, ProceduralGroup, Scene, SceneEditor, Shape, Transform
+    from valo import Camera, Group, InstancedObject, ProceduralGroup, Scene, SceneEditor, Shape, Transform
 
     scene = Scene()
     scene.material("Matte", "lambert", base_color=(0.6, 0.6, 0.6))

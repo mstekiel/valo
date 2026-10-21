@@ -18,7 +18,6 @@ from .check import MeshReport, check
 from .data import MeshData
 from .ops import merge, transform
 from .primitives import STANDARD, arrow, capsule, cone, cube, cylinder, icosphere, plane, sphere, torus
-from .sculpt import Sculpt  # noqa: F401 - deprecated alias of ShapeFile, removed at the end of the refactor
 from .shapefile import ShapeFile
 
 __all__ = ["STANDARD", "MeshData", "MeshReport", "ShapeFile", "arrow", "capsule", "check", "cone", "cube", "cylinder",

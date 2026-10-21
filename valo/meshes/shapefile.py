@@ -24,7 +24,7 @@ from pathlib import Path
 
 import numpy as np
 
-from .. import geometry
+from ..math import transforms
 from .data import MeshData
 from .ops import transform
 from .params import ShapeParam, shape_params
@@ -39,7 +39,7 @@ __all__ = ["IDENTITY", "ShapeFile", "ShapeParam", "transform_matrix"]
 def transform_matrix(t: dict) -> np.ndarray:
     """T · Rz · Ry · Rx · S from a TRANSFORM dict (rotations in degrees, applied x, then y, then z)."""
     t = {**IDENTITY, **(t or {})}
-    return geometry.transform_matrix(t["translate"], t["rotate_deg"], t["scale"])
+    return transforms.transform_matrix(t["translate"], t["rotate_deg"], t["scale"])
 
 
 def _literal(v) -> str:

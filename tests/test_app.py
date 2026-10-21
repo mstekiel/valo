@@ -82,7 +82,7 @@ def test_style_scale_is_absolute_not_compounding(viewer):
 def test_scene_renders_into_an_offset_viewport_rect(viewer):
     import wgpu
 
-    from valo import Lighting, Camera
+    from valo import Camera, Lighting
 
     m = viewer.renderer.material("Matte", "lambert", base_color=(0.9, 0.9, 0.9), ambient=1.0)
     ball = viewer.renderer.spheres(m)
@@ -215,7 +215,7 @@ EDITOR_ACTIONS = {  # name → (action(editor, material), changes the image)
 def test_editor_action_undoes_exactly(viewer, name):
     import copy
 
-    from valo import Editor, Lighting, Camera, meshes
+    from valo import Camera, Editor, Lighting, meshes
 
     action, visible = EDITOR_ACTIONS[name]
     m = viewer.renderer.material("Shiny", "blinn_phong", base_color=(0.7, 0.3, 0.2), shininess=200.0)
@@ -246,7 +246,7 @@ def test_editor_action_undoes_exactly(viewer, name):
 
 
 def test_mouse_orbits_and_zooms_only_over_the_scene(viewer):
-    from valo import Editor, Camera
+    from valo import Camera, Editor
 
     viewer.camera = cam = Camera()
     viewer.show(SimpleNamespace(batches=list), Editor())
@@ -325,7 +325,7 @@ def test_flat_ambient_can_be_switched_off_again(viewer):
 
 
 def test_orbit_speed_comes_from_rc(viewer):
-    from valo import Editor, Camera, rc_context
+    from valo import Camera, Editor, rc_context
 
     viewer.camera = cam = Camera()
     viewer.show(SimpleNamespace(batches=list), Editor())
@@ -397,7 +397,7 @@ def test_pick_finds_the_batch_and_instance_under_a_pixel(viewer):
 
 
 def two_balls(viewer):
-    from valo import Editor, Camera
+    from valo import Camera, Editor
 
     m = viewer.renderer.material("M", "lambert", base_color=(0.5, 0.5, 0.5))
     balls = viewer.renderer.spheres(m)
@@ -425,8 +425,8 @@ def test_the_hovered_object_gets_a_box_not_a_tint(viewer):
 
 
 def test_the_selection_gets_a_box_in_its_own_colour(viewer):
-    from valo.math import box_corners
     from valo.gpu import Pick
+    from valo.math import box_corners
 
     balls, plain = two_balls(viewer)
     w = plain.shape[1]
@@ -468,7 +468,7 @@ def test_info_rows_show_how_the_instance_was_placed(viewer):
 
 
 def test_click_selects_keys_navigate_and_double_click_centres(viewer):
-    from valo import Editor, Camera, rc_context
+    from valo import Camera, Editor, rc_context
 
     m = viewer.renderer.material("M", "lambert")
     balls = viewer.renderer.spheres(m)
@@ -572,7 +572,7 @@ def test_supersampling_smooths_the_outline(ball_scene):
 
 
 def test_offline_render_matches_the_viewer_and_settings_round_trip(viewer, ball_scene):
-    from valo import Lighting, Camera, render
+    from valo import Camera, Lighting, render
 
     viewer.show(ball_scene)
     viewer.camera, viewer.lighting = Camera(azimuth=30.0, distance=5.0), Lighting(mode="fixed")
@@ -602,7 +602,7 @@ def test_any_app_can_render_an_image_but_export_needs_scene_settings(viewer, bal
 
 
 def test_compass_turns_with_the_camera_and_draws_in_its_corner(viewer):
-    from valo import Editor, Camera, rc_context
+    from valo import Camera, Editor, rc_context
     from valo.ui import compass_layout
 
     cam = Camera(azimuth=-90.0, elevation=0.0)  # looking along +Y: right = +X, up = +Z

@@ -3,8 +3,8 @@
 import numpy as np
 import pytest
 
-from valo.math import instance_matrices, pack_mat4, perspective_reversed_z, translate
 from valo.gpu.material import ALL_SPECS, SCHEMA, linear_to_srgb, srgb_to_linear
+from valo.math import instance_matrices, pack_mat4, perspective_reversed_z, translate
 from valo.ui.undo import Command, UndoStack
 
 
@@ -90,8 +90,8 @@ def test_switching_projection_keeps_the_target_plane_the_same_size():
 
 
 def test_headlight_follows_the_camera_and_fixed_light_does_not():
-    from valo.scene.lighting import Lighting
     from valo.scene.camera import Camera
+    from valo.scene.lighting import Lighting
 
     cam = Camera()
     head, fixed = Lighting("headlight", 0.0, 0.0), Lighting("fixed", 30.0, 40.0)
@@ -104,8 +104,8 @@ def test_headlight_follows_the_camera_and_fixed_light_does_not():
 
 @pytest.mark.parametrize("start", ["headlight", "fixed"])
 def test_switching_light_mode_keeps_the_direction(start):
-    from valo.scene.lighting import MODES, Lighting
     from valo.scene.camera import Camera
+    from valo.scene.lighting import MODES, Lighting
 
     cam = Camera(azimuth=37.0, elevation=-12.0)
     light = Lighting(start, -50.0, 25.0)

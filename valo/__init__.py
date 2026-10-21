@@ -23,7 +23,6 @@ from .gpu import SCHEMA, SHADINGS, Instances, Material, Renderer, Spheres, linea
 from .math import instance_matrices
 from .meshes import (
     MeshData,
-    Sculpt,  # noqa: F401 - deprecated alias of ShapeFile, removed in the next commit
     ShapeFile,
     library,
 )
@@ -40,7 +39,6 @@ from .scene import (
     Transform,
     node_from_settings,
 )
-from .scene import Camera as OrbitCamera  # noqa: F401 - deprecated name of Camera, removed in the next commit
 from .studio import StudioEditor
 from .ui import Editor
 from .ui.scene_editor import SceneEditor

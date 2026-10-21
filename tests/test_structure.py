@@ -85,18 +85,8 @@ def test_entry_points_keep_how_they_are_called(name):
 
 # Lower layers never import higher ones: math ← meshes ← gpu ← scene ← (offline, ui) ← studio; config, testing and the
 # package __init__ are outside the order. Keys are module paths inside valo (packages as "meshes" prefixes).
-LAYERS = {
-    "math": 0, "geometry": 0,
-    "meshes": 1,
-    "gpu": 2, "render": 2, "materials": 2,
-    "scene": 3, "lighting": 3,
-    "offline": 4, "ui": 4, "ui_style": 4, "undo": 4, "app": 4, "scene_editor": 4,
-    "studio": 5,
-}
+LAYERS = {"math": 0, "meshes": 1, "gpu": 2, "scene": 3, "offline": 4, "ui": 4, "studio": 5}
 OUTSIDE = {"config", "testing", "__init__"}
-# old paths re-exporting the new ones, until the end of the refactor
-SHIMS = {"geometry", "materials", "meshes.sculpt", "render", "lighting", "undo", "ui_style", "app",
-         "scene_editor"}
 KNOWN_VIOLATIONS: set[tuple[str, str]] = set()  # (module, layer it may not import): none left
 
 
@@ -142,7 +132,7 @@ def test_lower_layers_never_import_higher_ones():
     for path in VALO.rglob("*.py"):
         module = _module(path)
         mine = _layer(module)
-        if mine is None or module in SHIMS:
+        if mine is None:
             continue
         for target in _imports(path, module):
             theirs = _layer(target)

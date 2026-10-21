@@ -23,7 +23,7 @@ MODES = ("headlight", "fixed")
 
 
 def _camera_basis(camera) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """(right, up, back) unit vectors of the camera, as in ``geometry.look_at`` (Z-up)."""
+    """(right, up, back) unit vectors of the camera, as in ``valo.math.look_at`` (Z-up)."""
     f = camera.forward()
     right = np.cross(f, (0.0, 0.0, 1.0))
     right /= np.linalg.norm(right)

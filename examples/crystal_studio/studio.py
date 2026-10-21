@@ -9,7 +9,7 @@ import numpy as np
 from crystal import MAX_ATOMS_PER_AXIS, Crystal, Species
 from imgui_bundle import imgui
 
-from valo import ICON, Command, Editor, Material, OrbitCamera, Viewer, mono_font
+from valo import ICON, Command, Editor, Material, Camera, Viewer, mono_font
 
 
 class CrystalEditor(Editor):
@@ -17,7 +17,7 @@ class CrystalEditor(Editor):
 
     title = "Crystal studio"
 
-    def __init__(self, crystal: Crystal, camera: OrbitCamera, triangles_per_atom: int = 0):
+    def __init__(self, crystal: Crystal, camera: Camera, triangles_per_atom: int = 0):
         super().__init__()
         self.crystal = crystal
         self.camera = camera

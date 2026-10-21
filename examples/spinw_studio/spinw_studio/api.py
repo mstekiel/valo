@@ -30,7 +30,7 @@ def show(viewer: valo.Viewer, sw_or_view, plot_options: dict | None = None) -> S
     editor = SpinwEditor(scene)
     viewer.show(scene, editor)
     if opts["camera"]:
-        viewer.camera = valo.OrbitCamera.from_settings(opts["camera"])
+        viewer.camera = valo.Camera.from_settings(opts["camera"])
     else:
         viewer.camera.target = tuple(float(c) for c in scene.center())
     if opts["lighting"]:
@@ -60,9 +60,9 @@ def render(sw_or_view, plot_options: dict | None = None, *, path=None, **image) 
     """
     opts = validate_options(plot_options)
     scene = build_scene(sw_or_view, opts)
-    camera = valo.OrbitCamera.from_settings(opts["camera"]) if opts["camera"] else None
+    camera = valo.Camera.from_settings(opts["camera"]) if opts["camera"] else None
     if camera is None:  # the studio's starting view: fitted, aimed at the scene's centre
-        camera = valo.OrbitCamera(fovy=valo.rc.camera.fov)
+        camera = valo.Camera(fovy=valo.rc.camera.fov)
         camera.target = tuple(float(c) for c in scene.center())
         camera.fit(scene.bounding_radius())
     settings = {"lighting": opts["lighting"], "image": {**opts["image"], **image}}

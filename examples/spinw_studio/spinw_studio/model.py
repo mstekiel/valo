@@ -202,7 +202,7 @@ DEFAULTS = {
     "objects": [],  # valo node settings of the objects added in the studio
     "object_materials": {},  # {name: Material.to_dict()}: the other materials of the scene's library
     "coupling_colors": {},  # {coupling label: colour}; kept for when couplings are drawn
-    "camera": {},  # valo OrbitCamera.settings() keys
+    "camera": {},  # valo Camera.settings() keys
     "lighting": {},  # valo Lighting.settings() keys
     "image": {},  # valo.render image keys (size, samples, transparent, background)
 }

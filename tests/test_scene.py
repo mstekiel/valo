@@ -5,13 +5,14 @@ import pytest
 
 from valo import Transform, meshes
 from valo.geometry import transform_matrix
+from valo.testing import click, press, release_pointer
 
 pytestmark = pytest.mark.gpu
+VIEWER_SIZE = (480, 320)
 
 
 @pytest.fixture
 def scene():
-    pytest.importorskip("wgpu")
     from valo import Scene
 
     try:
@@ -228,18 +229,6 @@ def test_unknown_kinds_and_unimportable_functions_are_reported():
 
 # -- SceneEditor: every action changes the scene, undoes exactly (state and image) and redoes
 
-@pytest.fixture(scope="module")
-def viewer():
-    pytest.importorskip("wgpu")
-    from rendercanvas.offscreen import RenderCanvas
-
-    from valo import Viewer
-
-    try:
-        return Viewer(RenderCanvas(size=(480, 320), pixel_ratio=1))
-    except Exception as exc:  # no adapter on this machine
-        pytest.skip(f"no GPU adapter: {exc}")
-
 
 def edited_scene(viewer):
     """A scene with a group, plain and instanced objects, a procedural ring and an unused material, in an editor."""
@@ -340,21 +329,14 @@ def test_windows_draw_for_every_kind_of_selection(viewer):
 def test_a_click_in_the_3d_view_selects_the_object(viewer):
     scene, editor = edited_scene(viewer)
     viewer.snapshot()
-    x0, y0, w, h = viewer.viewport
-    clip = viewer.camera.matrices(w / h)[0] @ np.array([-1.5, 0, 0, 1.0])  # cube B
-    r = viewer.canvas.get_pixel_ratio()
-    at = ((x0 + (clip[0] / clip[3] + 1) / 2 * w) / r, (y0 + (1 - clip[1] / clip[3]) / 2 * h) / r)
-    viewer.on_pointer({"event_type": "pointer_move", "x": at[0], "y": at[1]})
-    viewer.snapshot()
-    viewer.on_pointer({"event_type": "pointer_down", "button": 1, "x": at[0], "y": at[1], "modifiers": ()})
-    viewer.on_pointer({"event_type": "pointer_up", "button": 1, "x": at[0], "y": at[1], "modifiers": ()})
+    click(viewer, [-1.5, 0, 0])  # cube B
     viewer.snapshot()
     assert editor.selected is scene.find("B") and viewer.selection.source.owner is editor.selected
     assert viewer.outlined == [editor.selected] and [kind for _, kind in viewer.boxes()][0] == "selected"
-    viewer.on_key({"event_type": "key_down", "key": "Escape", "modifiers": ()})
+    press(viewer, "Escape")
     viewer.snapshot()
     assert editor.selected is None and viewer.outlined == []
-    viewer.pointer, viewer._last_click = None, None
+    release_pointer(viewer)
 
 
 def test_shapes_from_sculpt_files_reload_when_the_file_changes(viewer, tmp_path):

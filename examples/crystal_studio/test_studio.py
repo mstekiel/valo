@@ -20,18 +20,13 @@ def test_rock_salt_neighbours_alternate_species():
     assert np.allclose(np.diff(centers[:, 0]), 1.0)
 
 
+VIEWER_SIZE = (900, 520)
+
+
 @pytest.fixture(scope="module")
-def studio():
-    pytest.importorskip("wgpu")
-    from rendercanvas.offscreen import RenderCanvas
+def studio(viewer):
     from studio import build
 
-    from valo import Viewer
-
-    try:
-        viewer = Viewer(RenderCanvas(size=(900, 520), pixel_ratio=1))
-    except Exception as exc:  # no adapter on this machine
-        pytest.skip(f"no GPU adapter: {exc}")
     return viewer, build(viewer)
 
 

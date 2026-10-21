@@ -107,19 +107,6 @@ def test_lattice_parameters_and_matrix_agree():
 # -- the studio, offscreen (GPU) ------------------------------------------------------------------
 
 
-@pytest.fixture(scope="module")
-def viewer():
-    pytest.importorskip("wgpu")
-    from rendercanvas.offscreen import RenderCanvas
-
-    from valo import Viewer
-
-    try:
-        return Viewer(RenderCanvas(size=(900, 560), pixel_ratio=1))
-    except Exception as exc:  # no adapter on this machine
-        pytest.skip(f"no GPU adapter: {exc}")
-
-
 @pytest.fixture
 def studio(viewer):
     from spinw_studio import show
@@ -268,18 +255,11 @@ def test_plot_options_round_trip_and_export(studio, tmp_path):
 
 
 def test_the_file_menu_opens_without_errors(studio):
-    from imgui_bundle import imgui
+
+    from valo.testing import open_every_menu
 
     viewer, _, editor = studio
-    viewer.snapshot()  # lays out the dock: the scene rect is known
-    x, y, w, h = editor.scene_rect
-    viewer.gui_error, opened = None, 0
-    for mx in range(4, 240, 6):  # along the menu bar: File (with Export plot options), Edit, View
-        viewer.ui_click(mx, 10)
-        imgui.set_current_context(viewer.imgui.imgui_context)
-        opened += imgui.is_popup_open("", imgui.PopupFlags_.any_popup_id)
-        viewer.ui_click(x + w / 2, y + h / 2)
-    assert opened >= 3 and viewer.gui_error is None
+    assert open_every_menu(viewer) >= 3 and viewer.gui_error is None  # File holds Export plot options
 
 
 def test_plot_structure_blocks_then_returns_the_final_options(viewer, monkeypatch):
@@ -292,7 +272,3 @@ def test_plot_structure_blocks_then_returns_the_final_options(viewer, monkeypatc
     opts = api.plot_structure(lfo_like(), {"atom_colors": {"Fe": "Orange"}})
     assert calls == ["SpinW studio: LFO-like"] and opts["atom_radii"] == {"Fe": 0.9}
     monkeypatch.undo()
-
-
-if __name__ == '__main__':
-    viewer()

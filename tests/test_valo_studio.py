@@ -7,29 +7,17 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from valo.testing import open_every_menu
+
 pytestmark = pytest.mark.gpu
+VIEWER_SIZE = (1280, 720)  # room for the Code column
 VASE = Path(__file__).parents[1] / "examples" / "sculpts" / "vase.py"
 
 
-@pytest.fixture(scope="module")
-def viewer():
-    pytest.importorskip("wgpu")
-    from rendercanvas.offscreen import RenderCanvas
-
-    from valo import Viewer
-
-    try:
-        return Viewer(RenderCanvas(size=(1280, 720), pixel_ratio=1))
-    except Exception as exc:  # no adapter on this machine
-        pytest.skip(f"no GPU adapter: {exc}")
-
-
 @pytest.fixture
-def studio(viewer, tmp_path, monkeypatch):
-    from valo import rc
+def studio(viewer, tmp_path, tmp_library):
     from valo.studio import build
 
-    monkeypatch.setattr(rc.studio, "procedural_meshes", str(tmp_path / "library"))  # never the real library
     shutil.copy(VASE, tmp_path / "vase.py")
     editor = build(viewer)
     viewer.gui_error = None
@@ -153,19 +141,10 @@ def test_shape_files_changed_elsewhere_reload_and_names_are_checked(studio, tmp_
 
 
 def test_every_menu_and_window_draws_without_errors(viewer, studio):
-    from imgui_bundle import imgui
 
     blob(studio)
     studio.reset_layout()
-    viewer.snapshot()
-    x, y, w, h = studio.scene_rect
-    opened = 0
-    for mx in range(4, 240, 6):
-        viewer.ui_click(mx, 10)
-        imgui.set_current_context(viewer.imgui.imgui_context)
-        opened += imgui.is_popup_open("", imgui.PopupFlags_.any_popup_id)
-        viewer.ui_click(x + w / 2, y + h / 2)
-    assert opened >= 3 and viewer.gui_error is None
+    assert open_every_menu(viewer) >= 3 and viewer.gui_error is None
     for kind in ("new", "open", "save"):  # the File dialogs
         studio._dialog = (kind, "")
         viewer.snapshot()

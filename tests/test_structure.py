@@ -88,7 +88,7 @@ def test_entry_points_keep_how_they_are_called(name):
 LAYERS = {
     "math": 0, "geometry": 0,
     "meshes": 1,
-    "render": 2, "materials": 2,
+    "gpu": 2, "render": 2, "materials": 2,
     "scene": 3, "lighting": 3,
     "offline": 4, "ui": 4, "ui_style": 4, "undo": 4, "app": 4, "scene_editor": 4,
     "studio": 5,

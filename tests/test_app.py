@@ -198,10 +198,6 @@ def test_orbiting_changes_the_shading_only_with_a_fixed_light(viewer, mode, chan
 
 # -- every shared Editor action: changes something, and undo restores state and image exactly
 EDITOR_ACTIONS = {  # name → (action(editor, material), changes the image)
-    "projection": (lambda ed, m: ed.set_projection("orthographic"), True),
-    "field of view": (lambda ed, m: ed.set_fov(60.0), True),
-    "view preset": (lambda ed, m: ed.set_view("+X"), True),
-    "fit view": (lambda ed, m: ed.fit_view(), True),
     "light mode": (lambda ed, m: ed.set_light_mode("fixed"), False),  # switching keeps the light where it is
     "light direction": (lambda ed, m: ed.set_light("azimuth", 90.0), True),
     "light colour": (lambda ed, m: ed.set_light("color", (1.0, 0.3, 0.1)), True),
@@ -688,3 +684,18 @@ def test_dock_left_windows_sit_left_of_the_scene(viewer):
     x, _, w, _ = editor.scene_rect
     code, tree = (internal.find_window_by_name(n) for n in ("Code", "Tree"))
     assert code.pos.x + code.size.x <= x + 1 and tree.pos.x >= x + w - 1  # left and right of the 3D view
+
+
+@pytest.mark.parametrize("change", [lambda ed: ed.set_projection("orthographic"), lambda ed: ed.set_fov(60.0),
+                                    lambda ed: ed.set_view("+X"), lambda ed: ed.fit_view()])
+def test_view_changes_move_the_camera_but_are_not_undo_steps(viewer, change):
+    import copy
+
+    from valo import Camera, Editor
+
+    editor = Editor()
+    viewer.show(SimpleNamespace(batches=list, bounding_radius=lambda: 0.9), editor)
+    viewer.camera = Camera(distance=6.0)
+    before = copy.copy(viewer.camera)
+    change(editor)
+    assert viewer.camera != before and editor.undo_stack.done == []  # like Blender: navigation is not an edit

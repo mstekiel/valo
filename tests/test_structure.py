@@ -176,7 +176,7 @@ NOT_ACTIONS = {
     "render_settings", "can_export", "diagnostics", "users", "dirty", "code_error", "normal_info",
     # plumbing and view state (not scene edits, so not recorded)
     "watch", "one_step", "poll", "reload_shape", "update_normals", "file_dialog", "select", "open_code",
-    "browse_shape",
+    "browse_shape", "set_projection", "set_fov", "set_view", "fit_view",
     # documented as not recorded: typing (the code widget has its own undo), preferences, files written out
     "set_code", "set_preference", "set_ui_scale", "render_image", "export_script",
     # class settings

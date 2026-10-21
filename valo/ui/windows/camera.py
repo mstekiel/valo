@@ -1,44 +1,32 @@
-"""The shared Camera window: projection, field of view, view presets and fit, and the actions behind them."""
+"""The shared Camera window: projection, field of view, view presets and fit. They are view changes, made by the
+viewer's ``Navigator`` and not recorded for undo (like Blender's view navigation)."""
 
 from __future__ import annotations
 
 from imgui_bundle import imgui
 
-from ...render import PROJECTIONS, VIEWS
+from ...scene.camera import PROJECTIONS, VIEWS
 from ..style import ICON
 
 
 class CameraWindow:
-    """Editor part: the Camera window and its actions (projection, field of view, view presets, fit view)."""
+    """Editor part: the Camera window and the view operations it offers (not recorded for undo)."""
 
     def set_projection(self, projection: str) -> None:
-        """Switch the camera between perspective and orthographic (undoable)."""
-        cam, scene = self.viewer.camera, self.viewer.scene
-        radius = scene.bounding_radius() if hasattr(scene, "bounding_radius") else None
-        self._record(f"camera: {projection}", cam, ("projection", "distance", "ortho_height"),
-                     lambda: cam.set_projection(projection, radius))
+        """Switch the view between perspective and orthographic, keeping the scene's size on screen."""
+        self.viewer.navigator.set_projection(projection)
 
     def set_fov(self, degrees: float) -> None:
-        """Set the perspective field of view in degrees, keeping the target's size on screen (undoable)."""
-        cam, scene = self.viewer.camera, self.viewer.scene
-        radius = scene.bounding_radius() if hasattr(scene, "bounding_radius") else None
-        self._record("camera: field of view", cam, ("fovy", "distance"), lambda: cam.set_fov(degrees, radius),
-                     merge_key=("camera", "fovy"))
+        """Set the perspective field of view in degrees, keeping the target's size on screen."""
+        self.viewer.navigator.set_fov(degrees)
 
     def set_view(self, name: str) -> None:
-        """Look from a preset side: one of ``render.VIEWS`` (+X ... -Z, Iso)."""
-        cam = self.viewer.camera
-
-        def look():
-            cam.azimuth, cam.elevation = VIEWS[name]
-
-        self._record(f"camera: view {name}", cam, ("azimuth", "elevation"), look)
+        """Look from a preset side: one of ``VIEWS`` (+X ... -Z, Iso)."""
+        self.viewer.navigator.set_view(name)
 
     def fit_view(self) -> None:
-        """Move the camera so the whole scene fits (undoable)."""
-        cam, scene = self.viewer.camera, self.viewer.scene
-        if hasattr(scene, "bounding_radius"):
-            self._record("camera: fit", cam, ("distance", "ortho_height"), lambda: cam.fit(scene.bounding_radius()))
+        """Zoom so the whole scene fits."""
+        self.viewer.navigator.fit_view()
 
     def camera_window(self) -> None:
         """Projection, field of view, view presets, fit and auto-rotate."""

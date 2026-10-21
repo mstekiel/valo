@@ -33,9 +33,9 @@ build-backend = "hatchling.build"
 exclude = [".claude", "CLAUDE.md"]  # Claude Code project files: in the repo, not in the package
 
 [project.urls]
-Homepage = "https://github.com/OWNER/valo"
-Issues = "https://github.com/OWNER/valo/issues"
-Changelog = "https://github.com/OWNER/valo/blob/main/CHANGELOG.md"
+Homepage = "https://github.com/mstekiel/valo"
+Issues = "https://github.com/mstekiel/valo/issues"
+Changelog = "https://github.com/mstekiel/valo/blob/main/CHANGELOG.md"
 
 [project.scripts]
 valo-config = "valo.config:main"

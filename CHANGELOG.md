@@ -5,7 +5,7 @@ versions follow [Semantic Versioning](https://semver.org/) (while at 0.x, a mino
 
 ## [Unreleased]
 
-## [0.1.0] - Unreleased
+## [0.1.0] - 2026-10-21
 
 First public release.
 
@@ -28,5 +28,5 @@ First public release.
 - **Testing**: `valo.testing` helpers, an offscreen `viewer` fixture, and structure tests for the public API,
   the layering and undo coverage.
 
-[Unreleased]: https://github.com/OWNER/valo/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/OWNER/valo/releases/tag/v0.1.0
+[Unreleased]: https://github.com/mstekiel/valo/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/mstekiel/valo/releases/tag/v0.1.0

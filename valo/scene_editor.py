@@ -108,11 +108,10 @@ class SceneEditor(Editor):
 
     # -- selection (not an edit)
     def select(self, node: Node | None) -> None:
-        """Make ``node`` the selected one (shown in the Object window, highlighted whole in the 3D view)."""
+        """Make ``node`` the selected one (shown in the Object window; its bounding box in the 3D view)."""
         self.selected = node
         if self.viewer is not None:
-            objects = [] if node is None else [n for n in node.walk() if isinstance(n, MeshObject)]
-            self.viewer.highlighted = [o.instances for o in objects]
+            self.viewer.outlined = [] if node is None else [node]
             sel = self.viewer.selection
             if sel is not None and getattr(sel.source, "owner", None) is not node:
                 self.viewer.selection = None  # a 3D pick of something else no longer applies

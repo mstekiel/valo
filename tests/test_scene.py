@@ -310,9 +310,13 @@ def test_scene_editor_refuses_impossible_edits_and_selection_highlights(viewer):
         editor.set_shape_param(scene.find("A"), "radius", 1.0)
     assert not editor.undo_stack.done
     editor.select(scene.find("Ring"))
-    assert {i.owner.name for i in viewer.highlighted} == {"Bead", "Bead 2", "Bead 3"}
+    ring = scene.find("Ring")
+    assert viewer.outlined == [ring] and [kind for _, kind in viewer.boxes()] == ["selected"]
+    beads = np.concatenate([b.instances.matrices[:, :3, 3] for b in ring.children])
+    corners = unit_cube_corners(viewer.boxes()[0][0])
+    assert (beads >= corners.min(0) - 1e-6).all() and (beads <= corners.max(0) + 1e-6).all()  # one box, all beads
     editor.delete(scene.find("Ring"))
-    assert editor.selected is None and viewer.highlighted == []
+    assert editor.selected is None and viewer.outlined == []
 
 
 
@@ -346,9 +350,10 @@ def test_a_click_in_the_3d_view_selects_the_object(viewer):
     viewer.on_pointer({"event_type": "pointer_up", "button": 1, "x": at[0], "y": at[1], "modifiers": ()})
     viewer.snapshot()
     assert editor.selected is scene.find("B") and viewer.selection.source.owner is editor.selected
+    assert viewer.outlined == [editor.selected] and [kind for _, kind in viewer.boxes()][0] == "selected"
     viewer.on_key({"event_type": "key_down", "key": "Escape", "modifiers": ()})
     viewer.snapshot()
-    assert editor.selected is None and viewer.highlighted == []
+    assert editor.selected is None and viewer.outlined == []
     viewer.pointer, viewer._last_click = None, None
 
 

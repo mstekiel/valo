@@ -82,7 +82,7 @@ def test_style_scale_is_absolute_not_compounding(viewer):
 def test_scene_renders_into_an_offset_viewport_rect(viewer):
     import wgpu
 
-    from valo import OrbitCamera
+    from valo import Lighting, OrbitCamera
 
     m = viewer.renderer.material("Matte", "lambert", base_color=(0.9, 0.9, 0.9), ambient=1.0)
     ball = viewer.renderer.spheres(m)
@@ -91,7 +91,7 @@ def test_scene_renders_into_an_offset_viewport_rect(viewer):
     fmt = viewer.context._config["format"]
     tex = viewer.device.create_texture(size=(400, 300, 1), format=fmt,
                                        usage=wgpu.TextureUsage.RENDER_ATTACHMENT | wgpu.TextureUsage.COPY_SRC)
-    viewer.renderer.render(tex, (100, 50, 200, 150), scene, OrbitCamera(distance=3.0))
+    viewer.renderer.render(tex, (100, 50, 200, 150), scene, OrbitCamera(distance=3.0), Lighting())
     data = viewer.device.queue.read_texture({"texture": tex}, {"bytes_per_row": 400 * 4}, (400, 300, 1))
     img = np.frombuffer(data, np.uint8).reshape(300, 400, 4)[:, :, :3]
     inside = np.zeros((300, 400), bool)

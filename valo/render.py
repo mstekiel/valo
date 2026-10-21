@@ -21,7 +21,6 @@ import wgpu
 
 from .config import _unknown, rc
 from .geometry import instance_matrices, look_at, orthographic_reversed_z, pack_mat4, perspective_reversed_z
-from .lighting import Lighting
 from .materials import FRAGMENT_WGSL, Material
 from .meshes.data import MeshData
 from .meshes.primitives import sphere
@@ -598,14 +597,14 @@ class Renderer:
         return self._targets[1:]
 
     def render(self, surface_texture, viewport: tuple[int, int, int, int], scene, camera: OrbitCamera,
-               lighting: Lighting | None = None, highlights=(), samples: int = 1, transparent: bool = False,
-               background=None) -> None:
+               lighting, highlights=(), samples: int = 1, transparent: bool = False, background=None) -> None:
         """Draw ``scene`` into the ``viewport`` = (x, y, w, h) rectangle of ``surface_texture`` (framebuffer
         pixels, origin top-left); the rest of the texture is cleared to the window background.
 
         ``scene.batches()`` yields Batch (material, gpu_mesh, instance_bind_group, instance_count, source)
-        tuples. ``highlights``: (batch_index, instance_index, rgb) tints drawn over those instances; an
-        instance_index of None tints every instance of the batch (a whole object).
+        tuples. ``lighting`` is a ``valo.Lighting`` (anything with ``direction(camera)``, ``radiance()``, ``sky``,
+        ``ground`` and ``ambient``). ``highlights``: (batch_index, instance_index, rgb) tints drawn over those
+        instances; an instance_index of None tints every instance of the batch (a whole object).
         ``samples`` k renders the scene k×k larger and averages it down; ``transparent`` gives the background
         alpha 0; ``background`` (linear RGB) overrides ``rc.render.background``.
         """
@@ -617,7 +616,6 @@ class Renderer:
         self.device.queue.write_buffer(self.post_origin, 0, np.array([x, y, k, 0], np.float32))
 
         view_proj, eye = camera.matrices(vw / h)
-        lighting = lighting or Lighting()
         frame = np.zeros(40, np.float32)
         frame[:16] = pack_mat4(view_proj).ravel()
         frame[16:19] = eye

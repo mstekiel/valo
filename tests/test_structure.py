@@ -94,6 +94,7 @@ LAYERS = {
     "studio": 5,
 }
 OUTSIDE = {"config", "testing", "__init__"}
+SHIMS = {"geometry", "materials", "meshes.sculpt"}  # old paths re-exporting the new ones, until the end
 KNOWN_VIOLATIONS: set[tuple[str, str]] = set()  # (module, layer it may not import): none left
 
 
@@ -139,7 +140,7 @@ def test_lower_layers_never_import_higher_ones():
     for path in VALO.rglob("*.py"):
         module = _module(path)
         mine = _layer(module)
-        if mine is None:
+        if mine is None or module in SHIMS:
             continue
         for target in _imports(path, module):
             theirs = _layer(target)

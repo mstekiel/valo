@@ -7,7 +7,7 @@ from pathlib import Path
 
 from imgui_bundle import imgui
 
-from ...materials import linear_to_srgb, srgb_to_linear
+from ...gpu.material import linear_to_srgb, srgb_to_linear
 from ...offline import export_script, image_settings, plain, render
 from ..style import ICON
 

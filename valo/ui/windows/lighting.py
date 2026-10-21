@@ -5,7 +5,7 @@ from __future__ import annotations
 from imgui_bundle import imgui
 
 from ...config import rc
-from ...lighting import MODES
+from ...scene.lighting import MODES
 
 
 class LightingWindow:

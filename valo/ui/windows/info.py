@@ -6,7 +6,7 @@ from __future__ import annotations
 import numpy as np
 from imgui_bundle import imgui
 
-from ...geometry import axis_angle, decompose, euler_xyz
+from ...math import axis_angle, decompose, euler_xyz
 
 
 def _vec(v, digits: int = 3) -> str:

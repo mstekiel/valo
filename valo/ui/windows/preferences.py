@@ -7,7 +7,7 @@ from dataclasses import fields
 from imgui_bundle import imgui
 
 from ...config import SECTIONS, USER_FILE, rc
-from ...materials import linear_to_srgb, srgb_to_linear
+from ...gpu.material import linear_to_srgb, srgb_to_linear
 from ..style import ICON, apply_style
 
 

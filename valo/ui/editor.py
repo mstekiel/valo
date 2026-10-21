@@ -15,12 +15,10 @@ from collections.abc import Callable
 from dataclasses import fields
 from pathlib import Path
 
-import numpy as np
 from imgui_bundle import imgui
 from imgui_bundle.imgui import internal
 
 from ..config import SECTIONS, USER_FILE, rc
-from ..geometry import axis_angle, decompose, euler_xyz
 from ..materials import SCHEMA, Material, linear_to_srgb, srgb_to_linear
 from ..offline import export_script, image_settings, plain, render
 from .overlays import Overlays
@@ -28,13 +26,15 @@ from .style import ICON, apply_style
 from .undo import Command, UndoStack
 from .widgets import Widgets
 from .windows.camera import CameraWindow
+from .windows.history import HistoryWindow
+from .windows.info import InfoWindow
 from .windows.lighting import LightingWindow
 
 UI_SCALES = (0.85, 1.0, 1.15, 1.3, 1.5, 1.75, 2.0)
 SHARED_WINDOWS = ("Info", "Camera", "Lighting", "History")  # added by the base class, docked in the lower part
 
 
-class Editor(CameraWindow, LightingWindow, Overlays, Widgets):
+class Editor(InfoWindow, HistoryWindow, CameraWindow, LightingWindow, Overlays, Widgets):
     """Base class for an app's editor: undoable actions, dockable windows and the shared UI."""
     title = "valo"
     right_column: float | None = None  # share of the window width for the right dock column (None: rc.ui)
@@ -132,46 +132,6 @@ class Editor(CameraWindow, LightingWindow, Overlays, Widgets):
 
     # -- shared windows
 
-
-    def info_window(self) -> None:
-        """Properties of the hovered object, or of the selected one when nothing is hovered."""
-        viewer = self.viewer
-        pick, what = viewer.hover, "Hovered"
-        if pick is None and getattr(viewer, "selection", None) is not None:
-            pick, what = viewer.selection, "Selected"
-        if pick is None:
-            imgui.text_disabled("Point at an object in the 3D view")
-            return
-        imgui.text_disabled(what)
-        if imgui.begin_table("info", 2):
-            imgui.table_setup_column("key", imgui.TableColumnFlags_.width_fixed)
-            imgui.table_setup_column("value", imgui.TableColumnFlags_.width_stretch)
-            for key, value in pick_info(pick, viewer.scene).items():
-                imgui.table_next_row()
-                imgui.table_next_column()
-                imgui.text_disabled(key)
-                imgui.table_next_column()
-                imgui.text_wrapped(value)
-            imgui.end_table()
-
-    def history_window(self) -> None:
-        """Undo / redo buttons and the list of recorded edits."""
-        stack = self.undo_stack
-        imgui.begin_disabled(not stack.done)
-        if imgui.button(f"{ICON.ROTATE_LEFT} Undo"):
-            stack.undo()
-        imgui.end_disabled()
-        imgui.same_line()
-        imgui.begin_disabled(not stack.undone)
-        if imgui.button(f"{ICON.ROTATE_RIGHT} Redo"):
-            stack.redo()
-        imgui.end_disabled()
-        for cmd in reversed(stack.undone):  # newest redo at the top, greyed out
-            imgui.text_disabled(f"  {cmd.label}")
-        for i, cmd in enumerate(reversed(stack.done)):
-            imgui.text(f"{ICON.CARET_RIGHT if i == 0 else ' '} {cmd.label}")
-        if not stack.done and not stack.undone:
-            imgui.text_disabled("No edits yet")
 
     # -- frame
     def all_windows(self) -> dict[str, Callable[[], None]]:
@@ -418,38 +378,5 @@ def _pref_widget(f, value) -> tuple[bool, object]:
         changed, i = imgui.combo(label, list(m["choices"]).index(value), list(m["choices"]))
         return changed, m["choices"][i]
     return imgui.input_text(label, value)
-
-
-def _vec(v, digits: int = 3) -> str:
-    return "(" + ", ".join(f"{float(c) + 0.0:.{digits}f}" for c in v) + ")"  # + 0.0: no "-0.000"
-
-
-def pick_info(pick, scene) -> dict[str, str]:
-    """Human-readable properties of a picked object (the Info window's rows).
-
-    Object, material, instance number, mesh size, the instance's translation / rotation / scale decomposed
-    from its matrix, the point under the mouse, then scene-specific rows from ``scene.describe(pick)`` or,
-    failing that, the Instances' ``info(i)`` callback.
-    """
-    src, i = pick.source, pick.instance_index
-    rows: dict[str, str] = {}
-    if src is not None:
-        rows["Object"] = src.label or src.material.name
-        rows["Material"] = f"{src.material.name} ({src.material.shading})"
-        rows["Instance"] = f"{i + 1} of {src.count}"
-        rows["Mesh"] = f"{src.mesh.count // 3} triangles"
-        if i < len(src.matrices):
-            t, rotation, s = decompose(src.matrices[i])
-            axis, angle = axis_angle(rotation)
-            rows["Translation"] = _vec(t)
-            rows["Rotation"] = f"{angle:.1f} deg about {_vec(axis, 2)}" if angle > 1e-3 else "none"
-            rows["Euler XYZ"] = _vec(euler_xyz(rotation), 1) + " deg"
-            rows["Scale"] = f"{s[0]:.3f}" if np.allclose(s, s[0], rtol=1e-4) else _vec(s)
-    else:
-        rows["Object"] = f"batch {pick.batch_index}, instance {i}"
-    rows["Point"] = _vec(pick.world_point)
-    extra = scene.describe(pick) if hasattr(scene, "describe") else (src.info(i) if src and src.info else {})
-    rows.update({str(k): str(v) for k, v in (extra or {}).items()})
-    return rows
 
 

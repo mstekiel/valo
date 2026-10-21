@@ -64,14 +64,11 @@ ambient = 0.35                # ambient intensity (default 0.3; 0-5)
 
 
 [highlight]
-# The tint drawn over the object under the mouse, and (stronger) over the clicked selection.
+# Bounding boxes in the object's own frame: the clicked selection and the object under the mouse.
 
-# enabled = true
-color = [0.2, 0.85, 1.0]      # cyan instead of the default warm yellow [1.0, 0.8, 0.25], linear RGB
-# strength = 0.35             # hover tint strength (0 = invisible, 0-2)
-selected_strength = 0.8       # selection tint strength (default 0.6; 0-2)
+# enabled = true              # box the hovered object too
 # selected_color = [1.0, 0.55, 0.1]   # bounding box of the selected object, sRGB
-# hover_color = [0.8, 0.8, 0.8]       # bounding box of the object under the mouse, sRGB
+hover_color = [0.2, 0.85, 1.0]        # cyan instead of the default light grey [0.8, 0.8, 0.8], sRGB
 # box_width = 1.5             # box line width, px (0.5-6)
 # back_alpha = 0.35           # opacity of the box edges behind it (0-1)
 

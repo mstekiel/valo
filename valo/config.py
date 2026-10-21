@@ -2,7 +2,7 @@
 
     from valo import rc, rc_context
     rc.camera.orbit_speed            # attribute access
-    rc["highlight.strength"] = 0.5   # dotted access, validated
+    rc["highlight.box_width"] = 2.0   # dotted access, validated
     with rc_context({"camera.fov": 50}): ...
 
 Load order: the defaults below → ``~/.valo/valorc.toml`` → ``./valorc.toml`` → the file in ``$VALO_RC``.
@@ -119,13 +119,10 @@ class RenderConfig(Section):
 
 @dataclass
 class HighlightConfig(Section):
-    """Tint of the hovered and selected object."""
+    """Bounding boxes of the selected object and of the object under the mouse."""
 
     NAME = "highlight"
-    enabled: bool = opt(True, "Highlight hovered object")
-    color: tuple = opt((1.0, 0.8, 0.25), "Colour", 0.0, 1.0, "linear RGB")
-    strength: float = opt(0.35, "Hover strength", 0.0, 2.0)
-    selected_strength: float = opt(0.6, "Selection strength", 0.0, 2.0)
+    enabled: bool = opt(True, "Box the hovered object")
     selected_color: tuple = opt((1.0, 0.55, 0.1), "Selection box colour", 0.0, 1.0, "sRGB",
                                 help="Bounding box of the selected object")
     hover_color: tuple = opt((0.8, 0.8, 0.8), "Hover box colour", 0.0, 1.0, "sRGB",

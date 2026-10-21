@@ -145,7 +145,7 @@ def test_rc_validates_types_ranges_choices_and_names():
     rc["camera.fov"] = 40
     assert rc.camera.fov == 40.0 and isinstance(rc.camera.fov, float)
     for key, bad in (("camera.fov", 200), ("camera.fov", "wide"), ("lighting.mode", "spot"),
-                     ("highlight.color", (1, 1)), ("highlight.enabled", 1), ("picking.double_click_ms", 2.5)):
+                     ("highlight.selected_color", (1, 1)), ("highlight.enabled", 1), ("picking.double_click_ms", 2.5)):
         with pytest.raises(ValueError, match=key.split(".")[1]):
             rc[key] = bad
     with pytest.raises(KeyError, match="did you mean 'fov'"):
@@ -160,13 +160,13 @@ def test_rc_files_load_in_order_and_round_trip(tmp_path, monkeypatch):
     user, project, env = tmp_path / "user.toml", tmp_path / "valorc.toml", tmp_path / "env.toml"
     user.write_text('[camera]\nfov = 40\norbit_speed = 0.5\n', encoding="utf-8")
     project.write_text('[camera]\nfov = 45\n[keys]\nfit_all = "h"\n', encoding="utf-8")
-    env.write_text("[highlight]\nstrength = 0.1\n", encoding="utf-8")
+    env.write_text("[highlight]\nback_alpha = 0.1\n", encoding="utf-8")
     monkeypatch.setattr(config, "USER_FILE", user)
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("VALO_RC", str(env))
     rc = config.RC()
     assert rc.load_files() == [user, project, env]
-    assert (rc.camera.fov, rc.camera.orbit_speed, rc.keys.fit_all, rc.highlight.strength) == (45.0, 0.5, "h", 0.1)
+    assert (rc.camera.fov, rc.camera.orbit_speed, rc.keys.fit_all, rc.highlight.back_alpha) == (45.0, 0.5, "h", 0.1)
 
     saved = config.RC()
     saved.load(rc.save(tmp_path / "out.toml"))  # only the changed keys are written
@@ -186,8 +186,8 @@ def test_rc_context_restores_everything():
     from valo import rc, rc_context
 
     before = dict(rc.items())
-    with rc_context({"camera.fov": 60, "highlight": {"strength": 1.0}}):
-        assert rc.camera.fov == 60.0 and rc.highlight.strength == 1.0
+    with rc_context({"camera.fov": 60, "highlight": {"back_alpha": 1.0}}):
+        assert rc.camera.fov == 60.0 and rc.highlight.back_alpha == 1.0
         rc.ui.scale = 2.0
     assert dict(rc.items()) == before
 

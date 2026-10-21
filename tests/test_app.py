@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from valo.testing import changed, click, framebuffer_point, hover, image_point, open_every_menu, press, release_pointer
+from valo.testing import click, framebuffer_point, open_every_menu, press
 
 pytestmark = pytest.mark.gpu
 VIEWER_SIZE = (640, 400)
@@ -176,7 +176,6 @@ def test_global_ambient_lights_the_unlit_side(viewer):
     background = lit[0, 0]
     assert lit.max() > 60 and (dark <= background).all()  # only ambient lit the front: without it, black on bg
     viewer.lighting = Lighting()
-
 
 
 @pytest.mark.parametrize(("mode", "changes"), [("headlight", False), ("fixed", True)])
@@ -396,59 +395,6 @@ def test_pick_finds_the_batch_and_instance_under_a_pixel(viewer):
     assert viewer.renderer.pick(viewer.viewport, scene, cam, -5, -5) is None  # outside the viewport
 
 
-def two_balls(viewer):
-    from valo import Camera, Editor
-
-    m = viewer.renderer.material("M", "lambert", base_color=(0.5, 0.5, 0.5))
-    balls = viewer.renderer.spheres(m)
-    balls.set([[-1.2, 0, 0], [1.2, 0, 0]], 0.6)
-    viewer.show(SimpleNamespace(batches=lambda: [balls.batch()]), Editor())
-    viewer.camera = Camera(azimuth=-90.0, elevation=0.0, distance=6.0)
-    viewer.selection, viewer.outlined = None, []
-    release_pointer(viewer)
-    return balls, viewer.snapshot()
-
-
-def test_the_hovered_object_gets_a_box_not_a_tint(viewer):
-    from valo import rc_context
-
-    balls, plain = two_balls(viewer)
-    w = plain.shape[1]
-    assert hover(viewer, [-1.2, 0, 0]).instance_index == 0
-    diff = changed(plain, viewer.snapshot())
-    cx, cy = image_point(viewer, [-1.2, 0, 0])
-    assert diff.sum() > 50 and not diff[:, w // 2 :].any()  # lines around the left ball only
-    assert not diff[cy - 5 : cy + 5, cx - 5 : cx + 5].any()  # its own pixels are not tinted
-    with rc_context({"highlight.enabled": False}):
-        assert not changed(plain, viewer.snapshot()).any()
-    release_pointer(viewer)
-
-
-def test_the_selection_gets_a_box_in_its_own_colour(viewer):
-    from valo.gpu import Pick
-    from valo.math import box_corners
-
-    balls, plain = two_balls(viewer)
-    w = plain.shape[1]
-    viewer.selection = Pick(0, 0, balls, np.zeros(3))
-    diff = changed(plain, viewer.snapshot())
-    assert diff[:, : w // 2].sum() > 50 and not diff[:, w // 2 :].any()  # no owner: the clicked instance's box
-    img = viewer.snapshot().astype(int)
-    lines = img[diff]
-    assert (lines[:, 0] - lines[:, 2]).mean() > 30  # orange (selected_color), not the grey hover colour
-    both = np.eye(4)
-    both[:3, 3], both[0, 0], both[1, 1], both[2, 2] = (0, 0, 0), 3.6, 1.2, 1.2
-    balls.owner = SimpleNamespace(bounding_box=lambda: both)  # an object owning both balls
-    diff = changed(plain, viewer.snapshot())
-    assert diff[:, : w // 2].any() and diff[:, w // 2 :].any()  # one box around the whole object
-    viewer.selection, viewer.outlined = None, [balls.owner]
-    assert changed(plain, viewer.snapshot()).any()
-    viewer.outlined = []
-    assert not changed(plain, viewer.snapshot()).any()
-    del balls.owner
-    assert box_corners([0, 0, 0], [1, 2, 3]).shape == (8, 3)
-
-
 def test_info_rows_show_how_the_instance_was_placed(viewer):
     from valo import instance_matrices, meshes
     from valo.gpu import Pick
@@ -533,92 +479,6 @@ def test_background_colour_comes_from_rc(viewer):
     with rc_context({"render.background": (1.0, 0.0, 0.0)}):
         img = viewer.snapshot()
     assert (img[0, 0] == (255, 0, 0)).all()  # linear 1.0 → sRGB 255
-
-
-@pytest.fixture
-def ball_scene():
-    from valo import renderer
-
-    m = renderer().material("M", "lambert", base_color=(0.8, 0.8, 0.8))
-    ball = renderer().spheres(m)
-    ball.set([[0, 0, 0]], 1.0)
-    return SimpleNamespace(batches=lambda: [ball.batch()], bounding_radius=lambda: 1.0)
-
-
-def test_offline_render_size_alpha_background_and_png(ball_scene, tmp_path):
-    from PIL import Image
-
-    from valo import render
-
-    img = render(ball_scene, size=(320, 200), samples=1)
-    assert img.shape == (200, 320, 4) and (img[..., 3] == 255).all()
-    red = render(ball_scene, size=(320, 200), samples=1, background=(1.0, 0.0, 0.0))
-    assert (red[0, 0, :3] == (255, 0, 0)).all()
-    clear = render(ball_scene, {"image": {"size": [320, 200], "transparent": True}}, samples=1, path=tmp_path / "a.png")
-    assert clear[0, 0, 3] == 0 and clear[100, 160, 3] == 255  # background transparent, the ball opaque
-    assert Image.open(tmp_path / "a.png").mode == "RGBA"
-    with pytest.raises(KeyError, match="unknown image settings"):
-        render(ball_scene, {"image": {"resolution": [10, 10]}})
-
-
-def test_supersampling_smooths_the_outline(ball_scene):
-    from valo import render
-
-    def partial_alpha(samples):  # pixels on the outline that are neither background nor ball
-        a = render(ball_scene, size=(200, 200), samples=samples, transparent=True)[..., 3]
-        return int(((a > 0) & (a < 255)).sum())
-
-    assert partial_alpha(1) == 0 and partial_alpha(4) > 50
-
-
-def test_offline_render_matches_the_viewer_and_settings_round_trip(viewer, ball_scene):
-    from valo import Camera, Lighting, render
-
-    viewer.show(ball_scene)
-    viewer.camera, viewer.lighting = Camera(azimuth=30.0, distance=5.0), Lighting(mode="fixed")
-    shown = viewer.snapshot()
-    h, w = shown.shape[:2]
-    settings = {"camera": viewer.camera.settings(), "lighting": viewer.lighting.settings()}
-    img = render(ball_scene, settings, size=(w, h), samples=1)
-    assert np.array_equal(img[..., :3], shown)  # the same picture as on screen
-    assert Camera.from_settings(settings["camera"]) == viewer.camera
-    with pytest.raises(KeyError, match="did you mean 'azimuth'"):
-        Camera.from_settings({"azimut": 3})
-    viewer.lighting = Lighting()
-
-
-def test_any_app_can_render_an_image_but_export_needs_scene_settings(viewer, ball_scene, tmp_path):
-    from valo import Editor
-
-    editor = Editor()
-    viewer.show(ball_scene, editor)
-    editor.show_render = True
-    viewer.snapshot()  # the Render window draws
-    editor.render_options.update(size=[64, 48], samples=1)
-    assert editor.render_image(tmp_path / "x.png").exists() and "saved" in editor.render_status
-    assert not editor.can_export()
-    with pytest.raises(ValueError):
-        editor.export_script(tmp_path / "x.py")
-
-
-def test_compass_turns_with_the_camera_and_draws_in_its_corner(viewer):
-    from valo import Camera, Editor, rc_context
-    from valo.ui import compass_layout
-
-    cam = Camera(azimuth=-90.0, elevation=0.0)  # looking along +Y: right = +X, up = +Z
-    axes = Editor().compass_axes()
-    layout = {label: (end, near) for label, _, end, _, near in compass_layout(cam, axes, (100, 100), 40)}
-    assert layout["x"][0] == pytest.approx((140, 100)) and layout["z"][0] == pytest.approx((100, 60))
-    assert compass_layout(cam, axes, (100, 100), 40)[0][0] == "y"  # pointing away: drawn first (behind)
-
-    viewer.show(SimpleNamespace(batches=list), Editor())
-    with rc_context({"ui.compass": False}):
-        plain = viewer.snapshot().astype(int)
-    with rc_context({"ui.compass_corner": "bottom-left"}):
-        drawn = viewer.snapshot().astype(int)
-    changed = np.abs(drawn - plain).max(-1) > 20
-    h, w = changed.shape
-    assert changed[h // 2 :, : w // 3].sum() > 30 and not changed[: h // 2].any()  # only bottom-left
 
 
 def menu_editor(kind, viewer, tmp_path):

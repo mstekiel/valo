@@ -254,3 +254,29 @@ def test_a_broken_shape_file_opens_for_fixing(viewer, studio, tmp_path):
     assert studio.scene.objects() == [] and "cube(points)" in path.read_text(encoding="utf-8")
     with pytest.raises(FileNotFoundError):
         studio.open_shape(tmp_path / "nothing.py")
+
+
+def test_a_scene_built_by_actions_saves_and_rebuilds_the_same_picture(viewer, studio, tmp_path):
+    """End to end, through the editor only: what the refactor must keep working."""
+    from valo import Group, Scene, render
+
+    blob(studio)  # its file and object exist before the history starts
+    start = studio.scene.settings()
+    obj = studio.scene.find("Blob")
+    studio.set_shape_param(obj, "waist", 0.2)
+    studio.set_transform(obj, "rotate_deg", (20, 0, 30))
+    pair = studio.add(Group("Pair"))
+    studio.add_shape("valo.meshes.primitives:torus", pair, material=studio.new_material("Gold", "pbr").name)
+    studio.add_shape("valo.meshes.primitives:arrow", pair)
+    studio.set_transform(pair, "translate", (1.5, 0, 0))
+    studio.set_object_material(obj, "Gold")
+    studio.set_param(studio.scene.materials["Gold"], "roughness", 0.2)
+    studio.set_visible(studio.scene.find("Arrow"), False)
+    settings = studio.scene.settings()
+    again = Scene.from_settings(settings)
+    assert again.settings() == settings
+    cam = viewer.camera
+    assert np.array_equal(render(again, size=(160, 120), camera=cam), render(studio.scene, size=(160, 120), camera=cam))
+    while studio.undo_stack.done:  # and every step undoes, back to where the history started
+        studio.undo_stack.undo()
+    assert studio.scene.settings() == start

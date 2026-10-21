@@ -125,3 +125,10 @@ def test_exported_script_renders_the_same_picture_as_the_studio(studio, tmp_path
     while ed.undo_stack.done:
         ed.undo_stack.undo()
     viewer.lighting = type(viewer.lighting)()
+
+
+def test_every_menu_opens_without_errors(studio):
+    from valo.testing import open_every_menu
+
+    viewer, _ = studio
+    assert open_every_menu(viewer) >= 3 and viewer.gui_error is None

@@ -19,14 +19,14 @@ import numpy as np
 from imgui_bundle import imgui
 from imgui_bundle.imgui import internal
 
-from .config import SECTIONS, USER_FILE, rc
-from .geometry import axis_angle, decompose, euler_xyz
-from .lighting import MODES
-from .materials import SCHEMA, SHADINGS, Material, linear_to_srgb, srgb_to_linear
-from .offline import export_script, image_settings, plain, render
-from .render import PROJECTIONS, VIEWS
-from .ui_style import ICON, apply_style
-from .undo import Command, UndoStack
+from ..config import SECTIONS, USER_FILE, rc
+from ..geometry import axis_angle, decompose, euler_xyz
+from ..lighting import MODES
+from ..materials import SCHEMA, SHADINGS, Material, linear_to_srgb, srgb_to_linear
+from ..offline import export_script, image_settings, plain, render
+from ..render import PROJECTIONS, VIEWS
+from ..ui_style import ICON, apply_style
+from ..undo import Command, UndoStack
 
 UI_SCALES = (0.85, 1.0, 1.15, 1.3, 1.5, 1.75, 2.0)
 SHARED_WINDOWS = ("Info", "Camera", "Lighting", "History")  # added by the base class, docked in the lower part
@@ -668,7 +668,7 @@ def box_layout(camera, box, rect) -> list[tuple]:
     """The 12 edges of box matrix ``box`` (unit cube [-0.5, 0.5]^3 → world) as drawn by ``camera`` into ``rect`` =
     (x, y, w, h) logical pixels: (start, end, back) with ``back`` True for the edges behind the box (both faces
     meeting there turn away from the camera). Edges are clipped at the camera's near side (perspective)."""
-    from .geometry import box_corners
+    from ..geometry import box_corners
 
     x, y, w, h = rect
     view_proj, eye = camera.matrices(w / h)

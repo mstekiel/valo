@@ -8,9 +8,9 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
+from ..gpu.instances import Instances
 from ..math import bounding_box, box_corners, transform_matrix
 from ..meshes.params import shape_params
-from ..render import Instances
 from .shape import Shape, reference, resolve
 
 if TYPE_CHECKING:

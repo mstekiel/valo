@@ -22,9 +22,10 @@ from __future__ import annotations
 
 import numpy as np
 
-from ..materials import Material
-from ..render import Instances, Renderer
-from ..render import renderer as shared_renderer
+from ..gpu.instances import Instances
+from ..gpu.material import Material
+from ..gpu.renderer import Renderer
+from ..gpu.renderer import renderer as shared_renderer
 from .nodes import Group, InstancedObject, MeshObject, Node, ProceduralGroup, Transform
 from .shape import Shape
 

@@ -38,7 +38,7 @@ SIGNATURES = {
     "ProceduralGroup": "(name, builder, params=None, *, ranges=None, context=None, **kw)",
     "Group": "(name, *, visible=True, transform=None, locked=False)",
     "Camera": "(azimuth=-55.0, elevation=25.0, distance=14.0, target=(0.0, 0.0, 0.0), fovy=35.0, "
-                   "projection='perspective', ortho_height=10.0, _anim=None)",
+                   "projection='perspective', ortho_height=10.0)",
     "render": "(scene, settings=None, *, size=None, samples=None, transparent=None, background=None, camera=None, "
               "lighting=None, path=None)",
     "Renderer.instances": "(self, mesh, material, label=None, info=None)",

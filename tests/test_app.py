@@ -497,7 +497,7 @@ def test_click_selects_keys_navigate_and_double_click_centres(viewer):
         key("Escape")
         assert viewer.selection is None
         key("7")
-        assert cam.elevation == pytest.approx(89.99)  # top view (undoable through the editor)
+        assert cam.elevation == pytest.approx(89.99)  # top view
         key("5")
         assert cam.projection == "orthographic"
         az = cam.azimuth
@@ -506,7 +506,7 @@ def test_click_selects_keys_navigate_and_double_click_centres(viewer):
         target = cam.target
         key("ArrowUp", "Shift")
         assert cam.target != target  # Shift+arrow pans
-        assert len(viewer.editor.undo_stack.done) == 2  # view preset and projection; navigation is not recorded
+        assert len(viewer.editor.undo_stack.done) == 0  # navigation is never recorded (like Blender)
 
     viewer.camera = cam = OrbitCamera(azimuth=-90.0, elevation=0.0, distance=8.0)
     with rc_context({"camera.center_duration": 0.0}):

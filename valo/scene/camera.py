@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field, fields
+from dataclasses import dataclass, fields
 
 import numpy as np
 
-from ..config import _unknown, rc
+from ..config import _unknown
 from ..math import look_at, orthographic_reversed_z, perspective_reversed_z
 
 __all__ = ["PROJECTIONS", "VIEWS", "Camera"]
@@ -31,7 +31,6 @@ class Camera:
     fovy: float = 35.0
     projection: str = "perspective"  # or "orthographic"
     ortho_height: float = 10.0  # world units visible vertically in orthographic mode
-    _anim: tuple | None = field(default=None, repr=False, compare=False)  # running center_on animation
 
     def eye(self) -> np.ndarray:
         """Camera position in world space."""
@@ -143,30 +142,3 @@ class Camera:
         """Slide the view by (dx, dy) world units on the target plane; the scene follows (screen y points down)."""
         right, up = self.right_up()
         self.target = tuple(float(c) for c in np.asarray(self.target, float) - right * dx + up * dy)
-
-    def center_on(self, target, radius: float | None = None, duration: float | None = None) -> None:
-        """Move the target to ``target`` (and, given ``radius``, zoom so that sphere fits), animated over
-        ``duration`` seconds (default ``rc.camera.center_duration``; 0 jumps). ``step(dt)`` advances it."""
-        distance = self.fit_distance(radius) if radius else self.distance
-        height = 2 * distance * math.tan(math.radians(self.fovy / 2)) if radius else self.ortho_height
-        duration = rc.camera.center_duration if duration is None else duration
-        self._anim = (np.asarray(self.target, float), np.asarray(target, float), self.distance, distance,
-                      self.ortho_height, height, 0.0, max(duration, 0.0))
-        self.step(0.0)
-
-    @property
-    def animating(self) -> bool:
-        """True while a ``center_on`` animation is running."""
-        return self._anim is not None
-
-    def step(self, dt: float) -> None:
-        """Advance a running ``center_on`` animation by ``dt`` seconds (smooth ease in and out)."""
-        if self._anim is None:
-            return
-        t0, t1, d0, d1, h0, h1, elapsed, duration = self._anim
-        elapsed += dt
-        u = 1.0 if duration == 0 or elapsed >= duration else elapsed / duration
-        e = u * u * (3 - 2 * u)  # smoothstep
-        self.target = tuple(float(c) for c in t0 + (t1 - t0) * e)
-        self.distance, self.ortho_height = d0 + (d1 - d0) * e, h0 + (h1 - h0) * e
-        self._anim = None if u >= 1.0 else (t0, t1, d0, d1, h0, h1, elapsed, duration)

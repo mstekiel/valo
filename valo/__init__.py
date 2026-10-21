@@ -23,7 +23,12 @@ from .config import rc, rc_context
 from .geometry import instance_matrices
 from .lighting import Lighting
 from .materials import SCHEMA, SHADINGS, Material, linear_to_srgb, srgb_to_linear
-from .meshes import MeshData, Sculpt, library
+from .meshes import (
+           MeshData,
+           Sculpt,  # noqa: F401 - deprecated alias of ShapeFile, removed at the end of the refactor
+           ShapeFile,
+           library,
+)
 from .offline import plain, py_literal, render, save_png
 from .render import Instances, OrbitCamera, Renderer, Spheres, renderer
 from .scene import Group, InstancedObject, MeshObject, ProceduralGroup, Scene, Shape, Transform, node_from_settings
@@ -35,6 +40,6 @@ from .undo import Command, UndoStack
 
 __all__ = ["ICON", "SCHEMA", "SHADINGS", "Command", "Editor", "Group", "InstancedObject", "Instances", "Lighting",
            "Material", "MeshData", "MeshObject", "OrbitCamera", "ProceduralGroup", "Renderer", "Scene", "SceneEditor",
-           "StudioEditor", "Sculpt", "Shape", "Spheres", "Transform", "UndoStack", "Viewer", "instance_matrices",
+           "StudioEditor", "ShapeFile", "Shape", "Spheres", "Transform", "UndoStack", "Viewer", "instance_matrices",
            "library", "linear_to_srgb", "meshes", "mono_font", "node_from_settings", "plain", "py_literal", "rc",
            "rc_context", "render", "renderer", "save_png", "srgb_to_linear"]

@@ -5,7 +5,7 @@
     builders.py    revolve, parametric, heightfield, tube    (what shape files use)
     primitives.py  sphere, icosphere, cube, plane, cylinder, cone, torus, capsule, arrow, STANDARD
     check.py       check → MeshReport                  (winding, normals, watertight, volume)
-    sculpt.py      Sculpt: load / build / save a sculpt file
+    shapefile.py   ShapeFile: load / build / save a shape file
     library/       saved sculpts: library.names(), library.mesh(name, **params)
 
 Conventions: triangles counter-clockwise seen from outside; Z-up; unit-sized and centred at the origin
@@ -18,8 +18,9 @@ from .check import MeshReport, check
 from .data import MeshData
 from .ops import merge, transform
 from .primitives import STANDARD, arrow, capsule, cone, cube, cylinder, icosphere, plane, sphere, torus
-from .sculpt import Sculpt
+from .sculpt import Sculpt  # noqa: F401 - deprecated alias of ShapeFile, removed at the end of the refactor
+from .shapefile import ShapeFile
 
-__all__ = ["STANDARD", "MeshData", "MeshReport", "Sculpt", "arrow", "capsule", "check", "cone", "cube", "cylinder",
+__all__ = ["STANDARD", "MeshData", "MeshReport", "ShapeFile", "arrow", "capsule", "check", "cone", "cube", "cylinder",
            "heightfield", "icosphere", "library", "merge", "parametric", "plane", "revolve", "sphere", "torus",
            "transform", "tube"]

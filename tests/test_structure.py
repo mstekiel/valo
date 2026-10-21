@@ -16,10 +16,11 @@ VALO = Path(valo.__file__).parent
 
 API = ["ICON", "SCHEMA", "SHADINGS", "Command", "Editor", "Group", "InstancedObject", "Instances", "Lighting",
        "Material", "MeshData", "MeshObject", "OrbitCamera", "ProceduralGroup", "Renderer", "Scene", "SceneEditor",
-       "StudioEditor", "Sculpt", "Shape", "Spheres", "Transform", "UndoStack", "Viewer", "instance_matrices",
+       "StudioEditor", "ShapeFile", "Shape", "Spheres", "Transform", "UndoStack", "Viewer", "instance_matrices",
        "library", "linear_to_srgb", "meshes", "mono_font", "node_from_settings", "plain", "py_literal", "rc",
        "rc_context", "render", "renderer", "save_png", "srgb_to_linear"]
-MESHES_API = ["STANDARD", "MeshData", "MeshReport", "Sculpt", "arrow", "capsule", "check", "cone", "cube", "cylinder",
+MESHES_API = ["STANDARD", "MeshData", "MeshReport", "ShapeFile", "arrow", "capsule", "check", "cone", "cube",
+              "cylinder",
               "heightfield", "icosphere", "library", "merge", "parametric", "plane", "revolve", "sphere", "torus",
               "transform", "tube"]
 

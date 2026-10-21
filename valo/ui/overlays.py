@@ -35,7 +35,7 @@ def box_layout(camera, box, rect) -> list[tuple]:
     """The 12 edges of box matrix ``box`` (unit cube [-0.5, 0.5]^3 → world) as drawn by ``camera`` into ``rect`` =
     (x, y, w, h) logical pixels: (start, end, back) with ``back`` True for the edges behind the box (both faces
     meeting there turn away from the camera). Edges are clipped at the camera's near side (perspective)."""
-    from ..geometry import box_corners
+    from ..math import box_corners
 
     x, y, w, h = rect
     view_proj, eye = camera.matrices(w / h)

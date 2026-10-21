@@ -16,9 +16,10 @@ from imgui_bundle.imgui import internal
 from wgpu.utils.imgui import ImguiRenderer
 
 from ..config import rc
-from ..geometry import bounding_box, box_corners
-from ..lighting import Lighting
-from ..render import OrbitCamera, get_device, renderer
+from ..gpu import get_device, renderer
+from ..math import bounding_box, box_corners
+from ..scene.camera import Camera
+from ..scene.lighting import Lighting
 from .editor import Editor
 from .navigation import Navigator
 from .style import apply_style, load_fonts
@@ -46,7 +47,7 @@ class Viewer:
         self.context.configure(device=self.device, format=surface_format)
 
         self.renderer = renderer()  # shared: scenes built for scripting can be shown here, and back
-        self.camera = OrbitCamera(fovy=rc.camera.fov)
+        self.camera = Camera(fovy=rc.camera.fov)
         self.lighting = Lighting()
         self.imgui = ImguiRenderer(self.device, canvas)  # uses the format configured above
         io = imgui.get_io()  # of the context the renderer just made current

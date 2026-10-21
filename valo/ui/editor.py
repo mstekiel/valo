@@ -16,7 +16,7 @@ from imgui_bundle import imgui
 from imgui_bundle.imgui import internal
 
 from ..config import rc
-from ..materials import SCHEMA, Material
+from ..gpu.material import SCHEMA, Material
 from ..offline import image_settings
 from .overlays import Overlays
 from .style import ICON

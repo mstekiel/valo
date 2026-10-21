@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from imgui_bundle import imgui
 
-from ..materials import SCHEMA, SHADINGS, Material, linear_to_srgb, srgb_to_linear
+from ..gpu.material import SCHEMA, SHADINGS, Material, linear_to_srgb, srgb_to_linear
 from .style import ICON
 
 

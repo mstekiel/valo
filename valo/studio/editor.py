@@ -19,24 +19,20 @@ Domain studios (spinw_studio, ...) subclass ``StudioEditor``.
 
 from __future__ import annotations
 
-import argparse
 import traceback
 from pathlib import Path
 
 import numpy as np
-from imgui_bundle import imgui, portable_file_dialogs
-from imgui_bundle import imgui_color_text_edit as text_edit
+from imgui_bundle import portable_file_dialogs
 
 from .. import meshes
-from ..config import rc
-from ..geometry import decompose, euler_xyz, instance_matrices
+from ..geometry import decompose, euler_xyz
 from ..meshes import library
 from ..meshes.shapefile import IDENTITY, transform_matrix
 from ..scene import MeshObject, Scene, Shape, Transform
 from ..ui.scene_editor import SceneEditor, shape_error
-from ..ui.style import ICON, mono_font
-
-ERROR_COLOR = imgui.ImVec4(1.0, 0.45, 0.4, 1.0)
+from .code import CodeWindow
+from .normals import NormalsOverlay
 
 TEMPLATE = '''"""{name}: a procedural mesh. Edit, then save (Ctrl+S): the Object tab re-reads the parameters.
 
@@ -66,7 +62,7 @@ def _same(a, b) -> bool:
     return a is not None and b is not None and Path(a).resolve() == Path(b).resolve()
 
 
-class StudioEditor(SceneEditor):
+class StudioEditor(CodeWindow, NormalsOverlay, SceneEditor):
     """The studio: SceneEditor plus the Code window for shape files, New / Open shape and Save to library."""
 
     title = "valo studio"
@@ -240,68 +236,7 @@ class StudioEditor(SceneEditor):
             self.status = f"reloaded {path.name} (changed on disk)"
 
     # -- normals overlay
-    def update_normals(self) -> None:
-        """Arrows along the vertex normals of the selected object (every instance, at most
-        ``rc.studio.max_normal_arrows``), ``normal_length`` long; nothing when ``show_normals`` is off."""
-        obj = self.selected
-        if not (self.show_normals and isinstance(obj, MeshObject) and obj.shown() and obj.instances.count):
-            if self.normals.count:
-                self.normals.set(np.zeros((0, 4, 4)))
-            self._normal_key = None
-            return
-        inst = obj.instances
-        key = (id(obj), id(inst.mesh), inst.matrices.tobytes(), self.normal_length, rc.studio.max_normal_arrows)
-        if key == self._normal_key:
-            return
-        self._normal_key = key
-        if self._normal_data is None or self._normal_data[0] is not inst.mesh:
-            self._normal_data = (inst.mesh, obj.shape.build())
-        data = self._normal_data[1]
-        n_inst, n_vert = len(inst.matrices), len(data.positions)
-        pick = np.linspace(0, n_inst * n_vert - 1, min(n_inst * n_vert, rc.studio.max_normal_arrows)).astype(int)
-        rows = np.c_[pick // n_vert, pick % n_vert]
-        m = inst.matrices[rows[:, 0]]
-        p = np.einsum("nij,nj->ni", m[:, :3, :3], data.positions[rows[:, 1]]) + m[:, :3, 3]
-        normal_m = np.linalg.inv(m[:, :3, :3]).transpose(0, 2, 1)  # normals transform with the inverse transpose
-        n = np.einsum("nij,nj->ni", normal_m, data.normals[rows[:, 1]])
-        w, L = np.full(len(p), 0.12 * self.normal_length), np.full(len(p), self.normal_length)
-        self.normals.set(instance_matrices(p, np.c_[w, w, L], z_axis=n))
-        self._normal_rows = rows
 
-    def normal_info(self, i: int) -> dict:
-        """Info rows for normal arrow ``i``: the instance and vertex it starts at, and that vertex's normal."""
-        k, v = (int(c) for c in self._normal_rows[i])
-        n = self._normal_data[1].normals[v]
-        return {"Instance": str(k), "Vertex": str(v), "Normal": "(" + ", ".join(f"{c + 0.0:.3f}" for c in n) + ")"}
-
-    def object_window(self) -> None:
-        """SceneEditor's Object window plus the normals overlay switch for mesh objects."""
-        super().object_window()
-        if isinstance(self.selected, MeshObject):
-            _, self.show_normals = imgui.checkbox("Show normals", self.show_normals)
-            if self.show_normals:
-                _, self.normal_length = imgui.slider_float("Normal length", self.normal_length, 0.01, 0.5)
-
-    def browse_shape(self) -> None:
-        """Open the system's file dialog (in the library folder) to pick a shape file; the studio keeps running and
-        ``open_shape`` follows when you choose one. Without a system dialog, a path field opens instead."""
-        if self._browsing is not None:
-            return
-        try:
-            self._browsing = self.file_dialog("Open shape file", str(library.directory()),
-                                              ["Python shape files (*.py)", "*.py", "All files", "*"])
-        except Exception:
-            self._dialog = ("open", "")
-
-    def _poll_browsing(self) -> None:
-        if self._browsing is None or not self._browsing.ready(0):
-            return
-        paths, self._browsing = self._browsing.result(), None
-        if paths:
-            try:
-                self.open_shape(Path(paths[0]))
-            except Exception as exc:
-                self.status = f"! could not open {Path(paths[0]).name}: {exc}"
 
     def gui(self) -> None:
         """Show the selected object's shape file in the Code window (when nothing is unsaved), then draw."""
@@ -322,136 +257,3 @@ class StudioEditor(SceneEditor):
     def menus(self):
         """The File menu: New shape, Open shape file, Save to library."""
         return {"File": self.file_menu}
-
-    def file_menu(self) -> None:
-        """File menu items (valo adds Render below them)."""
-        if imgui.menu_item_simple(f"{ICON.FILE} New shape..."):
-            self._dialog = ("new", "")
-        if imgui.menu_item_simple(f"{ICON.FOLDER_OPEN} Open shape file..."):
-            self.browse_shape()
-        obj = self.selected
-        can_save = isinstance(obj, MeshObject) and obj.shape.sculpt is not None
-        if imgui.menu_item(f"{ICON.BOOK} Save to library as...", "", False, can_save)[0]:
-            self._dialog, self._confirm_overwrite = ("save", Path(str(obj.shape.source)).stem), False
-        imgui.separator()
-
-    def _dialogs(self) -> None:
-        if self._dialog is None:
-            return
-        kind, text = self._dialog
-        title = {"new": "New shape", "open": "Open shape file", "save": "Save to library"}[kind]
-        if not imgui.is_popup_open(title):
-            imgui.open_popup(title)
-        if not imgui.begin_popup_modal(title, None, imgui.WindowFlags_.always_auto_resize)[0]:
-            return
-        hint = {"new": f"name: a file in {library.directory()}", "open": "path of a .py shape file",
-                "save": f"library name: {library.directory()}/<name>.py"}[kind]
-        imgui.text_disabled(hint)
-        if imgui.is_window_appearing():
-            imgui.set_keyboard_focus_here()
-        done, text = imgui.input_text("##text", text, imgui.InputTextFlags_.enter_returns_true)
-        self._dialog = (kind, text)
-        if self.status.startswith("! "):
-            imgui.text_colored(ERROR_COLOR, self.status[2:])
-        ok = imgui.button("OK") or done
-        if kind == "save" and self._confirm_overwrite:
-            imgui.same_line()
-            ok = imgui.button(f"{ICON.TRIANGLE_EXCLAMATION} Overwrite") or ok
-        if ok:
-            try:
-                if kind == "new":
-                    self.new_shape(text.strip())
-                elif kind == "open":
-                    self.open_shape(Path(text.strip().strip('"')))
-                else:
-                    self.save_to_library(self.selected, text.strip(), overwrite=self._confirm_overwrite)
-                self._dialog = None
-                imgui.close_current_popup()
-            except FileExistsError as exc:
-                self._confirm_overwrite = kind == "save"
-                self.status = f"! {exc}"
-            except Exception as exc:
-                self.status = f"! {exc}"
-        imgui.same_line()
-        if imgui.button("Cancel"):
-            self._dialog = None
-            imgui.close_current_popup()
-        imgui.end_popup()
-
-    def _sync_widget(self):
-        if self._widget is None:
-            self._widget = text_edit.TextEditor()
-            self._widget.set_language(text_edit.TextEditor.Language.python())
-            self._widget.set_palette(text_edit.TextEditor.get_dark_palette())
-            self._widget.set_tab_size(4)
-            self._widget.set_insert_spaces_on_tabs(True)
-        if self.code != self._in_widget:  # changed outside the widget: opened, saved, undone, set_code
-            self._widget.set_text(self.code)
-            self._in_widget = self.code = self._widget.get_text()
-            if self.saved_code.rstrip("\n") == self.code.rstrip("\n"):
-                self.saved_code = self.code  # the widget normalises the final newline: not a change
-        return self._widget
-
-    def code_window(self) -> None:
-        """The shape file being edited: Save (Ctrl+S), the text, and the last reload error under it."""
-        if self.code_path is None:
-            imgui.text_disabled("File > New shape..., or File > Open shape file...,")
-            imgui.text_disabled("or select an object built from a shape file.")
-            return
-        widget = self._sync_widget()
-        imgui.begin_disabled(not self.dirty)
-        if imgui.button(f"{ICON.FLOPPY_DISK} Save"):
-            self.save_code()
-        imgui.end_disabled()
-        imgui.same_line()
-        imgui.text(f"{self.code_path.name}{'  ●' if self.dirty else ''}")
-        imgui.same_line()
-        imgui.text_disabled(self.status if not self.status.startswith("! ") else "")
-        error = self.code_error
-        footer = 0 if not error else 6 * imgui.get_text_line_height_with_spacing()
-        imgui.push_font(mono_font(), 0.0)
-        widget.render("##code", imgui.ImVec2(0, -footer))
-        imgui.pop_font()
-        if imgui.is_item_focused() or imgui.is_window_focused(imgui.FocusedFlags_.root_and_child_windows):
-            io = imgui.get_io()
-            if io.key_ctrl and imgui.is_key_pressed(imgui.Key.s):
-                self.save_code()
-        text = widget.get_text()
-        if text != self._in_widget:
-            self.code = self._in_widget = text
-        if error:
-            imgui.push_style_color(imgui.Col_.text, ERROR_COLOR)
-            imgui.push_font(mono_font(), 0.0)
-            imgui.text_wrapped(error)
-            imgui.pop_font()
-            imgui.pop_style_color()
-
-
-def build(viewer, path=None) -> StudioEditor:
-    """An empty studio scene in ``viewer`` (plus an object for shape file ``path``, if given); returns the editor."""
-    editor = StudioEditor(Scene(viewer.renderer))
-    viewer.show(editor.scene, editor)
-    if path is not None:
-        editor.open_shape(path)
-        viewer.fit_all()
-    return editor
-
-
-def main(argv=None) -> None:
-    """Command-line entry point: ``valo-studio [shape.py] [--size WxH]``."""
-    from ..ui.viewer import Viewer
-
-    ap = argparse.ArgumentParser(prog="valo-studio", description=__doc__.split("\n\n")[0])
-    ap.add_argument("file", type=Path, nargs="?", help="a shape file to open: a .py file with a mesh(...) function")
-    ap.add_argument("--size", default="1600x900", help="window size, e.g. 1920x1080")
-    args = ap.parse_args(argv)
-    if args.file is not None and not args.file.exists():
-        ap.error(f"{args.file} does not exist")
-    w, h = (int(x) for x in args.size.lower().split("x"))
-    viewer = Viewer(title="valo studio", size=(w, h))
-    build(viewer, args.file)
-    viewer.run()
-
-
-if __name__ == "__main__":
-    main()

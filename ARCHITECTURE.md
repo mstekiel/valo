@@ -4,6 +4,29 @@ Grown from the wgpu-py exploration examples (example 06, "crystal studio"). `val
 engine; apps such as `examples/crystal_studio/` are built on its public API (`valo/__init__.py`).
 Deliberately small: structure is added when a feature needs it, not before.
 
+## Package layout
+
+```
+valo/
+  math/        transforms (matrices, projections, decomposition), bounds (box matrices)     pure numpy
+  meshes/      MeshData, builders, primitives, check, shape files (ShapeFile), the library  pure numpy
+  gpu/         the draw engine: shaders (WGSL), Material, GpuMesh, Instances, Renderer      wgpu
+  scene/       the data model: Camera, Lighting, Shape, nodes, Scene                        GPU via a Renderer
+  offline.py   valo.render (images without a window), render scripts
+  ui/          editors: Editor + windows/ (mixins), overlays, navigation, Viewer, SceneEditor
+  studio/      the base studio app (valo-studio): StudioEditor, Code window, normals, CLI
+  config.py    rc, used by every layer                 testing.py   helpers for tests of valo and its apps
+```
+- **Layering:** `math` ← `meshes` ← `gpu` ← `scene` ← (`offline`, `ui`) ← `studio`. A layer imports only from
+  lower ones; `tests/test_structure.py` checks it, along with the public API names and signatures.
+- **Blender's model:**
+  - data is `scene` and `meshes`;
+  - the draw engine is `gpu`, with the overlays in `ui/overlays`;
+  - the editors are `ui` (the windows are Blender's Outliner / Properties / Text editor / Preferences);
+  - the operators are the undoable `Editor` actions.
+- **Mixins:** each window is a mixin with its actions (`ui/windows/camera.py` → `editor.set_projection`), so the
+  `Editor` classes stay small and scripts call the same methods the windows do.
+
 ## Writing an app
 
 ```python
@@ -37,11 +60,11 @@ scene.add(InstancedObject("Arrows", Shape(meshes.arrow), "Gold", instances=matri
 scene.add(ProceduralGroup("Ring", "my_app.builders:ring", {"n": 8}))   # ring(group, n=8) adds the children
 viewer.show(scene, SceneEditor(scene))
 ```
-- **A tree** (`valo/scene.py`): `Group` (transform + visibility for its children), `ProceduralGroup` (a group
+- **A tree** (`valo/scene/nodes.py`, `scene.py`): `Group` (transform + visibility for its children), `ProceduralGroup` (a group
   whose children `builder(group, **params)` regenerates whenever a parameter changes), `MeshObject` (one mesh)
   and `InstancedObject` (one mesh at world · M_i per instance matrix). world = parent world · own `Transform`
-  (scale, rotate x→y→z in degrees, translate: `geometry.transform_matrix`). Hidden ancestors hide a node.
-- **Shapes**: a `Shape` is a function (callable, `"module:function"`, or a sculpt file) plus parameters; the
+  (scale, rotate x→y→z in degrees, translate: `valo.math.transform_matrix`). Hidden ancestors hide a node.
+- **Shapes**: a `Shape` is a function (callable, `"module:function"`, or a shape file) plus parameters; the
   editable ones (float/int/bool with defaults; ranges from `func.ranges` / `RANGES`) come from its signature
   (`meshes/params.py`, shared by shape files and procedural builders). Shape files hot-reload.
 - **Rebuilds keep children:** a procedural rebuild matches the new children to the old ones by name path and
@@ -60,7 +83,7 @@ viewer.show(scene, SceneEditor(scene))
 - **Serialization**: `scene.settings()` / `Scene.from_settings(d)`: materials plus the tree as plain data,
   functions as `"module:function"` paths (so they must be importable), procedural groups as builder + parameters
   only. So Export render script works for any Scene.
-- **`SceneEditor`** (`valo/scene_editor.py`): undoable actions for the tree (add, add_shape, delete, duplicate,
+- **`SceneEditor`** (`valo/ui/scene_editor.py`, windows in `ui/windows/{outliner,object,materials}.py`): undoable actions for the tree (add, add_shape, delete, duplicate,
   rename, reparent, visibility), an object (transform, base shape, shape / builder parameters, material) and the library
   (new, duplicate, delete unused); windows **Scene** (tree with type and eye toggle, context menu, drag onto a
   group to reparent, "+ Add"), **Object** (parameters, transform, material, `meshes.check` diagnostics) and
@@ -77,7 +100,7 @@ Meshes live in the `valo/meshes/` package; import everything from `valo.meshes`.
 - **`ops.py`**: `transform` and `merge`.
 - **`builders.py`**: `revolve`, `parametric`, `heightfield` and `tube` (a circle swept along a 3D path).
 - **`check.py`**: diagnostics.
-- **`sculpt.py`** and **`library/`**: shape files and the procedural mesh library (below).
+- **`shapefile.py`** and **`library.py`**: shape files and the procedural mesh library (below).
 
 ## valo studio: procedural meshes in code
 
@@ -87,17 +110,17 @@ valo-studio my.py      mesh(a=1.0, n=32)                  (your edited values st
                        RANGES / MATERIAL / TRANSFORM       untouched ones follow the code)    defaults + MATERIAL +
                                                                                               baked TRANSFORM
 ```
-- **`StudioEditor`** (`valo/studio.py`, `uv run valo-studio [shape.py]`): `SceneEditor` plus a **Code** window
+- **`StudioEditor`** (`valo/studio/`, `uv run valo-studio [shape.py]`): `SceneEditor` plus a **Code** window
   (`imgui_color_text_edit`, docked left through `Editor.dock_left`). It's the base of every domain studio
   (spinw_studio derives from it).
-- **A shape file** is plain Python (contract in `valo/meshes/sculpt.py`): a `mesh(...)` function whose parameters
+- **A shape file** is plain Python (contract in `valo/meshes/shapefile.py`): a `mesh(...)` function whose parameters
   all have defaults (`float`, `int`, `bool`), optionally `RANGES`, `MATERIAL`, `TRANSFORM`. Build with
   `meshes.revolve` ((ρ, z) profile; repeat a point for a hard edge), `meshes.parametric` (P(u, v), outward is
-  ∂u × ∂v), `meshes.heightfield` (z = f(x, y)) or `meshes.tube` (around a 3D path: springs, wires, rings). Starter shapes: `examples/sculpts/`.
+  ∂u × ∂v), `meshes.heightfield` (z = f(x, y)) or `meshes.tube` (around a 3D path: springs, wires, rings). Starter shapes: `examples/shapes/`.
 - **Saving the code** re-reads the file for every object built from it (`Shape.reload`). On an error the last good
   mesh stays and the error, cut to your file's frames, shows under the code.
 - **Save to library** writes the file with the object's values as defaults, its material as `MATERIAL` and its
-  transform baked into `TRANSFORM` (AST rewrite, `Sculpt.save`) to `rc.studio.procedural_meshes` (default
+  transform baked into `TRANSFORM` (AST rewrite, `ShapeFile.save`) to `rc.studio.procedural_meshes` (default
   `data/procedural_meshes/`); the object's own transform becomes identity. `valo.library.mesh("<name>")` reads
   it back. One undo step.
 - **Diagnostics:** the Object window shows `meshes.check` (winding, unit normals, watertight + volume); "Show
@@ -113,21 +136,24 @@ node**. The layout is saved to `~/.valo/<title>.ini` (real windows only, also on
 
 ## Camera and lighting
 
-- **`OrbitCamera`** (`render.py`): azimuth/elevation/distance around a target; `projection` is "perspective" or
-  "orthographic" (`set_projection` keeps the target the same size on screen; `zoom` scales distance or
-  `ortho_height`); `VIEWS` has ±X/±Y/±Z/Iso presets.
-- **`Lighting`** (`lighting.py`, `viewer.lighting`): one directional light, a **headlight** (angles in the camera's
+- **`Camera`** (`scene/camera.py`, Blender's viewport view): plain state and maths. Azimuth / elevation /
+  distance around a target; `projection` is "perspective" or "orthographic" (`set_projection` keeps the target the
+  same size on screen; `zoom` scales distance or `ortho_height`); `VIEWS` has ±X/±Y/±Z/Iso presets.
+- **`Navigator`** (`ui/navigation.py`, `viewer.navigator`) moves it: mouse orbit / pan / zoom, the navigation keys,
+  presets, perspective / orthographic, fit and frame, and eased transitions (`center_on`). Like Blender's view
+  navigation, none of it is an undo step.
+- **`Lighting`** (`scene/lighting.py`, `viewer.lighting`): one directional light, a **headlight** (angles in the camera's
   frame, so it moves with you) or **fixed** (world angles); `set_mode` converts so it never jumps. Plus a **global
   hemisphere ambient**: sky colour, ground colour and an intensity shared by every object. The same sky/ground
   is what PBR materials reflect. A material's `ambient` only scales that global ambient (0–1, default 1).
-- The Editor's shared **Camera** and **Lighting** windows change these through undoable actions; mouse orbit/zoom
-  is navigation and is not recorded.
+- The shared **Camera** window calls the navigator (not recorded); the **Lighting** window's changes are undoable
+  actions (the light is part of the picture).
 
 Frame uniform (group 0, 160 bytes): `view_proj` mat4 · `eye` · `view_dir` (w = 1 perspective, 0 orthographic:
 shading uses a constant view vector) · `light_dir` · `light_color` (× intensity) · `sky` (w = ambient intensity)
 · `ground`.
 
-Look: `valo/ui_style.py` loads Roboto with Font Awesome icons merged in (`ICON.FLOPPY_DISK` etc.) and
+Look: `valo/ui/style.py` loads Roboto with Font Awesome icons merged in (`ICON.FLOPPY_DISK` etc.) and
 Inconsolata (`mono_font()`), and applies the theme (`apply_style(scale)`). ImGui 1.92 rasterises them at the
 real pixel density, so text is crisp at any DPI.
 
@@ -152,7 +178,7 @@ the objects, so `Lighting()` starts from `rc.lighting`, but the Lighting window 
   `info(i) -> dict`.
 - **Info window:** `ui.pick_info(pick, scene)` gives:
   - object, material, instance, mesh size;
-  - translation / rotation / scale from `geometry.decompose`;
+  - translation / rotation / scale from `valo.math.decompose`;
   - the point hit;
   - then `scene.describe(pick)` or `source.info(i)`.
 - **Hover and selection boxes:** `Viewer.boxes()` lists the selected node's box (`viewer.outlined`, set by
@@ -160,25 +186,25 @@ the objects, so `Lighting()` starts from `rc.lighting`, but the Lighting window 
   matrices (unit cube → world). `Editor.draw_boxes` projects them with `ui.box_layout` and draws them with ImGui over
   the 3D view: `rc.highlight` colours (sRGB), line width, back edges fainter; not in `valo.render` images.
   `Renderer.render(highlights=...)` (an additive tint + rim pass at the same depth) remains as a low-level option.
-- **Navigation** (`Viewer.on_pointer` / `on_key`, keys in `rc.keys`):
+- **Navigation** (`Viewer.on_pointer` / `on_key` hand the events to the `Navigator`; keys in `rc.keys`):
   - mouse: left-drag orbit, middle- or Shift-drag pan, wheel zoom, click select, double-click centre on the point;
   - keys: F frame selection, Home fit all, 1/3/7 (+Ctrl) views, 5 projection, arrows orbit (Shift pan), Esc deselect.
 
-  `OrbitCamera.center_on` animates over `rc.camera.center_duration`. Selection and navigation are view state
-  (not undoable); view presets and projection go through the Editor (undoable).
+  `Navigator.center_on` eases over `rc.camera.center_duration`. Selection and navigation are view state: never undo
+  steps.
 
 ## Scripting and offline rendering
 
 - **One GPU:** there is one GPU device and one `Renderer` per process (`valo.renderer()`); every `Viewer` uses it,
   so a scene built in a script can be shown in a window and the reverse.
 - **`valo.render(scene, settings=None, *, size, samples, transparent, background, camera, lighting, path)`**
-  (`offline.py`) renders without a window into an `rgba8unorm` texture and returns (h, w, 4) uint8 sRGB.
+  (`valo/offline.py`) renders without a window into an `rgba8unorm` texture and returns (h, w, 4) uint8 sRGB.
   Given a `path`, it saves a PNG.
   - **Supersampling:** the scene target is `samples`× larger and the post pass averages each block, premultiplied
     by alpha.
   - **Transparency:** the scene clears to alpha 0, and the post pass passes alpha through.
   - **Defaults:** missing options come from `rc.render` / `rc.lighting`, and the camera is fitted to the scene.
-- **`settings`** is plain data: `{"scene": ..., "camera": OrbitCamera.settings(), "lighting": Lighting.settings(),
+- **`settings`** is plain data: `{"scene": ..., "camera": Camera.settings(), "lighting": Lighting.settings(),
   "image": {"size", "samples", "transparent", "background"}}`.
 - **The scene settings protocol:** a scene that implements `settings() -> dict` and the classmethod
   `from_settings(d, gpu=None)` can be rebuilt from data. The Editor's File → Render window then exports a
@@ -206,25 +232,23 @@ Viewer.draw()
 ## Dependencies
 
 ```
-engine:  geometry, materials, undo              (leaves: numpy only, materials holds a GPU buffer)
-         meshes/  data ← ops ← builders ← primitives;  data ← check;  ops ← sculpt ← library
-                  (sculpt → geometry, library → materials)
-         render  → geometry, materials, meshes.data, meshes.primitives
-         scene   → geometry, materials, meshes (data, params, sculpt), render
-         ui      → materials, undo
-         app     → render, ui
-         scene_editor → scene, ui, meshes (check, library)
-         studio  → scene_editor, meshes (library, sculpt)  (the `valo-studio` command)
+math     ← (nothing)
+meshes   → math, config                        (shapefile → math; library → shapefile)
+gpu      → math, meshes, config                (renderer → shaders, material, mesh, instances)
+scene    → math, meshes, gpu, config           (nodes own gpu.Instances; Scene uses a gpu.Renderer)
+offline  → scene, gpu, config
+ui       → scene, gpu, meshes, math, offline, config
+studio   → ui, scene, meshes, math, config
 apps:    examples/crystal_studio: studio → crystal → valo
          examples/spinw_studio:   api → editor, scene → model, adapter; scene / editor → valo (Scene, StudioEditor)
 ```
-`render` draws anything with a `batches()` method; nothing in `valo/` imports from `examples/`.
+The renderer draws anything with a `batches()` method; nothing in `valo/` imports from `examples/`.
 
 ## Extension points (where a typical feature request goes)
 
 | Request | Change |
 |---|---|
-| New shading model | `valo/materials.py`: WGSL in `FRAGMENT_WGSL` + parameter list in `SCHEMA`. Panels and pipelines pick it up. |
+| New shading model | `valo/gpu/shaders.py`: WGSL in `FRAGMENT_WGSL` + parameter list in `valo/gpu/material.py` `SCHEMA`. Panels and pipelines pick it up. |
 | New mesh shape | write it in the studio: `uv run valo-studio`, File > New shape, then Save to library (→ `data/procedural_meshes/`, checked by the tests). A primitive every app needs goes in `valo/meshes/primitives.py` + `STANDARD`. |
 | A new domain studio | subclass `valo.StudioEditor` (scene tree, objects, materials, code window come with it); see `examples/spinw_studio/`. |
 | New mesh builder | `valo/meshes/builders.py`, next to `revolve` / `parametric` / `heightfield` / `tube`; test it with `check()`. |

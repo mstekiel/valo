@@ -8,38 +8,28 @@ Apps built on it live in `examples/`. Design and extension points: `ARCHITECTURE
 | | |
 |---|---|
 | Install | `uv sync` |
-| Run the studio | `uv run valo-studio [examples/sculpts/vase.py]` (procedural meshes in code; Save to library → `data/procedural_meshes/`) |
+| Run the studio | `uv run valo-studio [examples/shapes/vase.py]` (procedural meshes in code; Save to library → `data/procedural_meshes/`) |
 | Run an example app | `uv run python examples/crystal_studio/studio.py` |
-| Test | `uv run pytest` (engine + examples; GPU tests render offscreen and skip without an adapter) |
+| Test | `uv run pytest` (engine + examples; GPU tests render offscreen and skip without an adapter); `-m "not gpu"` for the fast part, `--cov` for coverage |
 | Lint / format | `uv run ruff check --fix .` |
 | Add a dependency | `uv add <pkg>` (ask the user first) |
 
-## Engine modules (`valo/`)
+## Engine packages (`valo/`): math ← meshes ← gpu ← scene ← (offline, ui) ← studio
+
+Lower layers never import higher ones (`tests/test_structure.py` checks it); `config.py` is used by all. Apps import
+only from `valo` (and `valo.meshes`). Blender's split: data (`scene`, `meshes`), draw engine (`gpu`), editors (`ui`).
 
 | Module | Owns | GPU? |
 |---|---|---|
-| `geometry.py` | matrices, `instance_matrices` (pure numpy) | no |
-| `meshes/` | package, pure numpy; import everything from `valo.meshes` (its `__init__` re-exports) | no |
-| `meshes/data.py` | `MeshData` (+ `_mesh`, `_grid_indices` helpers) | no |
-| `meshes/ops.py` | `transform`, `merge` | no |
-| `meshes/builders.py` | `revolve`, `parametric`, `heightfield`, `tube` | no |
-| `meshes/primitives.py` | `sphere`, `icosphere`, `cube`, `plane`, `cylinder`, `cone`, `torus`, `capsule`, `arrow`, `STANDARD` | no |
-| `meshes/params.py` | `ShapeParam`, `shape_params`: editable float/int/bool parameters from a function signature | no |
-| `meshes/check.py` | `check` → `MeshReport` (winding, unit normals, watertight + volume) | no |
-| `meshes/sculpt.py` | shape files: load (params from `mesh()`'s signature), build (transform baked), save (AST rewrite of defaults, `MATERIAL`, `TRANSFORM`) | no |
-| `meshes/library/` | the procedural mesh library in `rc.studio.procedural_meshes` (default `data/procedural_meshes/`): `directory()`, `names()`, `mesh(name, **params)`, `material(renderer, name)` | no |
-| `materials.py` | shading models (WGSL), parameter schema, observable `Material`, colour conversion | buffer only |
-| `render.py` | shared WGSL, pipelines, render targets, `OrbitCamera` (projections, `VIEWS`, pan, `center_on`), `Instances` / `Batch` / `Spheres`, scene pass → highlight → post pass, `pick` | yes |
-| `scene.py` | `Scene` (object tree + material library, `batches()`, `settings()` / `from_settings`), `Group`, `ProceduralGroup`, `MeshObject`, `InstancedObject`, `Shape`, `Transform` | yes |
-| `scene_editor.py` | `SceneEditor`: undoable scene actions (`one_step` groups them); Scene / Object / Materials windows; hot reload of shape files | yes |
-| `studio.py` | `StudioEditor` (`valo-studio`): SceneEditor + Code window for shape files, New / Open shape, Save to library, normals overlay; base of domain studios | yes |
-| `config.py` | `rc`: typed config sections (camera, lighting, highlight, picking, ui, keys, studio), TOML files, `rc_context`, `valo-config` | no |
-| `offline.py` | `valo.render` (offline images: size, supersampling, transparency, background), `export_script`, `py_literal` | yes |
-| `lighting.py` | `Lighting`: headlight or fixed directional light, global hemisphere ambient (sky, ground, intensity) | no |
-| `undo.py` | undo/redo stack | no |
-| `ui.py` | `Editor` base: undo, `windows()` / `menus()`, dockspace + default layout, menu bar, History, material widgets | no |
-| `ui_style.py` | fonts (Roboto + Font Awesome `ICON`, `mono_font()`), theme `apply_style(scale)` | no |
-| `app.py` | `Viewer`: canvas, shared device/renderer, camera, ImGui, mouse; `show(scene, editor)`, `run()` | yes |
+| `math/` | `transforms.py`: matrices (`pack_mat4`, projections, `instance_matrices`, `decompose`); `bounds.py`: `box_corners`, `bounding_box` | no |
+| `meshes/` | pure numpy, import from `valo.meshes`: `data` (`MeshData`), `ops` (`transform`, `merge`), `builders` (`revolve`, `parametric`, `heightfield`, `tube`), `primitives` (`STANDARD`), `params` (`shape_params`), `check` (`MeshReport`), `shapefile` (`ShapeFile`: load / build / save a shape file), `library` (`data/procedural_meshes/`) | no |
+| `gpu/` | the draw engine: `shaders` (all WGSL), `material` (`Material`, `SCHEMA`, colour conversion), `mesh` (`GpuMesh`), `instances` (`Instances`, `Spheres`, `Batch`), `renderer` (`Renderer`: passes, `pick`, `renderer()`) | yes |
+| `scene/` | the data model: `camera` (`Camera`: view state, projections, `VIEWS`), `lighting` (`Lighting`), `shape` (`Shape`), `nodes` (`Transform`, `Group`, `ProceduralGroup`, `MeshObject`, `InstancedObject`, bounding boxes), `scene` (`Scene`: tree, material library, `batches()`, `settings()`) | via a Renderer |
+| `offline.py` | `valo.render` (images without a window), `export_script`, `py_literal` | yes |
+| `ui/` | editors: `editor` (`Editor`: dockspace, layout, menus), `windows/` (camera, lighting, info, history, render, preferences, outliner, object, materials: mixins with their actions), `overlays` (compass, hover / selection boxes, `box_layout`), `widgets`, `navigation` (`Navigator`: orbit / pan / zoom, keys, presets, transitions; not undoable), `viewer` (`Viewer`), `scene_editor` (`SceneEditor` actions, `one_step`), `undo`, `style` (`ICON`, fonts) | yes |
+| `studio/` | `StudioEditor` (`valo-studio`): `editor` (actions), `code` (Code window, File menu, dialogs), `normals` (overlay), `cli` (`build`, `main`); base of domain studios | yes |
+| `config.py` | `rc`: typed sections (camera, lighting, highlight, picking, ui, keys, studio), TOML files, `rc_context`, `valo-config` | no |
+| `testing.py` | test helpers for valo and apps: `offscreen_viewer`, `screen_point` / `hover` / `click` at a world point, `press`, `open_every_menu`, `changed` | — |
 
 ## Example apps (`examples/<name>/`)
 
@@ -50,7 +40,7 @@ Apps built on it live in `examples/`. Design and extension points: `ARCHITECTURE
 
 ## Rules that keep it working
 
-1. Matrices are math convention (`p' = M @ p`), Z-up. `geometry.pack_mat4` is the only place that transposes for WGSL.
+1. Matrices are math convention (`p' = M @ p`), Z-up. `valo.math.pack_mat4` is the only place that transposes for WGSL.
 2. Depth is reversed-Z (clear 0, compare `greater`). Colour is linear everywhere; sRGB encoding happens only in the post pass.
 3. Every user-facing change is a method on the app's `Editor` subclass that pushes a `Command` for undo. The windows only
    call these methods, so tests and scripts can do everything the UI can.
@@ -73,15 +63,16 @@ Apps built on it live in `examples/`. Design and extension points: `ARCHITECTURE
 1. Test behaviour through the public entry point: the function, or the `Editor` action the UI calls. Assert a
    result, not just that the code ran.
 2. A bug fix comes with a test that fails without the fix. Check it once by reverting the fix.
-3. Every new `Editor` action gets a row in an undo table (`EDITOR_ACTIONS` in `tests/test_app.py` for shared
-   actions, the app's own test otherwise). It must change state, undo exactly (state and image) and redo.
-4. Where tests go:
-   - pure engine code → `tests/test_core.py`, meshes and sculpts → `tests/test_meshes.py`;
-   - scene model and `SceneEditor` (undo table `SCENE_ACTIONS`) → `tests/test_scene.py`;
-   - the studio → `tests/test_valo_studio.py` (undo table `STUDIO_ACTIONS`);
-   - offscreen GPU → `tests/test_app.py` (share the module-scoped `viewer`, use
-     `viewer.snapshot()`);
-   - apps → `examples/<name>/test_*.py`.
+3. Every new `Editor` action gets a row in an undo table: `EDITOR_ACTIONS` (`tests/ui/test_editor.py`),
+   `SCENE_ACTIONS` (`tests/scene/test_scene.py`), `STUDIO_ACTIONS` (`tests/studio/test_valo_studio.py`), or the app's
+   own test. It must change state, undo exactly (state and image) and redo. `tests/test_structure.py` fails for an
+   action without a row (view changes, queries and windows are on its allow-list).
+4. Where tests go: `tests/` mirrors the packages (`tests/math/`, `meshes/`, `gpu/`, `scene/`, `ui/`, `studio/`, plus
+   `test_config.py`, `test_offline.py`); apps → `examples/<name>/test_*.py`. Test file names are unique across the
+   repo (no `__init__.py`). GPU tests take the `viewer` fixture (root `conftest.py`: one offscreen Viewer per module,
+   size from `VIEWER_SIZE`), mark the module `pytestmark = pytest.mark.gpu`, and use `valo.testing` for pointer,
+   keys, menus and image comparison. `tests/test_structure.py` guards the public API, the layering and the undo
+   tables: change it on purpose when a rename or a new dependency is intended.
 5. Prefer `parametrize` or a table over copied tests. No tests of ImGui widget layout, and no golden images
    (GPU drivers differ): compare images only with each other (changed / restored exactly).
 6. Keep the whole suite under ~30 s. Every public function should be called by some test; `main()` / `run()`

@@ -8,7 +8,7 @@ Dear ImGui for a docking UI. Apps hand the `Viewer` a scene of instanced, shaded
 uv sync
 uv run python examples/crystal_studio/studio.py   # example app: rock-salt crystal + material editor
 uv run valo-studio                                # the studio: scene, objects, materials, procedural meshes in code
-uv run valo-studio examples/sculpts/vase.py       # ...opening a shape file
+uv run valo-studio examples/shapes/vase.py        # ...opening a shape file
 uv run pytest                                     # engine + example tests (GPU tests render offscreen)
 ```
 

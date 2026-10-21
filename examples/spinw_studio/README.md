@@ -49,7 +49,7 @@ spinw_studio/adapter.py               SpinW → plain numpy data. The ONLY file 
       │  SystemView(A, atoms)
       ▼
 spinw_studio/model.py                 the data contract + pure geometry (numpy; pillow for colour names)
-spinw_studio/scene.py, editor.py      the valo.Scene and its SceneEditor (valo's public API only)
+spinw_studio/scene.py, editor.py      the valo.Scene and its StudioEditor (valo's public API only)
 spinw_studio/api.py                   plot_structure, render
       ▼
 valo                                  rendering; knows nothing about crystals or spinwaves
@@ -130,7 +130,7 @@ One dict, validated, going in and out. Unknown keys give an error with "did you 
 | `shapes` | — | `{structure object: {"func", "params"}}`: base meshes you swapped (e.g. Fe as an icosphere) |
 | `objects`, `object_materials` | — | valo node settings of the objects you added, and the library's other materials |
 | `coupling_colors` | — | `{coupling label: colour}`; kept for the couplings to come |
-| `camera`, `lighting`, `image` | — | valo `OrbitCamera.settings()`, `Lighting.settings()`, `valo.render` image options |
+| `camera`, `lighting`, `image` | — | valo `Camera.settings()`, `Lighting.settings()`, `valo.render` image options |
 
 What `plot_structure` returns, and what Export writes, contains the materials in full, so feeding it back rebuilds
 the same picture pixel for pixel (a test checks this). **The lattice isn't in plot_options:** it lives in your `sw`.

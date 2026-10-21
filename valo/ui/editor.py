@@ -21,20 +21,20 @@ from imgui_bundle.imgui import internal
 
 from ..config import SECTIONS, USER_FILE, rc
 from ..geometry import axis_angle, decompose, euler_xyz
-from ..lighting import MODES
 from ..materials import SCHEMA, Material, linear_to_srgb, srgb_to_linear
 from ..offline import export_script, image_settings, plain, render
-from ..render import PROJECTIONS, VIEWS
 from .overlays import Overlays
 from .style import ICON, apply_style
 from .undo import Command, UndoStack
 from .widgets import Widgets
+from .windows.camera import CameraWindow
+from .windows.lighting import LightingWindow
 
 UI_SCALES = (0.85, 1.0, 1.15, 1.3, 1.5, 1.75, 2.0)
 SHARED_WINDOWS = ("Info", "Camera", "Lighting", "History")  # added by the base class, docked in the lower part
 
 
-class Editor(Overlays, Widgets):
+class Editor(CameraWindow, LightingWindow, Overlays, Widgets):
     """Base class for an app's editor: undoable actions, dockable windows and the shared UI."""
     title = "valo"
     right_column: float | None = None  # share of the window width for the right dock column (None: rc.ui)
@@ -129,140 +129,9 @@ class Editor(Overlays, Widgets):
 
         self.undo_stack.push(Command(label, restore(old), restore(new), merge_key=merge_key))
 
-    def set_projection(self, projection: str) -> None:
-        """Switch the camera between perspective and orthographic (undoable)."""
-        cam, scene = self.viewer.camera, self.viewer.scene
-        radius = scene.bounding_radius() if hasattr(scene, "bounding_radius") else None
-        self._record(f"camera: {projection}", cam, ("projection", "distance", "ortho_height"),
-                     lambda: cam.set_projection(projection, radius))
-
-    def set_fov(self, degrees: float) -> None:
-        """Set the perspective field of view in degrees, keeping the target's size on screen (undoable)."""
-        cam, scene = self.viewer.camera, self.viewer.scene
-        radius = scene.bounding_radius() if hasattr(scene, "bounding_radius") else None
-        self._record("camera: field of view", cam, ("fovy", "distance"), lambda: cam.set_fov(degrees, radius),
-                     merge_key=("camera", "fovy"))
-
-    def set_view(self, name: str) -> None:
-        """Look from a preset side: one of ``render.VIEWS`` (+X ... -Z, Iso)."""
-        cam = self.viewer.camera
-
-        def look():
-            cam.azimuth, cam.elevation = VIEWS[name]
-
-        self._record(f"camera: view {name}", cam, ("azimuth", "elevation"), look)
-
-    def fit_view(self) -> None:
-        """Move the camera so the whole scene fits (undoable)."""
-        cam, scene = self.viewer.camera, self.viewer.scene
-        if hasattr(scene, "bounding_radius"):
-            self._record("camera: fit", cam, ("distance", "ortho_height"), lambda: cam.fit(scene.bounding_radius()))
-
-    def set_light(self, key: str, value) -> None:
-        """Any ``Lighting`` field except ``mode``: azimuth, elevation, color, intensity, sky, ground, ambient."""
-        light = self.viewer.lighting
-        value = tuple(float(c) for c in value) if isinstance(value, (tuple, list)) else float(value)
-        self._record(f"light: {key}", light, (key,), lambda: setattr(light, key, value), merge_key=("light", key))
-
-    def set_light_mode(self, mode: str) -> None:
-        """Switch the light between headlight and fixed without moving it (undoable)."""
-        light, cam = self.viewer.lighting, self.viewer.camera
-        self._record(f"light: {mode}", light, ("mode", "azimuth", "elevation"), lambda: light.set_mode(mode, cam))
-
-    def set_ambient_flat(self, flat: bool) -> None:
-        """Flat ambient on (ground = sky) or off (the ground colour from before comes back); undoable."""
-        light = self.viewer.lighting
-        if flat == (tuple(light.sky) == tuple(light.ground)):
-            return
-        if flat:
-            self._ground_before_flat = tuple(light.ground)
-            self.set_flat_ambient(light.sky)
-        else:
-            ground = self._ground_before_flat or rc.lighting.ground
-            if tuple(ground) == tuple(light.sky):  # e.g. it started flat: any distinct ground will do
-                ground = tuple(0.2 * c for c in light.sky)
-            self.set_light("ground", ground)
-
-    def set_flat_ambient(self, rgb) -> None:
-        """One ambient colour from every side (sky = ground)."""
-        light, rgb = self.viewer.lighting, tuple(float(c) for c in rgb)
-
-        def flat():
-            light.sky = light.ground = rgb
-
-        self._record("light: ambient colour", light, ("sky", "ground"), flat, merge_key=("light", "flat"))
 
     # -- shared windows
-    def camera_window(self) -> None:
-        """Projection, field of view, view presets, fit and auto-rotate."""
-        cam = self.viewer.camera
-        for p in PROJECTIONS:
-            if imgui.radio_button(p.capitalize(), cam.projection == p):
-                self.set_projection(p)
-            imgui.same_line()
-        imgui.new_line()
-        if cam.projection == "perspective":
-            changed, v = imgui.slider_float("Field of view", cam.fovy, 10.0, 90.0, "%.0f deg")
-            if changed:
-                self.set_fov(v)
-        imgui.text_disabled("View from")
-        for i, name in enumerate(VIEWS):
-            if i:
-                imgui.same_line()
-            if imgui.button(name):
-                self.set_view(name)
-        if imgui.button(f"{ICON.EXPAND} Fit"):
-            self.fit_view()
-        imgui.same_line()
-        imgui.begin_disabled(self.viewer.selection is None)
-        if imgui.button(f"{ICON.CROSSHAIRS} Frame selection"):
-            self.viewer.frame_selection()
-        imgui.end_disabled()
-        imgui.same_line()
-        _, self.auto_rotate = imgui.checkbox("Auto-rotate", self.auto_rotate)
 
-
-    def lighting_window(self) -> None:
-        """Light mode, direction, colour and intensity, and the global ambient."""
-        light = self.viewer.lighting
-        for m in MODES:
-            if imgui.radio_button(m.capitalize(), light.mode == m):
-                self.set_light_mode(m)
-            imgui.same_line()
-        imgui.new_line()
-        imgui.text_disabled("moves with the camera" if light.mode == "headlight" else "stays put in the world")
-        for key, lo, hi in (("azimuth", -180.0, 180.0), ("elevation", -90.0, 90.0)):
-            changed, v = imgui.slider_float(key.capitalize(), getattr(light, key), lo, hi, "%.0f deg")
-            if changed:
-                self.set_light(key, v)
-        changed, col = self._color("##light colour", light.color)
-        if changed:
-            self.set_light("color", col)
-        imgui.same_line()
-        changed, v = imgui.slider_float("Light", light.intensity, 0.0, 3.0, "%.2f")
-        if changed:
-            self.set_light("intensity", v)
-
-        imgui.separator_text("Ambient (all objects)")
-        flat = tuple(light.sky) == tuple(light.ground)
-        changed, col = self._color("Sky" if not flat else "Colour", light.sky)
-        if changed:
-            if flat:
-                self.set_flat_ambient(col)
-            else:
-                self.set_light("sky", col)
-        if not flat:
-            imgui.same_line()
-            changed, col = self._color("Ground", light.ground)
-            if changed:
-                self.set_light("ground", col)
-        imgui.same_line()
-        clicked, want_flat = imgui.checkbox("Flat", flat)
-        if clicked:
-            self.set_ambient_flat(want_flat)
-        changed, v = imgui.slider_float("Ambient", light.ambient, 0.0, 1.5, "%.2f")
-        if changed:
-            self.set_light("ambient", v)
 
     def info_window(self) -> None:
         """Properties of the hovered object, or of the selected one when nothing is hovered."""

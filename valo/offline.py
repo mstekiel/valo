@@ -1,8 +1,9 @@
 """Offline rendering: an image of a scene without a window, for scripts and the studio's "Render image".
 
     import valo
-    crystal = Crystal()                                   # built on valo.renderer(), no window needed
-    img = valo.render(crystal, size=(2400, 1600), samples=2, transparent=True, path="nacl.png")
+    scene = valo.Scene()                                  # built on valo.renderer(), no window needed
+    ...                                                   # materials and objects
+    img = valo.render(scene, size=(2400, 1600), samples=2, transparent=True, path="scene.png")
 
 ``settings`` is the dict an exported render script holds: ``{"camera": {...}, "lighting": {...},
 "image": {"size": [w, h], "samples": k, "transparent": bool, "background": [r, g, b]}}`` (any part optional);

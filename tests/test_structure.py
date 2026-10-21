@@ -151,7 +151,7 @@ def test_valo_never_imports_the_examples():
         tree = ast.parse(path.read_text(encoding="utf-8"))
         absolute = [n.module or "" for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) and not n.level]
         absolute += [a.name for n in ast.walk(tree) if isinstance(n, ast.Import) for a in n.names]
-        assert not [m for m in absolute if m.split(".")[0] in ("examples", "spinw_studio", "crystal")], path
+        assert not [m for m in absolute if m.split(".")[0] in ("examples", "spinw_studio")], path
 
 
 # -- every editor action has a row in an undo table ----------------------------------------------------------------

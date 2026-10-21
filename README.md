@@ -6,7 +6,6 @@ Dear ImGui for a docking UI. Apps hand the `Viewer` a scene of instanced, shaded
 
 ```powershell
 uv sync
-uv run python examples/crystal_studio/studio.py   # example app: rock-salt crystal + material editor
 uv run valo-studio                                # the studio: scene, objects, materials, procedural meshes in code
 uv run valo-studio examples/shapes/vase.py        # ...opening a shape file
 uv run pytest                                     # engine + example tests (GPU tests render offscreen)
@@ -40,20 +39,19 @@ Render pictures without opening a window; every option is plain Python:
 
 ```python
 import valo
-from crystal import Crystal          # examples/crystal_studio
+from valo import MeshObject, Scene, Shape, meshes
 
-crystal = Crystal()
-crystal.n = [8, 8, 4]
-crystal.rebuild()
-valo.render(crystal, {"camera": {"azimuth": -60.0, "projection": "orthographic"},
-                      "lighting": {"mode": "fixed"},
-                      "image": {"size": [2400, 1600], "samples": 2, "transparent": True}},
-            path="crystal.png")
+scene = Scene()                                   # built on valo.renderer(), no window needed
+scene.material("Gold", "pbr", base_color=(1.0, 0.71, 0.29), metallic=1.0, roughness=0.3)
+scene.add(MeshObject("Torus", Shape(meshes.torus, {"major": 0.6}), "Gold"))
+valo.render(scene, {"camera": {"azimuth": -60.0, "elevation": 30.0, "projection": "orthographic"},
+                    "lighting": {"mode": "fixed"},
+                    "image": {"size": [2400, 1600], "samples": 2, "transparent": True}},
+            path="torus.png")
 ```
 
 Or set things up in the studio and use File → Render image / export script: Render PNG saves the picture, and
 Export writes a runnable `render_*.py` with every setting in an editable `SETTINGS` dict. Running it re-renders
-the same picture. A full example is at the bottom of `examples/crystal_studio/crystal.py`
-(`uv run python examples/crystal_studio/crystal.py`).
+the same picture.
 
 See `ARCHITECTURE.md` for how it fits together, how to write an app, and where new features go.

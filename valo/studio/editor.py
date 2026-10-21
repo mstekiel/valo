@@ -27,14 +27,14 @@ import numpy as np
 from imgui_bundle import imgui, portable_file_dialogs
 from imgui_bundle import imgui_color_text_edit as text_edit
 
-from . import meshes
-from .config import rc
-from .geometry import decompose, euler_xyz, instance_matrices
-from .meshes import library
-from .meshes.shapefile import IDENTITY, transform_matrix
-from .scene import MeshObject, Scene, Shape, Transform
-from .scene_editor import SceneEditor, shape_error
-from .ui_style import ICON, mono_font
+from .. import meshes
+from ..config import rc
+from ..geometry import decompose, euler_xyz, instance_matrices
+from ..meshes import library
+from ..meshes.shapefile import IDENTITY, transform_matrix
+from ..scene import MeshObject, Scene, Shape, Transform
+from ..ui.scene_editor import SceneEditor, shape_error
+from ..ui.style import ICON, mono_font
 
 ERROR_COLOR = imgui.ImVec4(1.0, 0.45, 0.4, 1.0)
 
@@ -439,7 +439,7 @@ def build(viewer, path=None) -> StudioEditor:
 
 def main(argv=None) -> None:
     """Command-line entry point: ``valo-studio [shape.py] [--size WxH]``."""
-    from .app import Viewer
+    from ..ui.viewer import Viewer
 
     ap = argparse.ArgumentParser(prog="valo-studio", description=__doc__.split("\n\n")[0])
     ap.add_argument("file", type=Path, nargs="?", help="a shape file to open: a .py file with a mesh(...) function")

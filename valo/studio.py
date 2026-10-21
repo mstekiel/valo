@@ -5,7 +5,7 @@ procedural mesh in Python and tune its parameters in the Object tab.
     uv run valo-studio my_shape.py     # open a shape file
 
 A **shape file** is plain Python with a ``mesh(...)`` function whose parameters all have defaults (``float``,
-``int``, ``bool``), optionally ``RANGES``, ``MATERIAL`` and ``TRANSFORM`` (contract: ``valo.meshes.sculpt``).
+``int``, ``bool``), optionally ``RANGES``, ``MATERIAL`` and ``TRANSFORM`` (contract: ``valo.meshes.shapefile``).
 Every save in the Code window (Ctrl+S) re-reads the file: the Object tab's parameters are refreshed (values kept
 where name and type still match) and the mesh is rebuilt; on an error the last good mesh stays and the error shows
 under the code. Files changed by another editor reload too.
@@ -31,7 +31,7 @@ from . import meshes
 from .config import rc
 from .geometry import decompose, euler_xyz, instance_matrices
 from .meshes import library
-from .meshes.sculpt import IDENTITY, transform_matrix
+from .meshes.shapefile import IDENTITY, transform_matrix
 from .scene import MeshObject, Scene, Shape, Transform
 from .scene_editor import SceneEditor, shape_error
 from .ui_style import ICON, mono_font

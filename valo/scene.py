@@ -107,10 +107,10 @@ class Shape:
 
     def _load(self) -> None:
         if isinstance(self.source, (str, Path)) and str(self.source).endswith(".py"):
-            from .meshes.sculpt import Sculpt
+            from .meshes.shapefile import ShapeFile
 
             mtime = Path(self.source).stat().st_mtime  # before reading: a write during the read shows next time
-            self.sculpt = Sculpt.load(self.source)
+            self.sculpt = ShapeFile.load(self.source)
             self.func, self.specs, self.mtime = self.sculpt.build, self.sculpt.params, mtime
         else:
             self.func = resolve(self.source)

@@ -13,12 +13,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ...config import rc
-from ...materials import Material
-from ..data import MeshData
-from ..sculpt import Sculpt
+from ..config import rc
+from .data import MeshData
+from .shapefile import ShapeFile
 
-PROJECT_DIR = Path(__file__).resolve().parents[3]  # the folder holding the valo package
+PROJECT_DIR = Path(__file__).resolve().parents[2]  # the folder holding the valo package
 
 
 def directory() -> Path:
@@ -36,11 +35,11 @@ def path(name: str) -> Path:
     return directory() / f"{name}.py"
 
 
-def load(name: str) -> Sculpt:
-    """The library entry ``name`` as a Sculpt (raises KeyError if there is none)."""
+def load(name: str) -> ShapeFile:
+    """The library entry ``name`` as a ShapeFile (raises KeyError if there is none)."""
     if not path(name).exists():
         raise KeyError(f"no library mesh {name!r}; have {names()}")
-    return Sculpt.load(path(name))
+    return ShapeFile.load(path(name))
 
 
 def mesh(name: str, **params) -> MeshData:
@@ -48,7 +47,7 @@ def mesh(name: str, **params) -> MeshData:
     return load(name).build(params)
 
 
-def material(renderer, name: str) -> Material:
+def material(renderer, name: str):
     """The entry's saved MATERIAL preset as a new material (a plain grey PBR one if it has none)."""
     preset = dict(load(name).material or {"shading": "pbr"})
     return renderer.material(name, preset.pop("shading"), **preset)

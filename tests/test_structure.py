@@ -96,7 +96,6 @@ LAYERS = {
 OUTSIDE = {"config", "testing", "__init__"}
 KNOWN_VIOLATIONS = {  # to remove in the package refactor (they are why it exists)
     ("render", "lighting"),  # the renderer will take a Lighting as an argument instead of making one
-    ("meshes.library", "materials"),  # only a type hint
 }
 
 

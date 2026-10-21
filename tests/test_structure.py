@@ -85,7 +85,7 @@ def test_entry_points_keep_how_they_are_called(name):
 # Lower layers never import higher ones: math ← meshes ← gpu ← scene ← (offline, ui) ← studio; config, testing and the
 # package __init__ are outside the order. Keys are module paths inside valo (packages as "meshes" prefixes).
 LAYERS = {
-    "geometry": 0,
+    "math": 0, "geometry": 0,
     "meshes": 1,
     "render": 2, "materials": 2,
     "scene": 3, "lighting": 3,

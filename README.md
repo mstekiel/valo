@@ -23,7 +23,7 @@ parameters into the Object tab; files changed in another editor reload too. "Sav
 | Mouse / key | Action |
 |---|---|
 | left-drag / middle- or Shift-drag / wheel | orbit / pan / zoom |
-| hover / click / double-click | Info + highlight / select / centre on that point |
+| hover / click / double-click | Info + grey box / select (orange box) / centre on that point |
 | F / Home | frame the selection / fit everything |
 | 1, 3, 7 (Ctrl: opposite side) / 5 | front, right, top views / toggle orthographic |
 | arrows (Shift: pan) / Esc | orbit in steps / deselect |

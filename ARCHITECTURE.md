@@ -55,7 +55,8 @@ viewer.show(scene, SceneEditor(scene))
   built this way.
 - **Names** of nodes and materials are unique per scene (" 2" suffix), so they work as references.
 - **GPU**: each object owns an `Instances` whose `owner` is the object; `scene.batches()` draws the visible ones.
-  A click on any instance selects (and highlights) the whole object; `viewer.highlighted` tints a group's objects.
+  A click on any instance selects the whole object. `Node.bounding_box()` is the box around a node's content in
+  its own frame (it tilts and scales with the node); the selected and hovered nodes are drawn with it.
 - **Serialization**: `scene.settings()` / `Scene.from_settings(d)`: materials plus the tree as plain data,
   functions as `"module:function"` paths (so they must be importable), procedural groups as builder + parameters
   only. So Export render script works for any Scene.
@@ -154,9 +155,11 @@ the objects, so `Lighting()` starts from `rc.lighting`, but the Lighting window 
   - translation / rotation / scale from `geometry.decompose`;
   - the point hit;
   - then `scene.describe(pick)` or `source.info(i)`.
-- **Highlight:** the hovered and selected instances (a whole object when the instances have an `owner`, plus
-  `viewer.highlighted`) are drawn again over the scene, with an additive tint + rim
-  pipeline at the same depth (`@invariant` position, `greater-equal`). Colour and strength come from `rc.highlight`.
+- **Hover and selection boxes:** `Viewer.boxes()` lists the selected node's box (`viewer.outlined`, set by
+  `SceneEditor.select`, else the clicked pick's owner, else the clicked instance) and the hovered one, as box
+  matrices (unit cube → world). `Editor.draw_boxes` projects them with `ui.box_layout` and draws them with ImGui over
+  the 3D view: `rc.highlight` colours (sRGB), line width, back edges fainter; not in `valo.render` images.
+  `Renderer.render(highlights=...)` (an additive tint + rim pass at the same depth) remains as a low-level option.
 - **Navigation** (`Viewer.on_pointer` / `on_key`, keys in `rc.keys`):
   - mouse: left-drag orbit, middle- or Shift-drag pan, wheel zoom, click select, double-click centre on the point;
   - keys: F frame selection, Home fit all, 1/3/7 (+Ctrl) views, 5 projection, arrows orbit (Shift pan), Esc deselect.
@@ -193,7 +196,7 @@ Viewer.draw()
  │    ├─ scene pass → rgba16float texture, one instanced draw per batch
  │    │     batch = Batch(material, gpu mesh, instance bind group, count, source)   group 2 = mat4x4f per instance
  │    │     (vs_main: world = M·p, normal = cofactor(M)·n, so non-uniform scale shades correctly)
- │    ├─ highlight: hovered / selected instance drawn again, additive tint + rim, same depth
+ │    ├─ (highlights=..., if an app passes them: instances drawn again with an additive tint)
  │    └─ post pass → encode linear → sRGB into the viewport region of the window
  ├─ Renderer.pick(...) under the pointer → viewer.hover (1-pixel id pass, read back)
  └─ ImguiRenderer.render()  → editor.gui(): menu bar, dockspace, windows on top (skipped without an editor)

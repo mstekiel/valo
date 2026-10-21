@@ -55,3 +55,8 @@ Export writes a runnable `render_*.py` with every setting in an editable `SETTIN
 the same picture.
 
 See `ARCHITECTURE.md` for how it fits together, how to write an app, and where new features go.
+
+## License
+
+valo is free software under the GNU General Public License v3.0 or later; see `LICENSE`.
+Changes are listed in `CHANGELOG.md`.

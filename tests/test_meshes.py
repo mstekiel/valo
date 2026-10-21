@@ -185,7 +185,7 @@ def test_merge_offsets_indices():
 
 
 
-@pytest.mark.parametrize("path", sorted((Path(__file__).parents[1] / "examples" / "sculpts").glob("*.py")),
+@pytest.mark.parametrize("path", sorted((Path(__file__).parents[1] / "examples" / "shapes").glob("*.py")),
                          ids=lambda p: p.stem)
 def test_starter_sculpts_build_clean_meshes(path):
     from valo.meshes import Sculpt

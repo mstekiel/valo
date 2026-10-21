@@ -1,4 +1,4 @@
-"""A vase: a (ρ, z) profile swept around Z. Open it with: uv run valo-studio examples/sculpts/vase.py"""
+"""A vase: a (ρ, z) profile swept around Z. Open it with: uv run valo-studio examples/shapes/vase.py"""
 
 import numpy as np
 

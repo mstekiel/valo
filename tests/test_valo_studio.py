@@ -11,7 +11,7 @@ from valo.testing import open_every_menu
 
 pytestmark = pytest.mark.gpu
 VIEWER_SIZE = (1280, 720)  # room for the Code column
-VASE = Path(__file__).parents[1] / "examples" / "sculpts" / "vase.py"
+VASE = Path(__file__).parents[1] / "examples" / "shapes" / "vase.py"
 
 
 @pytest.fixture

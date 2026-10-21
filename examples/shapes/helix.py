@@ -1,4 +1,4 @@
-"""A coil spring: a tube swept along a helix. Open it with: uv run valo-studio examples/sculpts/helix.py"""
+"""A coil spring: a tube swept along a helix. Open it with: uv run valo-studio examples/shapes/helix.py"""
 
 import numpy as np
 

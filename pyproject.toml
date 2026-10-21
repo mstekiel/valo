@@ -44,9 +44,17 @@ spinwaves = { path = "C:/Users/stekiel.JCNSOPC-MICHAL.001/Documents/GitHub/spinw
 [dependency-groups]
 dev = [
     "pytest>=9.1.1",
+    "pytest-cov>=7.1.0",
     "ruff>=0.17.1",
 ]
 spinw = [
     "lmfit>=1.3.4",
     "spinwaves",
 ]
+
+[tool.coverage.run]
+source = ["valo"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true

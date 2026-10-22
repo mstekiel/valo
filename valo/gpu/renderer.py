@@ -23,9 +23,9 @@ from ..meshes.primitives import sphere
 from .instances import Instances, Spheres
 from .material import Material
 from .mesh import VERTEX_LAYOUT, GpuMesh
-from .shaders import COMMON_WGSL, FRAGMENT_WGSL, HIGHLIGHT_WGSL, PICK_WGSL, POST_WGSL, VERTEX_WGSL
+from .shaders import COMMON_WGSL, FRAGMENT_WGSL, HIGHLIGHT_WGSL, LINES_WGSL, PICK_WGSL, POST_WGSL, VERTEX_WGSL
 
-__all__ = ["DEPTH_FORMAT", "PICK_FORMAT", "SCENE_FORMAT", "Pick", "Renderer", "get_device", "renderer"]
+__all__ = ["DEPTH_FORMAT", "PICK_FORMAT", "SCENE_FORMAT", "Lines", "Pick", "Renderer", "get_device", "renderer"]
 
 
 DEPTH_FORMAT = "depth32float"
@@ -33,6 +33,19 @@ SCENE_FORMAT = "rgba16float"  # linear HDR scene colour; encoded to sRGB in POST
 
 
 PICK_FORMAT = "rgba32uint"  # (batch + 1, instance, depth bits, 1)
+
+
+class Lines(NamedTuple):
+    """Overlay line segments drawn into the scene against its depth, so objects in front hide them (e.g. bounding
+    boxes): ``segments`` (N, 2, 3) world xyz ends, ``colors`` (N, 4) linear RGBA, ``width`` in framebuffer pixels
+    (multiplied by the supersampling)."""
+
+    segments: np.ndarray
+    colors: np.ndarray
+    width: float = 1.5
+
+
+LINE_DEPTH_BIAS = 1e-3  # lines are drawn this much (relative depth) nearer, so edges lying on a mesh don't flicker
 
 
 class Pick(NamedTuple):
@@ -123,6 +136,22 @@ class Renderer:
                       "targets": [{"format": SCENE_FORMAT, "blend": add}]},
         ) for front in ("ccw", "cw"))  # proper, mirrored instances
         self._hl_layout, self._hl_buffers = hl_layout, []  # one tint buffer per highlight, made on demand
+        line_module = device.create_shader_module(code=VERTEX_WGSL + LINES_WGSL)
+        blend = {"color": {"src_factor": "src-alpha", "dst_factor": "one-minus-src-alpha", "operation": "add"},
+                 "alpha": {"src_factor": "one", "dst_factor": "one-minus-src-alpha", "operation": "add"}}
+        self.line_pipeline = device.create_render_pipeline(  # overlay lines, tested against the scene's depth
+            layout=device.create_pipeline_layout(
+                bind_group_layouts=[self.frame_layout, self.material_layout, self.instance_layout]),
+            vertex={"module": line_module, "entry_point": "vs_line", "buffers": []},
+            primitive={"topology": "triangle-list", "cull_mode": "none"},
+            depth_stencil={"format": DEPTH_FORMAT, "depth_write_enabled": False, "depth_compare": "greater-equal"},
+            fragment={"module": line_module, "entry_point": "fs_line",
+                      "targets": [{"format": SCENE_FORMAT, "blend": blend}]},
+        )
+        self._line_frame = device.create_buffer(size=16, usage=wgpu.BufferUsage.UNIFORM | wgpu.BufferUsage.COPY_DST)
+        self._line_frame_bg = device.create_bind_group(
+            layout=self.material_layout, entries=[{"binding": 0, "resource": {"buffer": self._line_frame}}])
+        self._line_buffer = self._line_bg = None  # segments, grown on demand
         self.post_origin = device.create_buffer(size=16, usage=wgpu.BufferUsage.UNIFORM | wgpu.BufferUsage.COPY_DST)
         self._meshes: weakref.WeakKeyDictionary[MeshData, GpuMesh] = weakref.WeakKeyDictionary()
         self.sphere = self.mesh(sphere(20, 40))  # unit diameter; scaled per instance
@@ -244,6 +273,26 @@ class Renderer:
             )
         return self._post_pipelines[output_format]
 
+    def _draw_lines(self, rpass, lines: Lines, w: int, h: int, k: int) -> None:
+        """Upload ``lines`` and draw them (one 6-vertex quad per segment) in the current scene pass."""
+        seg = np.asarray(lines.segments, np.float32).reshape(-1, 2, 3)
+        data = np.zeros((len(seg), 12), np.float32)
+        data[:, 0:3], data[:, 4:7] = seg[:, 0], seg[:, 1]
+        data[:, 8:12] = np.broadcast_to(np.asarray(lines.colors, np.float32).reshape(-1, 4), (len(seg), 4))
+        if self._line_buffer is None or self._line_buffer.size < data.nbytes:
+            self._line_buffer = self.device.create_buffer(
+                size=max(data.nbytes, 2 * (self._line_buffer.size if self._line_buffer else 0)),
+                usage=wgpu.BufferUsage.STORAGE | wgpu.BufferUsage.COPY_DST)
+            self._line_bg = self.device.create_bind_group(
+                layout=self.instance_layout, entries=[{"binding": 0, "resource": {"buffer": self._line_buffer}}])
+        self.device.queue.write_buffer(self._line_buffer, 0, data)
+        self.device.queue.write_buffer(self._line_frame, 0,
+                                       np.array([w, h, float(lines.width) * k, LINE_DEPTH_BIAS], np.float32))
+        rpass.set_pipeline(self.line_pipeline)
+        rpass.set_bind_group(1, self._line_frame_bg)
+        rpass.set_bind_group(2, self._line_bg)
+        rpass.draw(6, len(seg))
+
     def _scene_targets(self, w: int, h: int):
         if self._targets is None or self._targets[0] != (w, h):
             usage = wgpu.TextureUsage.RENDER_ATTACHMENT
@@ -257,7 +306,8 @@ class Renderer:
         return self._targets[1:]
 
     def render(self, surface_texture, viewport: tuple[int, int, int, int], scene, camera,
-               lighting, highlights=(), samples: int = 1, transparent: bool = False, background=None) -> None:
+               lighting, highlights=(), samples: int = 1, transparent: bool = False, background=None,
+               lines: Lines | None = None) -> None:
         """Draw ``scene`` into the ``viewport`` = (x, y, w, h) rectangle of ``surface_texture`` (framebuffer
         pixels, origin top-left); the rest of the texture is cleared to the window background.
 
@@ -266,7 +316,8 @@ class Renderer:
         ``ground`` and ``ambient``). ``highlights``: (batch_index, instance_index, rgb) tints drawn over those
         instances; an instance_index of None tints every instance of the batch (a whole object).
         ``samples`` k renders the scene k×k larger and averages it down; ``transparent`` gives the background
-        alpha 0; ``background`` (linear RGB) overrides ``rc.render.background``.
+        alpha 0; ``background`` (linear RGB) overrides ``rc.render.background``. ``lines`` (a ``Lines``) are drawn
+        last into the scene, hidden wherever a mesh is in front of them.
         """
         tw, th = surface_texture.size[:2]
         x, y = (int(np.clip(c, 0, lim - 1)) for c, lim in zip(viewport[:2], (tw, th), strict=True))
@@ -320,6 +371,8 @@ class Renderer:
                 slot = getattr(getattr(b, "source", None), "slot", None)
                 first, n = (0, b[3]) if ii is None else (int(slot[ii]) if slot is not None else ii, 1)
                 _draw_slots(rpass, b, first, n, self.highlight_pipelines)
+        if lines is not None and len(lines.segments):
+            self._draw_lines(rpass, lines, vw * k, h * k, k)
         rpass.end()
 
         rpass = encoder.begin_render_pass(color_attachments=[{

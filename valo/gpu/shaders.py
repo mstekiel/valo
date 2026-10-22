@@ -1,5 +1,5 @@
 """All WGSL of the renderer: the shared vertex stage and lighting helpers, one fragment shader per shading model
-(``FRAGMENT_WGSL``, keyed like ``material.SCHEMA``), and the pick, highlight and post passes.
+(``FRAGMENT_WGSL``, keyed like ``material.SCHEMA``), and the pick, highlight, overlay-line and post passes.
 
 Add a shading model: a WGSL entry in ``FRAGMENT_WGSL`` plus its parameter list in ``material.SCHEMA``.
 """
@@ -80,6 +80,49 @@ struct PickId { batch: vec4u };   // x = batch index + 1 (0 = nothing)
 @fragment
 fn fs_main(in: VsOut) -> @location(0) vec4u {
     return vec4u(pick.batch.x, in.instance, bitcast<u32>(in.pos.z), 1u);
+}
+"""
+
+
+LINES_WGSL = """
+// Overlay lines (e.g. bounding boxes), drawn in the scene pass against its depth: each segment is one instance of a
+// 6-vertex quad, widened on screen to a fixed width in pixels.
+struct LineFrame { size: vec4f };   // xy = viewport, z = line width (framebuffer px), w = depth bias (relative)
+@group(1) @binding(0) var<uniform> lines: LineFrame;
+struct Segment { a: vec4f, b: vec4f, color: vec4f };   // ends in world xyz, colour linear RGBA
+@group(2) @binding(0) var<storage, read> segments: array<Segment>;
+
+struct LineOut { @builtin(position) pos: vec4f, @location(0) color: vec4f };
+
+@vertex
+fn vs_line(@builtin(vertex_index) v: u32, @builtin(instance_index) i: u32) -> LineOut {
+    let s = segments[i];
+    var p = frame.view_proj * vec4f(s.a.xyz, 1.0);
+    var q = frame.view_proj * vec4f(s.b.xyz, 1.0);
+    var out: LineOut;
+    out.color = s.color;
+    let near = 1e-4;
+    if (p.w < near && q.w < near) {   // all of it behind the camera
+        out.pos = vec4f(2.0, 2.0, 2.0, 1.0);
+        return out;
+    }
+    if (p.w < near) { p = mix(p, q, (near - p.w) / (q.w - p.w)); }   // cut where it crosses the near side
+    if (q.w < near) { q = mix(q, p, (near - q.w) / (p.w - q.w)); }
+    let half = lines.size.xy * 0.5;
+    var d = (q.xy / q.w - p.xy / p.w) * half;   // the segment on screen, pixels
+    if (length(d) < 1e-6) { d = vec2f(1.0, 0.0); }
+    let n = normalize(vec2f(-d.y, d.x)) * lines.size.z * 0.5 / half;   // half the width, in NDC
+    var ends = array<f32, 6>(0.0, 0.0, 1.0, 1.0, 0.0, 1.0);
+    var sides = array<f32, 6>(-1.0, 1.0, -1.0, -1.0, 1.0, 1.0);
+    let c = select(p, q, ends[v] > 0.5);
+    // a little nearer than the surface it may lie on (reversed-Z: larger is nearer), so edges on a mesh don't flicker
+    out.pos = vec4f(c.xy + n * sides[v] * c.w, c.z * (1.0 + lines.size.w), c.w);
+    return out;
+}
+
+@fragment
+fn fs_line(in: LineOut) -> @location(0) vec4f {
+    return in.color;
 }
 """
 

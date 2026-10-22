@@ -164,3 +164,37 @@ def test_a_mirrored_instance_is_drawn_outside_out(viewer):
     cube.set([np.diag([-1.0, 1.0, 1.0, 1.0])])  # the cube is symmetric under x → -x
     assert cube.batch().mirrored == 1
     assert np.array_equal(viewer.snapshot(), proper)
+
+
+def test_lines_are_hidden_behind_meshes(viewer):
+    """Overlay lines (e.g. bounding boxes) are drawn against the scene's depth: in front of a mesh they show, behind
+    it they show only outside its silhouette."""
+    import wgpu
+
+    from valo import Camera, Lighting, meshes
+    from valo.gpu import Lines
+    from valo.testing import changed
+
+    m = viewer.renderer.material("M", "lambert", base_color=(0.5, 0.5, 0.5))
+    cube = viewer.renderer.instances(meshes.cube(2.0), m)
+    cube.set([np.eye(4)])
+    scene = SimpleNamespace(batches=lambda: [cube.batch()])
+    cam = Camera(azimuth=-90.0, elevation=0.0, distance=8.0)  # looking along +y: the cube covers the middle
+    fmt = viewer.context._config["format"]
+
+    def image(lines=None):
+        tex = viewer.device.create_texture(size=(400, 300, 1), format=fmt, usage=wgpu.TextureUsage.RENDER_ATTACHMENT
+                                           | wgpu.TextureUsage.COPY_SRC)
+        viewer.renderer.render(tex, (0, 0, 400, 300), scene, cam, Lighting(), lines=lines)
+        data = viewer.device.queue.read_texture({"texture": tex}, {"bytes_per_row": 400 * 4}, (400, 300, 1))
+        return np.frombuffer(data, np.uint8).reshape(300, 400, 4)[:, :, :3]
+
+    def across(y):  # a red horizontal line through the middle of the view, at depth y
+        return Lines(np.array([[[-6.0, y, 0.0], [6.0, y, 0.0]]]), np.array([[1.0, 0.0, 0.0, 1.0]]), width=3.0)
+
+    plain = image()
+    assert np.array_equal(image(None), plain)
+    front, behind = changed(plain, image(across(-3.0))), changed(plain, image(across(3.0)))
+    rows = slice(140, 160)
+    assert front[rows, 190:210].any() and front[rows, 10:30].any()  # in front: over the cube and beside it
+    assert not behind[rows, 190:210].any() and behind[rows, 10:30].any()  # behind: hidden by the cube only

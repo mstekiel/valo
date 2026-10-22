@@ -14,6 +14,8 @@ versions follow [Semantic Versioning](https://semver.org/) (while at 0.x, a mino
 - Preferences: Expand all / Collapse all.
 - Mirrored instances: instance matrices with det < 0 (mirrors, inversion) draw right side out (`Batch.mirrored`);
   picks and highlights keep your instance order.
+- spinw_studio: the cell is built from unique sites and symmetry operations (adapter stubs `atom_operation`,
+  `moment_operation`, `atom_generators`); atoms are drawn with their operation.
 
 ### Changed
 - Font size and UI scale apply live (between frames; in Preferences when the slider is released); font size in

@@ -12,6 +12,8 @@ rules. Change it whenever one of those changes.
 ## Status
 **Works now:**
 - the structure as a `valo.Scene` (see "The scene" below): atoms per label, moment arrows, unit-cell edges;
+- the cell built from the unique sites and the symmetry operations; each atom's mesh is placed with its
+  operation (turned, or mirrored), each moment turned as an axial vector;
 - a parameters tab: lattice a, b, c, α, β, γ, the uvw extent and the moment length, which rebuild the structure;
 - valo's Scene / Object / Materials windows: per-label radius, base mesh, material and visibility;
 - objects of your own added next to the structure;
@@ -21,7 +23,9 @@ rules. Change it whenever one of those changes.
 - `plot_structure` / `render` / Export plot options.
 
 **To do:**
-1. **Fill the `set_lattice` stub** in `spinw_studio/adapter.py`, so lattice edits reach your `sw`.
+1. **Fill the symmetry stubs** in `spinw_studio/adapter.py`: the unique sites, `symmetry_operations`,
+   `atom_operation`, `moment_operation` and `atom_generators` (see "The data contract"). Until then, opening a
+   `SpinW` object stops with the first unfilled stub's message.
 2. **Couplings** (bonds between atoms, coloured by `coupling_colors`): a locked "Couplings" group in the
    structure.
 
@@ -92,28 +96,47 @@ Structure         ProceduralGroup(scene.structure): a, b, c (Å), alpha, beta, g
 - **Colours** in plot_options are **sRGB** (CSS names, `#rrggbb` or (r, g, b)); valo converts them to linear.
 
 ## The data contract (filled by `adapter.py`)
-The adapter stubs return plain arrays. `adapter.system_view(sw)` checks their shapes, types and ranges, names any
-stub that breaks the contract, and builds the `SystemView`.
+The cell is built the way spinwaves builds it: the **unique sites** of your script, copied by the **symmetry
+operations** {R|t}·θ of the magnetic space group. One operation acts differently on the two kinds of vectors:
+- **positions** are polar: r' = R r + t;
+- **moments** are axial: m' = θ · det(R) · R m, with θ = −1 for an operation with time reversal. So an inversion
+  keeps a moment, and time reversal flips it.
+
+The adapter stubs return plain arrays in **crystal coordinates** (the studio converts the operations with the
+current A, so lattice edits stay consistent). `adapter.system_view(sw)` checks them, names any stub that breaks
+the contract, and builds the `SystemView`.
 
 | Stub | Returns | Frame and units |
 |---|---|---|
 | `lattice_matrix(sw)` | `ndarray` (3, 3) float | A; columns a, b, c in xyz, Å |
-| `atom_positions_uvw(sw)` | `ndarray` (N, 3) float | every atom of one cell after symmetry; uvw in [0, 1); row i = atom i = `Coupling` id |
-| `atom_moments_xyz(sw)` | `ndarray` (N, 3) float | moment per atom, Cartesian xyz, any length; zero row = no arrow |
-| `atom_labels(sw)` | `list[str]` (N) | "Fe", "O1", …: selects the material and the radius |
-| `atom_spins(sw)` *(optional)* | `ndarray` (N,) float | spin length S (default 0) |
-| `atom_extra(sw, i)` *(optional)* | `dict[str, str]` | extra Info rows for atom i |
+| `site_positions_uvw(sw)` | `ndarray` (S, 3) float | the unique atoms, uvw |
+| `site_moments_xyz(sw)` | `ndarray` (S, 3) float | their moments, Cartesian xyz, any length; zero row = non-magnetic |
+| `site_labels(sw)` | `list[str]` (S) | "Fe", "O1", …: selects the material and the radius |
+| `symmetry_operations(sw)` | `list` (G) | spinwaves' operation objects; each is passed back to the next stubs |
+| `atom_operation(sw, op)` | `ndarray` (4, 4) float | `[[R, t], [0, 0, 0, 1]]` in uvw: r' = R r + t |
+| `moment_operation(sw, op)` | `ndarray` (3, 3) float | θ · det(R) · R, acting on moment components along a, b, c |
+| `atom_generators(sw)` | `ndarray` (N, 2) int | per cell atom, **in spinwaves' order** (row i = `Coupling` id i): [site index, operation index] |
+| `site_spins(sw)` *(optional)* | `ndarray` (S,) float | spin length S (default 0) |
+| `operation_label(sw, op)` *(optional)* | `str` | e.g. "x+1/2,-y+1/2,-z, -1", shown in Info |
+| `atom_positions_uvw(sw)` *(optional check)* | `ndarray` (N, 3) or None | spinwaves' own cell positions: the built cell is compared with them, and a mismatch names `atom_operation` / `atom_generators` |
+| `atom_extra(sw, i)` *(optional)* | `dict[str, str]` | extra Info rows for cell atom i |
 | `system_name(sw)` *(optional)* | `str` | window title and file names |
 | `set_lattice(sw, a, b, c, alpha, beta, gamma)` | — | **changes sw in place**: new lattice (Å, degrees; alpha between b and c), uvw kept; then `lattice_matrix(sw)` returns the new A |
 
 ```python
-AtomSite(label, index, uvw, moment, spin=0.0, extra={})   # one atom of the cell
-SystemView(A, atoms, name="")                             # what everything after the adapter uses
+SymOp(R, t, M, label="")                                   # one operation, crystal coordinates
+AtomSite(label, index, uvw, moment, spin=0.0, extra={}, op=0, site=None)   # one atom of the cell
+SystemView(A, atoms, name="", ops=(IDENTITY,))             # what everything after the adapter uses
 ```
+`model.apply_op(op, uvw)` places a site, `model.moment_xyz(A, op, m)` turns its moment (A M A⁻¹ m), and
+`model.orientation(A, op)` = A R A⁻¹ is how the atom's **mesh** is drawn: turned by rotations, mirrored by mirrors
+and the inversion (valo draws mirrored instances right side out). A hand-made `SystemView` without operations
+gives every atom the identity.
 `model.lattice_params(A)` / `model.lattice_matrix(a, b, c, alpha, beta, gamma)` convert between A and the six
 parameters. The standard orientation puts a along x and b in the xy plane; `with_lattice` keeps the current
 orientation. `model.expand(system, boundaries)` repeats the atoms by lattice translations n ∈ ℤ³, keeping those whose uvw falls
-inside the box. The Info window shows each drawn atom's cell index, uvw, translation n, xyz, moment and S.
+inside the box. The Info window shows each drawn atom's cell index, site, operation, uvw, translation n, xyz,
+moment and S.
 
 ## plot_options
 One dict, validated, going in and out. Unknown keys give an error with "did you mean". The defaults are in

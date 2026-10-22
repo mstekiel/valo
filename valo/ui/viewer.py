@@ -93,6 +93,7 @@ class Viewer:
             error = traceback.format_exc()
             if error != self.gui_error:
                 print(error)
+                self.editor.notify(error.strip().splitlines()[-1], "error", error)
             self.gui_error = error
             io = imgui.get_io()
             saved = io.config_error_recovery_enable_assert, io.config_error_recovery_enable_debug_log

@@ -161,6 +161,14 @@ class UIConfig(Section):
     compass_size: float = opt(42.0, "Compass size", 16.0, 200.0, "px", help="length of a full-length axis")
     compass_corner: str = opt("bottom-left", "Compass corner",
                               choices=("bottom-left", "bottom-right", "top-left", "top-right"))
+    message_seconds: float = opt(0.0, "Message time", 0.0, 60.0, "s",
+                                 help="A message box at the mouse closes after this long; 0: when you move on")
+    message_move_px: float = opt(40.0, "Message mouse distance", 5.0, 500.0, "px",
+                                 help="A message box closes when the mouse moves this far from it")
+    info_color: tuple = opt((80, 200, 120), "Info colour", 0, 255, "sRGB 0-255", help="e.g. a file was saved")
+    warning_color: tuple = opt((245, 160, 40), "Warning colour", 0, 255, "sRGB 0-255")
+    error_color: tuple = opt((240, 80, 70), "Error colour", 0, 255, "sRGB 0-255")
+    console_lines: int = opt(2000, "Console length", 100, 100000, help="Messages the Console keeps")
 
 
 @dataclass

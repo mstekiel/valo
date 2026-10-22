@@ -18,6 +18,7 @@ from imgui_bundle.imgui import internal
 from ..config import rc
 from ..gpu.material import SCHEMA, Material
 from ..offline import image_settings
+from .messages import Messages
 from .overlays import Overlays
 from .style import ICON
 from .undo import Command, UndoStack
@@ -34,7 +35,7 @@ SHARED_WINDOWS = ("Info", "Camera", "Lighting", "History")  # added by the base 
 
 
 class Editor(CameraWindow, LightingWindow, InfoWindow, HistoryWindow, RenderWindow, PreferencesWindow, Overlays,
-             Widgets):
+             Widgets, Messages):
     """Base class for an app's editor: undoable actions, dockable windows and the shared UI."""
     title = "valo"
     right_column: float | None = None  # share of the window width for the right dock column (None: rc.ui)
@@ -191,6 +192,7 @@ class Editor(CameraWindow, LightingWindow, InfoWindow, HistoryWindow, RenderWind
             if expanded:
                 self.preferences_window()
             imgui.end()
+        self.draw_toast()
 
     def build_layout(self, dock_id: int, names: list[str]) -> None:
         """The default layout: a right column of tabbed app windows, ``dock_bottom`` and shared windows below them,

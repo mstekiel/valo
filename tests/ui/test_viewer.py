@@ -38,6 +38,21 @@ def test_style_scale_is_absolute_not_compounding(viewer):
     assert style.frame_padding.x == 8.0
 
 
+@pytest.mark.parametrize("scale", [1.0, 1.25, 1.5, 0.966])
+def test_title_bars_are_whole_pixels_at_any_scale(viewer, scale):
+    """A title bar of fractional height left a 1-pixel seam under it that showed the window behind."""
+    from imgui_bundle import imgui
+
+    from valo.ui.style import apply_style
+
+    imgui.set_current_context(viewer.imgui.imgui_context)
+    apply_style(scale)
+    viewer.canvas.draw()  # NewFrame sets the font size
+    imgui.set_current_context(viewer.imgui.imgui_context)
+    assert imgui.get_frame_height() == round(imgui.get_frame_height())  # font size + 2 * frame_padding.y
+    apply_style()
+
+
 def test_scene_fills_the_central_dock_node_and_windows_dock_around_it(viewer):
     from imgui_bundle import imgui
 

@@ -78,8 +78,8 @@ def apply_style(scale: float = 1.0) -> None:
         r, g, b, *a = rgba
         style.set_color_(getattr(imgui.Col_, key), imgui.ImVec4(r / 255, g / 255, b / 255, a[0] if a else 1.0))
 
-    def v(x, y):
-        return imgui.ImVec2(x * scale, y * scale)
+    def v(x, y):  # whole pixels, like ImGui's ScaleAllSizes: a title bar of fractional height leaves a see-through
+        return imgui.ImVec2(round(x * scale), round(y * scale))  # seam where its edge and the window's blend
 
     style.window_padding, style.frame_padding, style.cell_padding = v(10, 10), v(8, 5), v(6, 4)
     style.item_spacing, style.item_inner_spacing = v(8, 6), v(6, 4)

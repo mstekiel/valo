@@ -27,10 +27,16 @@ def _pref_widget(f, value) -> tuple[bool, object]:
             return changed, tuple(round(c * 255) for c in col)
         changed, col = imgui.color_edit3(label, [linear_to_srgb(c) for c in value], imgui.ColorEditFlags_.no_inputs)
         return changed, tuple(srgb_to_linear(c) for c in col)
+    if isinstance(value, tuple) and len(value) == 2:  # e.g. an image size
+        changed, pair = imgui.drag_int2(label, list(value), 1.0, m["lo"], m["hi"], f"%d{unit}")
+        return changed, tuple(pair)
     if m["choices"]:
         changed, i = imgui.combo(label, list(m["choices"]).index(value), list(m["choices"]))
         return changed, m["choices"][i]
-    return imgui.input_text(label, value)
+    if isinstance(value, str):
+        return imgui.input_text(label, value)
+    imgui.text_disabled(f"{m['label']}: {value!r}")  # no widget for this type: shown, not editable
+    return False, value
 
 
 class PreferencesWindow:
@@ -53,10 +59,16 @@ class PreferencesWindow:
         if imgui.button(f"{ICON.ARROW_ROTATE_LEFT} Reset all"):
             rc.reset()
             self.set_ui_scale(rc.ui.scale)
+        imgui.same_line()
+        expanded = getattr(self, "preferences_expanded", None)
+        if imgui.button("Collapse all" if expanded else "Expand all"):
+            self.preferences_expanded = not expanded
         if getattr(self, "status_message", ""):
             imgui.text_disabled(self.status_message)
         for name in SECTIONS:
             section = getattr(rc, name)
+            if expanded is not None:
+                imgui.set_next_item_open(expanded, imgui.Cond_.always)
             if not imgui.collapsing_header(f"{SECTIONS[name].__doc__.split(':')[0].rstrip('.')}  ##{name}"):
                 continue
             for f in fields(section):

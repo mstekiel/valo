@@ -122,7 +122,10 @@ def test_preferences_window_edits_rc_live(viewer):
     viewer.show(SimpleNamespace(batches=list), editor)
     with rc_context():
         editor.show_preferences = True
-        viewer.snapshot()  # the generated widgets for every key draw without errors
+        editor.preferences_expanded = True  # every section open: the generated widget of every key draws
+        viewer.gui_error = None
+        viewer.snapshot()
+        assert viewer.gui_error is None, viewer.gui_error
         editor.set_preference("ui.scale", 1.25)
         imgui.set_current_context(viewer.imgui.imgui_context)
         assert rc.ui.scale == 1.25 and imgui.get_style().font_scale_main == 1.25

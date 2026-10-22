@@ -7,9 +7,11 @@ from pathlib import Path
 
 from imgui_bundle import imgui
 
+from ...config import rc
 from ...gpu.material import linear_to_srgb, srgb_to_linear
 from ...offline import export_script, image_settings, plain, render
 from ..style import ICON
+from ..widgets import SliderSpec
 
 
 class RenderWindow:
@@ -54,7 +56,8 @@ class RenderWindow:
         changed, size = imgui.input_int2("Size (px)", list(opt["size"]))
         if changed:
             opt["size"] = [max(16, min(16384, int(c))) for c in size]
-        _, opt["samples"] = imgui.slider_int("Supersampling", int(opt["samples"]), 1, 4, "%dx")
+        spec = SliderSpec(1, 4, rc.render.samples, 1, hard_lo=1, hard_hi=4, fmt="%dx", integer=True, editable=False)
+        _, opt["samples"] = self.slider("render.samples", "Supersampling", int(opt["samples"]), spec)
         _, opt["transparent"] = imgui.checkbox("Transparent background", bool(opt["transparent"]))
         if not opt["transparent"]:
             changed, col = imgui.color_edit3("Background", [linear_to_srgb(c) for c in opt["background"]],

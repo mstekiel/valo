@@ -17,19 +17,21 @@ from ...scene import (
     Transform,
 )
 from ..style import ICON
+from ..widgets import SliderSpec
 from .outliner import KIND_ICONS
 
 
 class ObjectWindow:
     """SceneEditor part: the Object window."""
 
-    @staticmethod
-    def _param_widget(p: ShapeParam, value) -> tuple[bool, object]:
-        if p.kind == "float":
-            return imgui.slider_float(p.name, float(value), p.lo, p.hi, "%.4g")
-        if p.kind == "int":
-            return imgui.slider_int(p.name, int(value), int(p.lo), int(p.hi))
-        return imgui.checkbox(p.name, bool(value))
+    def _param_widget(self, key: str, p: ShapeParam, value) -> tuple[bool, object]:
+        """A checkbox for a bool parameter, else a slider (its range and step from the shape's ``RANGES``)."""
+        if p.kind == "bool":
+            return imgui.checkbox(p.name, bool(value))
+        integer = p.kind == "int"
+        spec = SliderSpec(p.lo, p.hi, p.default, p.step or (1 if integer else None), fmt="%d" if integer else "%.4g",
+                          integer=integer)
+        return self.slider(key, p.name, value, spec)
 
     def object_window(self) -> None:
         """The selected node: its shape or builder parameters, transform, material and mesh diagnostics."""
@@ -49,13 +51,13 @@ class ObjectWindow:
             imgui.separator_text("Shape")
             self._shape_combo(node)
             for p in node.shape.specs:
-                changed, v = self._param_widget(p, node.shape.params[p.name])
+                changed, v = self._param_widget(f"shape.{node.shape.name}.{p.name}", p, node.shape.params[p.name])
                 if changed:
                     self.set_shape_param(node, p.name, v)
         elif isinstance(node, ProceduralGroup):
             imgui.separator_text(f"Builder: {node.func.__name__}")
             for p in node.specs:
-                changed, v = self._param_widget(p, node.params[p.name])
+                changed, v = self._param_widget(f"builder.{node.func.__name__}.{p.name}", p, node.params[p.name])
                 if changed:
                     self.set_procedural_param(node, p.name, v)
         self._transform_section(node)

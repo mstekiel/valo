@@ -6,6 +6,7 @@ from imgui_bundle import imgui
 
 from ...config import rc
 from ...scene.lighting import MODES
+from ..widgets import SliderSpec
 
 
 class LightingWindow:
@@ -55,14 +56,16 @@ class LightingWindow:
         imgui.new_line()
         imgui.text_disabled("moves with the camera" if light.mode == "headlight" else "stays put in the world")
         for key, lo, hi in (("azimuth", -180.0, 180.0), ("elevation", -90.0, 90.0)):
-            changed, v = imgui.slider_float(key.capitalize(), getattr(light, key), lo, hi, "%.0f deg")
+            spec = SliderSpec(lo, hi, getattr(rc.lighting, key), hard_lo=lo, hard_hi=hi, fmt="%.0f deg")
+            changed, v = self.slider(f"lighting.{key}", key.capitalize(), getattr(light, key), spec)
             if changed:
                 self.set_light(key, v)
         changed, col = self._color("##light colour", light.color)
         if changed:
             self.set_light("color", col)
         imgui.same_line()
-        changed, v = imgui.slider_float("Light", light.intensity, 0.0, 3.0, "%.2f")
+        spec = SliderSpec(0.0, 3.0, rc.lighting.intensity, hard_lo=0.0, fmt="%.2f")
+        changed, v = self.slider("lighting.intensity", "Light", light.intensity, spec)
         if changed:
             self.set_light("intensity", v)
 
@@ -83,6 +86,7 @@ class LightingWindow:
         clicked, want_flat = imgui.checkbox("Flat", flat)
         if clicked:
             self.set_ambient_flat(want_flat)
-        changed, v = imgui.slider_float("Ambient", light.ambient, 0.0, 1.5, "%.2f")
+        spec = SliderSpec(0.0, 1.5, rc.lighting.ambient, hard_lo=0.0, fmt="%.2f")
+        changed, v = self.slider("lighting.ambient", "Ambient", light.ambient, spec)
         if changed:
             self.set_light("ambient", v)

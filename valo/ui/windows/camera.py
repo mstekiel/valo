@@ -5,8 +5,10 @@ from __future__ import annotations
 
 from imgui_bundle import imgui
 
+from ...config import rc
 from ...scene.camera import PROJECTIONS, VIEWS
 from ..style import ICON
+from ..widgets import SliderSpec
 
 
 class CameraWindow:
@@ -37,7 +39,8 @@ class CameraWindow:
             imgui.same_line()
         imgui.new_line()
         if cam.projection == "perspective":
-            changed, v = imgui.slider_float("Field of view", cam.fovy, 10.0, 90.0, "%.0f deg")
+            spec = SliderSpec(10.0, 90.0, rc.camera.fov, hard_lo=1.0, hard_hi=170.0, fmt="%.0f deg")
+            changed, v = self.slider("camera.fov", "Field of view", cam.fovy, spec)
             if changed:
                 self.set_fov(v)
         imgui.text_disabled("View from")

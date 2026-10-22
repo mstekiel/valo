@@ -17,13 +17,15 @@ the user to run. Stop and report at the first step that fails; do not work aroun
   (`git tag -l v<version>`).
 
 ## 2. Checks (all must pass)
+The same checks CI runs (`.github/workflows/ci.yml`), locally:
 ```bash
-uv sync
+uv sync --inexact
 uv run ruff check .
-uv run pytest
+uv run pytest -rs
 ```
-Check pytest's own exit code, not the exit code of a pipe. Report the test count and the duration; the suite should
-stay under ~30 s.
+`--inexact` keeps extra groups the user installed (e.g. `--group spinw`); a plain `uv sync` would uninstall them.
+Check pytest's own exit code, not the exit code of a pipe. Report the test count, the skips (`-rs`: GPU tests must
+run here, not skip) and the duration; the suite should stay under ~30 s.
 
 ## 3. Version and changelog
 - `pyproject.toml`: set `version = "<version>"`, then run `uv lock` (this updates valo's own entry in `uv.lock`;
@@ -64,9 +66,12 @@ git tag -a v<version> -m "valo <version>"
 End the commit message with the session's attribution line.
 
 ## 6. Hand over to the user (do not run these)
-Print the following, with the version filled in:
+Print the following, with the version filled in, in this order:
 ```bash
 git push origin main
+```
+Then wait for the CI run of that push to pass (GitHub → Actions). Only then:
+```bash
 git push origin v<version>
 ```
 Then: on GitHub, create the release from tag `v<version>`, paste the CHANGELOG section as the notes and attach the

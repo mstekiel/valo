@@ -56,7 +56,7 @@ ignore = ["D105", "D107"]  # magic methods and __init__ (the class docstring cov
 
 [tool.pytest.ini_options]
 testpaths = ["tests", "examples"]
-addopts = "--strict-markers -q"
+addopts = "--strict-markers -q -p valo.testing"  # valo.testing: the viewer / tmp_library fixtures
 markers = ["gpu: needs a GPU adapter (renders offscreen)"]
 
 [tool.uv.sources]

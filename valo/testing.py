@@ -1,6 +1,7 @@
 """Test helpers for valo and the apps built on it (like ``numpy.testing``): an offscreen Viewer, where a world point
-shows up on screen, pointer / key / menu events, and image comparison. The root ``conftest.py`` turns them into
-pytest fixtures (``viewer``, ``tmp_library``).
+shows up on screen, pointer / key / menu events, and image comparison. It is also a pytest plugin
+(``-p valo.testing``, set in pyproject.toml): the fixtures ``viewer`` and ``tmp_library``, and tests start from the
+default config.
 
     viewer.show(scene, editor)
     before = viewer.snapshot()
@@ -14,6 +15,11 @@ framebuffer pixels of the window, and ``Viewer.snapshot()`` images are the scene
 from __future__ import annotations
 
 import numpy as np
+
+try:
+    import pytest
+except ImportError:  # the helpers work without pytest; only the plugin part below needs it
+    pytest = None
 
 
 def offscreen_viewer(size: tuple[int, int] = (900, 560)):
@@ -101,3 +107,36 @@ def open_every_menu(viewer) -> int:
 def changed(before, after, threshold: int = 3) -> np.ndarray:
     """Per-pixel mask (h, w) of where two images differ by more than ``threshold`` levels in any channel."""
     return np.abs(np.asarray(after, int) - np.asarray(before, int)).max(-1) > threshold
+
+
+# -- the pytest plugin (loaded with ``-p valo.testing``)
+
+def pytest_configure(config):
+    """Tests run with the default config: forget what ``~/.valo/valorc.toml`` or ``./valorc.toml`` set at import."""
+    from .config import rc
+
+    rc.reset()
+
+
+if pytest is not None:
+
+    @pytest.fixture(scope="module")
+    def viewer(request):
+        """An offscreen Viewer shared by the tests of one module (its size: the module's ``VIEWER_SIZE``, default
+        900 x 560). Skips the test without a GPU adapter."""
+        v = offscreen_viewer(getattr(request.module, "VIEWER_SIZE", (900, 560)))
+        if v is None:
+            pytest.skip("no GPU adapter")
+        return v
+
+    @pytest.fixture
+    def tmp_library(tmp_path, monkeypatch):
+        """The procedural mesh library redirected to empty temporary folders (never the real ones): the user folder
+        (returned) and the built-in one (``library.BUILTIN_DIR``)."""
+        from .config import rc
+        from .meshes import library
+
+        folder = tmp_path / "library"
+        monkeypatch.setattr(library, "BUILTIN_DIR", tmp_path / "builtin")
+        monkeypatch.setattr(rc.studio, "procedural_meshes", str(folder))
+        return folder

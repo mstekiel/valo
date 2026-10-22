@@ -68,7 +68,7 @@ only from `valo` (and `valo.meshes`). Blender's split: data (`scene`, `meshes`),
    action without a row (view changes, queries and windows are on its allow-list).
 4. Where tests go: `tests/` mirrors the packages (`tests/math/`, `meshes/`, `gpu/`, `scene/`, `ui/`, `studio/`, plus
    `test_config.py`, `test_offline.py`); apps → `examples/<name>/test_*.py`. Test file names are unique across the
-   repo (no `__init__.py`). GPU tests take the `viewer` fixture (root `conftest.py`: one offscreen Viewer per module,
+   repo (no `__init__.py`). GPU tests take the `viewer` fixture (`valo.testing`, a pytest plugin: one offscreen Viewer per module,
    size from `VIEWER_SIZE`), mark the module `pytestmark = pytest.mark.gpu`, and use `valo.testing` for pointer,
    keys, menus and image comparison. `tests/test_structure.py` guards the public API, the layering and the undo
    tables: change it on purpose when a rename or a new dependency is intended.

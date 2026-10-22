@@ -158,7 +158,7 @@ def test_valo_never_imports_the_examples():
 
 NOT_ACTIONS = {
     # windows, menus and drawing: UI only, they call the actions
-    "windows", "panel", "menus", "all_windows", "gui", "file_menu", "draw_compass", "draw_boxes", "material_section",
+    "windows", "panel", "menus", "all_windows", "gui", "file_menu", "draw_compass", "box_lines", "material_section",
     "compass_axes", "build_layout", "reset_layout", "camera_window", "lighting_window", "info_window",
     "history_window", "render_window", "preferences_window", "scene_window", "object_window", "materials_window",
     "code_window", "draw_toast", "apply_pending_style",

@@ -98,8 +98,9 @@ class ShapeFile:
         return data if np.allclose(m, np.eye(4)) else transform(data, m)
 
     # -- saving
-    def rewrite(self, params: dict, material: dict | None, transform_: dict) -> str:
-        """The source with new defaults and MATERIAL / TRANSFORM values; everything else untouched."""
+    def rewrite(self, params: dict, material: dict | None, transform_: dict, ranges: dict | None = None) -> str:
+        """The source with new defaults and MATERIAL / TRANSFORM values, and ``ranges`` (name → (lo, hi[, step]))
+        merged into RANGES; everything else untouched."""
         src = self.source.encode("utf-8")  # ast offsets are UTF-8 byte offsets
         line_start = [0, *itertools.accumulate(len(line) for line in src.splitlines(keepends=True))]
 
@@ -124,7 +125,8 @@ class ShapeFile:
                 cast = {"int": int, "bool": bool, "float": float}[kinds[name]]
                 edits.append((*span(defaults[name]), _literal(cast(value))))
 
-        values = {"MATERIAL": material, "TRANSFORM": transform_}
+        values = {"MATERIAL": material, "TRANSFORM": transform_,
+                  "RANGES": {**getattr(self.module, "RANGES", {}), **ranges} if ranges else None}
         for node in tree.body:
             if (isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name)
                     and node.targets[0].id in values):

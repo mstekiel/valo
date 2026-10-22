@@ -33,6 +33,7 @@ from ..meshes.shapefile import IDENTITY, transform_matrix
 from ..scene import MeshObject, Scene, Shape, Transform
 from ..ui.messages import ConsoleStream
 from ..ui.scene_editor import SceneEditor, shape_error
+from ..ui.widgets import SliderSpec
 from .code import CodeWindow
 from .normals import NormalsOverlay
 
@@ -206,7 +207,8 @@ class StudioEditor(CodeWindow, NormalsOverlay, SceneEditor):
         baked = {"translate": t.tolist(), "rotate_deg": [round(a, 6) for a in euler_xyz(r)], "scale": s.tolist()}
         baked = {k: v if not np.allclose(v, IDENTITY[k]) else IDENTITY[k] for k, v in baked.items()}
         old = (target.read_text(encoding="utf-8") if target.exists() else None, obj.shape, obj.transform)
-        text = shape_file.rewrite(obj.shape.params, self.scene.materials[obj.material].to_dict(), baked)
+        text = shape_file.rewrite(obj.shape.params, self.scene.materials[obj.material].to_dict(), baked,
+                                  self._changed_ranges(obj))
         new_shape = []  # made once, then reused by redo
 
         def put(file_text, shape, transform):
@@ -229,6 +231,16 @@ class StudioEditor(CodeWindow, NormalsOverlay, SceneEditor):
         self._push(f"Save {obj.name} to library as {name}", put(*old), put(text, None, Transform()))
         self.notify(f"saved to the library: {target.name}", detail=str(target))
         return target
+
+    def _changed_ranges(self, obj: MeshObject) -> dict:
+        """The slider ranges changed for ``obj``'s parameters (right-click > Range), as RANGES entries."""
+        out = {}
+        for p in obj.shape.specs:
+            key = f"shape.{obj.shape.name}.{p.name}"
+            if key in self.slider_ranges:
+                r = self.slider_spec(key, SliderSpec(p.lo, p.hi, step=p.step))
+                out[p.name] = (r.lo, r.hi) + ((r.step,) if r.step else ())
+        return out
 
     # -- hot reload and following the selection
     def poll(self) -> None:

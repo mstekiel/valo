@@ -119,6 +119,18 @@ def test_save_to_library_bakes_the_object_state_into_the_file(viewer, studio):
         studio.save_to_library(studio.open_shape(library.path("blob")), "tall_blob")
 
 
+def test_save_to_library_keeps_slider_ranges_changed_in_the_menu(studio):
+    from valo import library
+
+    blob(studio)
+    obj = studio.scene.find("Blob")
+    studio.set_slider_range("shape.blob.height", lo=0.5, hi=8.0, step=0.5)
+    studio.save_to_library(obj, "tall")
+    saved = {p.name: (p.lo, p.hi, p.step) for p in library.load("tall").params}
+    assert saved["height"] == (0.5, 8.0, 0.5)
+    assert saved["radius"] == {p.name: (p.lo, p.hi, p.step) for p in library.load("blob").params}["radius"]
+
+
 def test_what_a_shape_file_prints_goes_to_the_console(viewer, studio, tmp_path):
     path = tmp_path / "talky.py"
     text = VASE.read_text(encoding="utf-8").replace("def mesh(", "print('built at import')\n\n\ndef mesh(", 1)

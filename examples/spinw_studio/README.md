@@ -27,7 +27,7 @@ rules. Change it whenever one of those changes. The original design notes are in
 
 ## Usage
 ```bash
-uv sync --group spinw                                             # spinwaves (editable, local) + lmfit
+uv sync --group spinw                                             # spinwaves (editable, local)
 uv run --group spinw python examples/spinw_studio/lfo_spinw.py    # the LFO example
 ```
 ```python

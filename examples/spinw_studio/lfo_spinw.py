@@ -3,10 +3,6 @@ import numpy as np
 from pathlib import Path
 
 
-
-import lmfit
-from lmfit import Parameters
-
 # import spinwaves
 from spinwaves import Atom, Crystal, SpinW, Coupling
 from spinwaves.symmetry.magnetic_symmetry import MSG
@@ -18,8 +14,8 @@ from spinw_studio import plot_structure  # renders in valo; see README.md
 HOME_PATH = Path(__file__).parent
 
 
-def load_system(parameters: Parameters, show_struct: bool=False, silent=True) -> SpinW:
-    Fz = parameters['Fz'].value
+def load_system(parameters: dict, show_struct: bool=False, silent=True) -> SpinW:
+    Fz = parameters['Fz']
     atoms = [
         Atom(label='Lu', r=(0.0221, 0.9284, 0.75)),
         Atom(label='Fe', r=(0,   0.5, 0),   m=(-1,0,Fz), s=2.5),
@@ -45,36 +41,36 @@ def load_system(parameters: Parameters, show_struct: bool=False, silent=True) ->
 
     ### Extract the model parameters
     # Negative couplings are FM, positive are AF
-    Ka = parameters['Ka'].value*2
-    Kc = parameters['Kc'].value*2
-    # Kac = parameters['Kac'].value
+    Ka = parameters['Ka']*2
+    Kc = parameters['Kc']*2
+    # Kac = parameters['Kac']
 
-    J1ab = parameters['J1ab'].value
-    J1c  = parameters['J1c'].value
-    J2a = parameters['J2a'].value
-    J2b = parameters['J2b'].value
-    J2d1  = parameters['J2d1'].value
-    J2d2  = parameters['J2d2'].value
+    J1ab = parameters['J1ab']
+    J1c  = parameters['J1c']    
+    J2a = parameters['J2a']
+    J2b = parameters['J2b']
+    J2d1  = parameters['J2d1']
+    J2d2  = parameters['J2d2']
 
-    Dab_x = parameters['Dab_x'].value
-    Dab_y = parameters['Dab_y'].value
-    Dab_z = parameters['Dab_z'].value
+    Dab_x = parameters['Dab_x']
+    Dab_y = parameters['Dab_y']
+    Dab_z = parameters['Dab_z']
     
-    Dc_x = parameters['Dc_x'].value
-    Dc_y = parameters['Dc_y'].value
-    Dc_z = parameters['Dc_z'].value
+    Dc_x = parameters['Dc_x']
+    Dc_y = parameters['Dc_y']
+    Dc_z = parameters['Dc_z']
 
-    # J6 = parameters["J6"].value
-    # J7 = parameters["J7"].value
-    J8 = parameters["J8"].value
-    J9a = parameters["J9a"].value
-    J9b = parameters["J9b"].value
-    # J10 = parameters["J10"].value
-    # J11a = parameters["J11a"].value
-    # J11b = parameters["J11b"].value
-    # J12a = parameters["J12a"].value
-    # J12b = parameters["J12b"].value
-    # J13 = parameters["J13"].value
+    # J6 = parameters["J6"]
+    # J7 = parameters["J7"]
+    J8 = parameters["J8"]
+    J9a = parameters["J9a"]
+    J9b = parameters["J9b"]
+    # J10 = parameters["J10"]
+    # J11a = parameters["J11a"]
+    # J11b = parameters["J11b"]
+    # J12a = parameters["J12a"]
+    # J12b = parameters["J12b"]
+    # J13 = parameters["J13"]
 
 
     couplings = []
@@ -161,12 +157,11 @@ def load_system(parameters: Parameters, show_struct: bool=False, silent=True) ->
     
     return sw
 
-
 if __name__ == "__main__":
     # PLACEHOLDER values (all couplings 0): enough to look at the structure. Put your fitted parameters here.
     #     uv run --group spinw python examples/spinw_studio/lfo_spinw.py
-    params = Parameters()
+    params = dict()
     for name in ['Fz', 'Ka', 'Kc', 'J1ab', 'J1c', 'J2a', 'J2b', 'J2d1', 'J2d2', 'Dab_x', 'Dab_y', 'Dab_z',
                  'Dc_x', 'Dc_y', 'Dc_z', 'J8', 'J9a', 'J9b']:
-        params.add(name, value=0.0)
+        params[name] = 0.0
     load_system(params, show_struct=True, silent=False)

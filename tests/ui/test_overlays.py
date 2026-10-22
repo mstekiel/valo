@@ -158,5 +158,5 @@ def test_a_box_behind_an_object_is_hidden_by_it(viewer):
     viewer.selection = None
     assert changed(plain, viewer.snapshot()).any()
     edges = box_edges(viewer.camera, np.eye(4))
-    assert len(edges) == 12 and sum(back for *_, back in edges) == 8  # face-on in perspective: only the front face shows
+    assert len(edges) == 12 and sum(back for *_, back in edges) == 8  # face-on in perspective: only the front shows
     assert {tuple(np.abs(p)) for p, q, _ in edges} == {(0.5, 0.5, 0.5)}

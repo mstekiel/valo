@@ -28,6 +28,21 @@ from .style import apply_style, load_fonts
 EMPTY_SCENE = SimpleNamespace(batches=list)
 
 
+def _upload_new_textures_whole(backend) -> None:
+    """Work around wgpu's ImGui backend (wgpu 0.32): for a new texture it uploads only the ``update_rect`` part, and
+    at the origin. When a font size change grows ImGui's font atlas, the new texture is filled everywhere but its
+    update rect covers only the new glyphs, so most text vanished. Mark a new texture's whole area as updated."""
+    update = backend._update_texture
+
+    def update_whole(tex):
+        if tex.status == imgui.ImTextureStatus.want_create:
+            rect = tex.update_rect
+            rect.x, rect.y, rect.w, rect.h = 0, 0, tex.width, tex.height
+        update(tex)
+
+    backend._update_texture = update_whole
+
+
 class Viewer:
     """A window (or offscreen canvas) that renders a scene with an Editor's dockable windows around it."""
     def __init__(self, canvas=None, title: str = "valo", size: tuple[int, int] = (1360, 800), layout_file="auto",
@@ -55,6 +70,7 @@ class Viewer:
         self.camera = Camera(fovy=rc.camera.fov)
         self.lighting = Lighting()
         self.imgui = ImguiRenderer(self.device, canvas)  # uses the format configured above
+        _upload_new_textures_whole(self.imgui.backend)
         io = imgui.get_io()  # of the context the renderer just made current
         io.config_flags |= imgui.ConfigFlags_.docking_enable
         if layout_file:

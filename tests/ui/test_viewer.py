@@ -218,3 +218,36 @@ def test_an_error_in_a_window_is_reported_and_later_frames_still_work(viewer):
     editor.fail, viewer.gui_error = False, None
     viewer.snapshot()  # ImGui recovered: no "Missing End()" from here on
     assert viewer.gui_error is None and open_every_menu(viewer) >= 3
+
+
+def test_a_grown_font_atlas_reaches_the_gpu_whole(viewer):
+    """Bigger or new font sizes grow ImGui's atlas into a new texture; all of it must be uploaded, not just the part
+    ImGui marks as updated (else text goes missing after a font size change)."""
+    from valo import Editor, rc_context
+
+    editor, first = Editor(), {}
+    viewer.show(SimpleNamespace(batches=list), editor)
+    queue = viewer.imgui.backend._device.queue
+    write = queue.write_texture
+    existing = {id(t) for t in viewer.imgui.backend._textures.values()}  # earlier tests' atlas: only updated now
+
+    def spy(destination, data, layout, size):
+        texture = destination["texture"]
+        if id(texture) not in existing:
+                first.setdefault(id(texture), (tuple(destination.get("origin", (0, 0, 0)))[:2], tuple(size)[:2],
+                                           tuple(texture.size)[:2]))
+        return write(destination, data, layout, size)
+
+    queue.write_texture = spy
+    try:
+        with rc_context({"ui.scale": 2.0}):
+            for size in (24.0, 28.0, 32.0, 20.0, 13.0):
+                editor.set_preference("ui.font_size", size)
+                viewer.snapshot()
+    finally:
+        del queue.write_texture
+        editor.set_ui_scale(1.0)
+        viewer.snapshot()
+    assert first, "the atlas never grew: the test needs bigger fonts"
+    for origin, size, texture_size in first.values():
+        assert origin == (0, 0) and size == texture_size  # a new texture is uploaded whole

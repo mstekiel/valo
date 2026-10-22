@@ -476,3 +476,29 @@ def test_bounding_boxes_live_in_the_nodes_frame(scene):
     assert np.allclose(np.ptp(corners, axis=0), [4.2, 0.2, 0.2])  # the rotated row lies along x in the world
     g.visible = False
     assert g.bounding_box() is None and row.bounding_box() is None
+
+
+def test_the_shape_list_opens_for_an_object_made_from_a_library_mesh(viewer, tmp_library):
+    """Regression: with the object's own library mesh in the list, drawing the Shape combo raised a TypeError."""
+    from imgui_bundle import imgui
+
+    from valo.meshes import library
+
+    tmp_library.mkdir(parents=True)
+    (tmp_library / "box.py").write_text(SCULPT, encoding="utf-8")
+    scene, editor = edited_scene(viewer)
+    obj = editor.add_shape(library.path("box"))
+    editor.select(obj)
+    editor._focus = ["Object"]
+    draw, where = editor._shape_combo, {}
+
+    def shape_combo(node):
+        where["pos"], where["h"] = imgui.get_cursor_screen_pos(), imgui.get_frame_height()
+        draw(node)
+
+    editor._shape_combo = shape_combo
+    viewer.snapshot()
+    viewer.gui_error = None
+    viewer.ui_click(where["pos"].x + 20, where["pos"].y + where["h"] / 2)  # open the Shape combo
+    viewer.snapshot()
+    assert viewer.gui_error is None, viewer.gui_error

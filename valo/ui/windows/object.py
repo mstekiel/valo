@@ -81,7 +81,8 @@ class ObjectWindow:
                 if imgui.selectable(name, func is obj.shape.func)[0]:
                     self.set_shape(obj, func)
             for name in library.names():
-                if imgui.selectable(f"{ICON.BOOK} {name}", obj.shape.name == name and obj.shape.file)[0]:
+                current = obj.shape.file is not None and obj.shape.name == name
+                if imgui.selectable(f"{ICON.BOOK} {name}", current)[0]:
                     self.set_shape(obj, library.path(name))
             imgui.end_combo()
 

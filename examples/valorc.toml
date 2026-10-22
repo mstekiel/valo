@@ -99,6 +99,8 @@ scale = 1.15                  # scales text and spacing together, like View > UI
 # warning_color = [245, 160, 40]  # warning
 # error_color = [240, 80, 70]     # and error
 # console_lines = 2000        # messages the Console keeps (100-100000)
+# title_bar = [24, 25, 27]        # the window's own title bar, sRGB 0-255 (Windows 11)
+# title_text = [225, 227, 230]    # and its text
 # The two layout shares only apply when there is no saved layout yet, or after View > Reset layout.
 
 

@@ -26,7 +26,7 @@ MESHES_API = ["STANDARD", "MeshData", "MeshReport", "ShapeFile", "arrow", "capsu
 
 # How the main entry points are called: parameter names, kinds and defaults (annotations left out on purpose).
 SIGNATURES = {
-    "Viewer": "(canvas=None, title='valo', size=(1360, 800), layout_file='auto')",
+    "Viewer": "(canvas=None, title='valo', size=(1360, 800), layout_file='auto', icon=None)",
     "Viewer.show": "(self, scene, editor=None)",
     "Scene": "(renderer=None)",
     "Scene.add": "(self, node, parent=None, index=None)",

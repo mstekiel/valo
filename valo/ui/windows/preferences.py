@@ -9,6 +9,7 @@ from imgui_bundle import imgui
 
 from ...config import SECTIONS, USER_FILE, rc
 from ...gpu.material import linear_to_srgb, srgb_to_linear
+from ..native import set_title_bar
 from ..style import ICON, apply_style
 from ..widgets import SliderSpec
 
@@ -55,6 +56,8 @@ class PreferencesWindow:
         rc[key] = value
         if key in ("ui.scale", "ui.accent", "ui.font_size"):
             self.set_ui_scale(rc.ui.scale)
+        if key in ("ui.title_bar", "ui.title_text") and self.viewer is not None:
+            set_title_bar(self.viewer.canvas)
 
     def preferences_window(self) -> None:
         """Every ``rc`` key, with widgets generated from the config schema, plus Save and Reset."""

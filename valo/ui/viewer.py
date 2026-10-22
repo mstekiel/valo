@@ -21,6 +21,7 @@ from ..math import bounding_box, box_corners
 from ..scene.camera import Camera
 from ..scene.lighting import Lighting
 from .editor import Editor
+from .native import DEFAULT_ICON, set_icon, set_title_bar
 from .navigation import Navigator
 from .style import apply_style, load_fonts
 
@@ -29,9 +30,11 @@ EMPTY_SCENE = SimpleNamespace(batches=list)
 
 class Viewer:
     """A window (or offscreen canvas) that renders a scene with an Editor's dockable windows around it."""
-    def __init__(self, canvas=None, title: str = "valo", size: tuple[int, int] = (1360, 800), layout_file="auto"):
+    def __init__(self, canvas=None, title: str = "valo", size: tuple[int, int] = (1360, 800), layout_file="auto",
+                 icon=None):
         """``layout_file``: where the dock layout is saved; "auto" = ``~/.valo/<title>.ini`` for a window and
-        nothing for a canvas passed in (tests, embedding); None = never saved."""
+        nothing for a canvas passed in (tests, embedding); None = never saved. ``icon``: an image file for the
+        window's icon (a square PNG; None: valo's)."""
         if layout_file == "auto":
             slug = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-") or "valo"
             layout_file = Path.home() / ".valo" / f"{slug}.ini" if canvas is None else None
@@ -39,6 +42,8 @@ class Viewer:
             from rendercanvas.glfw import RenderCanvas
 
             canvas = RenderCanvas(title=title, size=size, update_mode="continuous", max_fps=60)
+            set_icon(canvas, icon or DEFAULT_ICON)
+            set_title_bar(canvas)
         self.canvas = canvas
         self.adapter, self.device = get_device()
         # Plain (non-sRGB) surface: ImGui's colours are already sRGB, the post pass encodes the scene.

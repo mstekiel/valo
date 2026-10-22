@@ -169,6 +169,10 @@ class UIConfig(Section):
     warning_color: tuple = opt((245, 160, 40), "Warning colour", 0, 255, "sRGB 0-255")
     error_color: tuple = opt((240, 80, 70), "Error colour", 0, 255, "sRGB 0-255")
     console_lines: int = opt(2000, "Console length", 100, 100000, help="Messages the Console keeps")
+    title_bar: tuple = opt((24, 25, 27), "Title bar colour", 0, 255, "sRGB 0-255",
+                           help="the window's own title bar (Windows 11)")
+    title_text: tuple = opt((225, 227, 230), "Title text colour", 0, 255, "sRGB 0-255",
+                            help="the window's own title bar (Windows 11)")
 
 
 @dataclass

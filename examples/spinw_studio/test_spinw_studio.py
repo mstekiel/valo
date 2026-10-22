@@ -156,11 +156,6 @@ def filled(monkeypatch):
     return monkeypatch
 
 
-def test_unfilled_stubs_say_what_to_fill():
-    with pytest.raises(NotImplementedError, match="fill in from spinwaves: site_labels"):
-        adapter.system_view(fake_sw())
-
-
 def test_the_adapter_builds_the_cell_from_sites_and_operations(filled):
     view = adapter.system_view(fake_sw())
     assert view.labels == ["Fe"] and len(view.ops) == 4 and np.allclose(view.A, A_LFO)

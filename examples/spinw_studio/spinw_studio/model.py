@@ -3,7 +3,12 @@
 Coordinates: crystal (fractional) **uvw** and Cartesian **xyz** in Å, with ``r_xyz = A @ r_uvw``; the columns of
 ``A`` are the lattice vectors a, b, c in xyz. Magnetic moments are always Cartesian xyz here.
 
-    SystemView(A, atoms=(AtomSite(...), ...))   ← built by adapter.system_view(sw) from your SpinW object
+Symmetry operations (``SymOp``) are in crystal coordinates: positions r' = R r + t (polar), moments m' = M m in the
+lattice basis with M = θ·det(R)·R (axial vectors; θ = -1 with time reversal). Each atom of the cell records the
+operation that placed it, and ``orientation(A, op)`` turns that into the Cartesian matrix its mesh is drawn with.
+
+    SystemView(A, atoms=(AtomSite(...), ...), ops=(SymOp(...), ...))   ← adapter.system_view(sw)
+    apply_op / moment_xyz / orientation         → a site moved by an operation, its moment, its mesh's matrix
     expand(system, bounds)                      → every atom (with lattice translations) inside a uvw box
     cell_edges(A)                               → the 12 edges of the unit cell [0, 1]³ in xyz
     lattice_params(A) / lattice_matrix(...)     ↔ (a, b, c in Å, alpha, beta, gamma in degrees)
@@ -32,15 +37,65 @@ class AtomSite:
     moment: tuple  # magnetic moment, Cartesian xyz, any length (zero = no arrow)
     spin: float = 0.0  # spin length S
     extra: dict = field(default_factory=dict)  # extra Info rows, str → str
+    op: int = 0  # the symmetry operation (index into SystemView.ops) that put the atom here from its site
+    site: int | None = None  # the unique site (asymmetric unit) it comes from, if known
+
+
+@dataclass(frozen=True)
+class SymOp:
+    """A symmetry operation in crystal coordinates: r' = R r + t for positions (uvw), m' = M m for moments in the
+    lattice basis (M = θ·det(R)·R: moments are axial vectors, θ = -1 with time reversal). ``label`` names it in the
+    Info window, e.g. "x+1/2,-y+1/2,-z, -1"."""
+
+    R: np.ndarray  # (3, 3), integer-valued for a lattice operation, det ±1
+    t: np.ndarray  # (3,) translation, uvw
+    M: np.ndarray  # (3, 3) acting on moments in the lattice basis
+    label: str = ""
+
+    def __post_init__(self):
+        R, t, M = (np.asarray(x, float) for x in (self.R, self.t, self.M))
+        shapes_ok = R.shape == (3, 3) and t.shape == (3,) and M.shape == (3, 3)
+        if not shapes_ok or not np.isfinite([*R.ravel(), *t, *M.ravel()]).all():
+            raise ValueError(f"a SymOp needs R (3, 3), t (3,), M (3, 3), got {R.shape}, {t.shape}, {M.shape}")
+        if not np.isclose(abs(np.linalg.det(R)), 1.0, atol=1e-6):
+            raise ValueError(f"a symmetry operation's R must have det ±1, got det {np.linalg.det(R):.4g}")
+        object.__setattr__(self, "R", R)
+        object.__setattr__(self, "t", t)
+        object.__setattr__(self, "M", M)
+
+
+IDENTITY = SymOp(np.eye(3), np.zeros(3), np.eye(3), "x,y,z")
+
+
+def apply_op(op: SymOp, uvw) -> np.ndarray:
+    """Crystal coordinates ``uvw`` (N, 3) moved by ``op`` and brought back into the cell: (R uvw + t) mod 1."""
+    out = np.mod(np.asarray(uvw, float).reshape(-1, 3) @ op.R.T + op.t, 1.0)
+    out[np.isclose(out, 1.0, rtol=0, atol=1e-9)] = 0.0
+    return out
+
+
+def moment_xyz(A, op: SymOp, moment) -> np.ndarray:
+    """A Cartesian moment (3,) moved by ``op``: A M A⁻¹ m (the operation's moment matrix in xyz)."""
+    A = np.asarray(A, float)
+    return A @ op.M @ np.linalg.solve(A, np.asarray(moment, float))
+
+
+def orientation(A, op: SymOp) -> np.ndarray:
+    """The Cartesian linear part of ``op``, A R A⁻¹ (3, 3): how a site's mesh turns, or mirrors (det < 0), when the
+    operation places a copy of it."""
+    A = np.asarray(A, float)
+    return A @ op.R @ np.linalg.inv(A)
 
 
 @dataclass(frozen=True)
 class SystemView:
-    """A crystal system as plain data: the lattice matrix A and the atoms of one unit cell."""
+    """A crystal system as plain data: the lattice matrix A, the atoms of one unit cell, and the symmetry
+    operations that placed them (``AtomSite.op`` indexes ``ops``; without operations every atom has the identity)."""
 
     A: np.ndarray  # (3, 3) float, r_xyz = A @ r_uvw, columns a, b, c in Å
     atoms: tuple  # tuple[AtomSite, ...]
     name: str = ""
+    ops: tuple = (IDENTITY,)  # tuple[SymOp, ...]
 
     def __post_init__(self):
         a = np.asarray(self.A, float)
@@ -48,6 +103,10 @@ class SystemView:
             raise ValueError(f"A must be a finite, invertible 3x3 matrix (columns a, b, c in Å), got {self.A!r}")
         object.__setattr__(self, "A", a)
         object.__setattr__(self, "atoms", tuple(self.atoms))
+        object.__setattr__(self, "ops", tuple(self.ops))
+        bad = [atom.index for atom in self.atoms if not 0 <= atom.op < len(self.ops)]
+        if bad:
+            raise ValueError(f"atoms {bad} name a symmetry operation outside ops (there are {len(self.ops)})")
 
     @property
     def labels(self) -> list[str]:
@@ -91,7 +150,7 @@ def with_lattice(system: SystemView, a, b, c, alpha, beta, gamma) -> SystemView:
     """``system`` with other lattice parameters, keeping each atom's uvw and the cell's orientation in space (the
     display-only path: for a SystemView there is no SpinW object to change)."""
     rotation = system.A @ np.linalg.inv(lattice_matrix(*lattice_params(system.A)))  # standard → this orientation
-    return SystemView(rotation @ lattice_matrix(a, b, c, alpha, beta, gamma), system.atoms, system.name)
+    return SystemView(rotation @ lattice_matrix(a, b, c, alpha, beta, gamma), system.atoms, system.name, system.ops)
 
 
 # -- extent ----------------------------------------------------------------------------------------
@@ -106,23 +165,27 @@ class Expanded:
     moments: np.ndarray  # (M, 3) Cartesian moments
     indices: np.ndarray  # (M,) unit-cell index of each atom
     translations: np.ndarray  # (M, 3) int lattice translation n (uvw = site uvw + n)
+    orientations: np.ndarray  # (M, 3, 3) Cartesian linear part of each atom's symmetry operation (det -1: mirrored)
 
 
 def expand(system: SystemView, bounds, tol: float = 1e-6) -> dict[str, Expanded]:
     """Every atom of ``system``, repeated by lattice translations n ∈ ℤ³, whose uvw falls inside ``bounds``
-    = ((umin, umax), (vmin, vmax), (wmin, wmax)) (inclusive, with a small tolerance). Grouped by label."""
+    = ((umin, umax), (vmin, vmax), (wmin, wmax)) (inclusive, with a small tolerance). Grouped by label; each row
+    also carries the orientation of the operation that placed the atom (``orientation``)."""
     lo, hi = np.asarray(bounds, float).T
+    turns = [orientation(system.A, op) for op in system.ops]
     rows: dict[str, list] = {label: [] for label in system.labels}
     for atom in system.atoms:
         u = np.asarray(atom.uvw, float)
         ranges = [range(math.ceil(lo[k] - u[k] - tol), math.floor(hi[k] - u[k] + tol) + 1) for k in range(3)]
         for n in np.array(np.meshgrid(*ranges, indexing="ij")).reshape(3, -1).T:
-            rows[atom.label].append((u + n, atom.moment, atom.index, n))
+            rows[atom.label].append((u + n, atom.moment, atom.index, n, turns[atom.op]))
     out = {}
     for label, items in rows.items():
         uvw = np.array([r[0] for r in items], float).reshape(-1, 3)
         out[label] = Expanded(to_xyz(system.A, uvw), uvw, np.array([r[1] for r in items], float).reshape(-1, 3),
-                              np.array([r[2] for r in items], int), np.array([r[3] for r in items], int).reshape(-1, 3))
+                              np.array([r[2] for r in items], int), np.array([r[3] for r in items], int).reshape(-1, 3),
+                              np.array([r[4] for r in items], float).reshape(-1, 3, 3))
     return out
 
 

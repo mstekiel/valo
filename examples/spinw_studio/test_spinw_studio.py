@@ -9,13 +9,18 @@ import numpy as np
 import pytest
 from spinw_studio import adapter
 from spinw_studio.model import (
+    IDENTITY,
     AtomSite,
+    SymOp,
     SystemView,
+    apply_op,
     cell_edges,
     default_radius,
     expand,
     lattice_matrix,
     lattice_params,
+    moment_xyz,
+    orientation,
     parse_color,
     to_xyz,
     validate_options,
@@ -25,6 +30,53 @@ from spinw_studio.model import (
 A_LFO = np.diag([5.3, 5.6, 7.5])
 FE_UVW = [(0, 0.5, 0), (0.5, 0, 0), (0, 0.5, 0.5), (0.5, 0, 0.5)]  # Pbnm 4b, like LFO
 FE_M = [(-1, 0, 0.1), (1, 0, -0.1), (1, 0, 0.1), (-1, 0, -0.1)]  # G-type, canted
+
+
+def op(R, t, theta=1, label=""):
+    """A SymOp from its crystal-frame rotation R, translation t and time reversal theta (moments: θ·det(R)·R)."""
+    R = np.asarray(R, float)
+    return SymOp(R, t, theta * np.linalg.det(R) * R, label)
+
+
+# The generators of lfo_spinw.py's Pbnm (the first one with time reversal) and the products that place the 4 Fe of 4b.
+G1 = op(np.diag([1, -1, -1]), (0.5, 0.5, 0), -1, "x+1/2,-y+1/2,-z, -1")
+G3 = op(np.diag([-1, -1, 1]), (0, 0, 0.5), 1, "-x,-y,z+1/2, +1")
+G13 = op(np.diag([-1, 1, -1]), (0.5, 0.5, -0.5), -1, "-x+1/2,y+1/2,-z-1/2, -1")  # G1 after G3
+INVERSION = op(-np.eye(3), (0, 0, 0), 1, "-x,-y,-z, +1")
+PBNM_OPS = (IDENTITY, G1, G3, G13, INVERSION)
+
+
+def pbnm_fe() -> SystemView:
+    """The 4 Fe of LFO made from one site (0, 1/2, 0) with moment (-1, 0, 0.1) by the operations above."""
+    site_uvw, site_m = np.array([0.0, 0.5, 0.0]), np.array([-1.0, 0.0, 0.1])
+    atoms = tuple(AtomSite("Fe", i, tuple(apply_op(PBNM_OPS[g], site_uvw)[0]),
+                           tuple(moment_xyz(A_LFO, PBNM_OPS[g], site_m)), 2.5, op=g, site=0)
+                  for i, g in enumerate((0, 1, 2, 3)))
+    return SystemView(A_LFO, atoms, "LFO Fe", PBNM_OPS)
+
+
+def test_symmetry_operations_place_atoms_and_turn_moments_as_axial_vectors():
+    fe = pbnm_fe()
+    assert np.allclose([a.uvw for a in fe.atoms], FE_UVW)  # 4b, in spinwaves' order
+    m = np.array([a.moment for a in fe.atoms])
+    assert np.allclose(m[:, 0], [-1, 1, 1, -1]) and np.allclose(m[:, 2], 0.1)  # G-type along x, weak FM along z
+    assert np.allclose(apply_op(INVERSION, [[0, 0.5, 0]]), [[0, 0.5, 0]])  # 4b sits on an inversion centre
+    assert np.allclose(moment_xyz(A_LFO, INVERSION, [1, 2, 3]), [1, 2, 3])  # axial: inversion keeps a moment
+    assert np.allclose(moment_xyz(A_LFO, op(np.eye(3), (0, 0, 0), -1), [1, 2, 3]), [-1, -2, -3])  # time reversal
+    assert np.linalg.det(orientation(A_LFO, INVERSION)) == pytest.approx(-1)  # meshes are mirrored by it
+    A = lattice_matrix(5, 6, 7, 90, 90, 120)  # hexagonal-like: the Cartesian matrix depends on A
+    turn = orientation(A, op([[0, -1, 0], [1, -1, 0], [0, 0, 1]], (0, 0, 0)))  # 3-fold about c
+    assert np.allclose(np.linalg.matrix_power(turn, 3), np.eye(3)) and not np.allclose(turn, np.round(turn))
+    with pytest.raises(ValueError, match="det"):
+        SymOp(np.diag([2, 1, 1]), (0, 0, 0), np.eye(3))
+
+
+def test_expand_carries_each_atoms_orientation():
+    out = expand(pbnm_fe(), [[0, 0.99]] * 3)["Fe"]  # one copy of each
+    assert np.allclose(out.orientations, [orientation(A_LFO, PBNM_OPS[g]) for g in (0, 1, 2, 3)])
+    assert np.allclose(expand(lfo_like(), [[0, 0.99]] * 3)["Fe"].orientations, np.eye(3))  # no ops: identity
+    with pytest.raises(ValueError, match="symmetry operation outside ops"):
+        SystemView(A_LFO, (AtomSite("Fe", 0, (0, 0, 0), (0, 0, 0), op=3),))
 
 
 def lfo_like(**kw) -> SystemView:

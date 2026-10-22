@@ -78,6 +78,9 @@ Structure         ProceduralGroup(scene.structure): a, b, c (Å), alpha, beta, g
 └─ Cell            the 12 edges: Shape(cylinder, r = edge radius), material "Unit cell"
 + your own objects (Scene window → Add), deletable as usual
 ```
+- **An atom object's Transform acts on each atom:** Fe, O1, … (and the moments and cell edges) are
+  `InstancedObject`s, so the Object window's Transform turns, scales or shifts every copy of the mesh in place,
+  after its symmetry operation; the atoms stay on their sites. Selecting one boxes every atom; hover boxes one.
 - **Rebuild:** changing a Structure parameter calls the builder again. It applies the lattice, re-reads the system,
   runs `model.expand`, and updates the children's instances. Your edits to the children (radius, base mesh,
   material, visibility) are kept: valo keeps rebuilt children by name.

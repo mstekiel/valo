@@ -18,6 +18,10 @@ versions follow [Semantic Versioning](https://semver.org/) (while at 0.x, a mino
   `moment_operation`, `atom_generators`); atoms are drawn with their operation.
 
 ### Changed
+- An `InstancedObject`'s Transform now acts on each instance's mesh (parent world · M_i · T, like Blender's
+  instancing), not on the set as a whole.
+- Instanced objects are boxed instance by instance: the selection shows a box per instance, hover the one under the
+  pointer.
 - Font size and UI scale apply live (between frames; in Preferences when the slider is released); font size in
   0.5 px steps.
 

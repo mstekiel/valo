@@ -389,3 +389,17 @@ def test_each_atom_is_drawn_with_its_symmetry_operation(viewer):
     viewer.gui_error = None
     image = viewer.snapshot()
     assert image.std() > 5 and viewer.gui_error is None
+
+
+def test_an_atom_objects_transform_turns_each_atom_in_place(studio):
+    from valo.math import transform_matrix
+
+    _, scene, editor = studio
+    fe = scene.find("Fe")
+    centres = fe.instances.matrices[:, :3, 3].copy()
+    editor.set_transform(fe, "rotate_deg", (0, 0, 45))
+    assert np.allclose(fe.instances.matrices[:, :3, 3], centres, atol=1e-5)  # every Fe stays on its site
+    turn = transform_matrix(rotation_deg=(0, 0, 45))[:3, :3]
+    assert np.allclose(fe.instances.matrices[:, :3, :3], turn, atol=1e-6)  # ...and its mesh is turned (identity ops)
+    editor.undo_stack.undo()
+    assert np.allclose(fe.instances.matrices[:, :3, :3], np.eye(3), atol=1e-6)

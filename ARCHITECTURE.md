@@ -63,7 +63,8 @@ viewer.show(scene, SceneEditor(scene))
 ```
 - **A tree** (`valo/scene/nodes.py`, `scene.py`): `Group` (transform + visibility for its children), `ProceduralGroup` (a group
   whose children `builder(group, **params)` regenerates whenever a parameter changes), `MeshObject` (one mesh)
-  and `InstancedObject` (one mesh at world · M_i per instance matrix). world = parent world · own `Transform`
+  and `InstancedObject` (one mesh per instance matrix M_i, at parent world · M_i · T: like Blender's instancing,
+  its own `Transform` T acts on each instance's mesh, turning or scaling every copy in place). world = parent world · own `Transform`
   (scale, rotate x→y→z in degrees, translate: `valo.math.transform_matrix`). Hidden ancestors hide a node.
   Instance matrices may be **improper** (det < 0: mirrors, inversion, e.g. crystal symmetry operations):
   `Instances` keeps them last in its GPU buffer and the renderer draws them with clockwise front faces
@@ -84,7 +85,9 @@ viewer.show(scene, SceneEditor(scene))
 - **Names** of nodes and materials are unique per scene (" 2" suffix), so they work as references.
 - **GPU**: each object owns an `Instances` whose `owner` is the object; `scene.batches()` draws the visible ones.
   A click on any instance selects the whole object. `Node.bounding_box()` is the box around a node's content in
-  its own frame (it tilts and scales with the node); the selected and hovered nodes are drawn with it.
+  its own frame (it tilts and scales with the node); the selected and hovered nodes are drawn with it. An
+  `InstancedObject` is boxed instance by instance (`instance_box(i)` / `instance_boxes()`): the selection shows a
+  box per instance, hover only the instance under the pointer.
 - **Serialization**: `scene.settings()` / `Scene.from_settings(d)`: materials plus the tree as plain data,
   functions as `"module:function"` paths (so they must be importable), procedural groups as builder + parameters
   only. So Export render script works for any Scene.

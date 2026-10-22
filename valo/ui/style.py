@@ -35,6 +35,7 @@ def load_fonts(size: float | None = None) -> None:
     icons.glyph_offset = imgui.ImVec2(0, 1)
     io.fonts.add_font_from_file_ttf(str(ICON_FONT), size * 0.85, icons)
     io.fonts.add_font_from_file_ttf(str(MONO_FONT), size)
+    io.fonts.add_font_from_file_ttf(str(ICON_FONT), size * 0.85, icons)  # icons in mono text too (the Console)
     io.font_default = ui
     imgui.get_style().font_size_base = size
 

@@ -21,7 +21,7 @@ def test_vector_fonts_with_icons_are_loaded(viewer):
     io = imgui.get_io()
     assert len(io.fonts.fonts) == 2 and io.font_default is io.fonts.fonts[0]
     assert io.font_default.is_glyph_in_font(ord(ICON.FLOPPY_DISK))  # icons merged into the UI font
-    assert mono_font() is io.fonts.fonts[1]
+    assert mono_font() is io.fonts.fonts[1] and mono_font().is_glyph_in_font(ord(ICON.CIRCLE_CHECK))
 
 
 def test_style_scale_is_absolute_not_compounding(viewer):

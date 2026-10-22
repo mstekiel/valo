@@ -55,7 +55,6 @@ class Editor(CameraWindow, LightingWindow, InfoWindow, HistoryWindow, ConsoleWin
         self.show_render = False
         self.render_options = {k: (list(v) if isinstance(v, tuple) else v)
                                for k, v in image_settings(None).items()}  # from rc.render
-        self.render_status = ""
         self.visible: dict[str, bool] = {}
         self.scene_rect: tuple[float, float, float, float] | None = None  # central dock node, logical pixels
         self._focus: list[str] = []  # windows to focus next frame (the first tab of each dock node)

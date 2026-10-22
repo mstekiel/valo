@@ -33,14 +33,14 @@ class RenderWindow:
         path = Path(path) if path else self._output(".png")
         settings = self.render_settings()
         render(self.viewer.scene, settings, path=path)
-        self.render_status = f"saved {path}"
+        self.notify(f"rendered {path.name}", detail=str(path))
         return path
 
     def export_script(self, path=None) -> Path:
         """Write a runnable script that re-renders this picture offline (needs a scene with ``settings()``)."""
         path = Path(path) if path else self._output(".py")
         export_script(path, self.viewer.scene, self.render_settings())
-        self.render_status = f"exported {path}"
+        self.notify(f"exported {path.name}", detail=str(path))
         return path
 
     def can_export(self) -> bool:
@@ -69,7 +69,3 @@ class RenderWindow:
         if imgui.button(f"{ICON.FILE_CODE} Export render script"):
             self.export_script()
         imgui.end_disabled()
-        if self.render_status:
-            imgui.push_text_wrap_pos(0.0)
-            imgui.text_disabled(self.render_status)
-            imgui.pop_text_wrap_pos()

@@ -60,7 +60,8 @@ class PreferencesWindow:
                             "the slider).")
         imgui.pop_text_wrap_pos()
         if imgui.button(f"{ICON.FLOPPY_DISK} Save to {USER_FILE.name}"):
-            self.status_message = f"saved {rc.save()}"
+            path = rc.save()
+            self.notify(f"preferences saved to {path.name}", detail=str(path))
         imgui.same_line()
         if imgui.button(f"{ICON.ARROW_ROTATE_LEFT} Reset all"):
             rc.reset()
@@ -69,8 +70,6 @@ class PreferencesWindow:
         expanded = getattr(self, "preferences_expanded", None)
         if imgui.button("Collapse all" if expanded else "Expand all"):
             self.preferences_expanded = not expanded
-        if getattr(self, "status_message", ""):
-            imgui.text_disabled(self.status_message)
         for name in SECTIONS:
             section = getattr(rc, name)
             if expanded is not None:

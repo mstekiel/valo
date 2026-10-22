@@ -81,7 +81,7 @@ def test_any_app_can_render_an_image_but_export_needs_scene_settings(viewer, bal
     editor.show_render = True
     viewer.snapshot()  # the Render window draws
     editor.render_options.update(size=[64, 48], samples=1)
-    assert editor.render_image(tmp_path / "x.png").exists() and "saved" in editor.render_status
+    assert editor.render_image(tmp_path / "x.png").exists() and editor.messages[-1].text == "rendered x.png"
     assert not editor.can_export()
     with pytest.raises(ValueError):
         editor.export_script(tmp_path / "x.py")

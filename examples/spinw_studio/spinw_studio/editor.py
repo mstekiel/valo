@@ -60,7 +60,7 @@ The lattice is not here: it lives in your SpinW object (the studio's lattice edi
 
 PLOT_OPTIONS = {py_literal(self.plot_options())}
 ''', encoding="utf-8")
-        self.render_status = f"exported {path}"
+        self.notify(f"exported {path.name}", detail=str(path))
         return path
 
     def file_menu(self) -> None:

@@ -1,7 +1,8 @@
 # valo — instructions for Claude Code
 
 Interactive scientific 3D rendering engine: wgpu (rendering) + glfw (window) + Dear ImGui (docking UI), Python only.
-Apps built on it live in `examples/`. Design and extension points: `ARCHITECTURE.md`. Keep both files short and current.
+Apps built on it live in `examples/`. Design and extension points: `ARCHITECTURE.md`. Versions, releases and GitHub
+housekeeping: `DEV.md` (the `/release` skill follows it). Keep these files short and current.
 
 ## Commands (uv only — never pip, venv, conda, poetry)
 

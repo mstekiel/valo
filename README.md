@@ -57,6 +57,7 @@ Export writes a runnable `render_*.py` with every setting in an editable `SETTIN
 the same picture.
 
 See `ARCHITECTURE.md` for how it fits together, how to write an app, and where new features go.
+`DEV.md` covers development: checks, versions, releases and the GitHub housekeeping.
 
 ## License
 

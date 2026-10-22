@@ -5,6 +5,13 @@ import pytest
 from valo import testing
 
 
+def pytest_configure(config):
+    """Tests run with the default config: forget what ``~/.valo/valorc.toml`` or ``./valorc.toml`` set at import."""
+    from valo import rc
+
+    rc.reset()
+
+
 @pytest.fixture(scope="module")
 def viewer(request):
     """An offscreen Viewer shared by the tests of one module (its size: the module's ``VIEWER_SIZE``, default

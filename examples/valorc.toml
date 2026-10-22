@@ -83,7 +83,7 @@ hover_color = [0.2, 0.85, 1.0]        # cyan instead of the default light grey [
 [ui]
 # Look and layout of the panels.
 
-font_size = 18.0              # text size in logical pixels; takes effect on the next start (default 16; 10-32)
+font_size = 18.0              # text size in logical pixels, in steps of 0.5 (default 16; 10-32)
 scale = 1.15                  # scales text and spacing together, like View > UI scale (default 1.0; 0.5-3)
 # accent = [66, 133, 244]     # highlight colour of buttons, sliders and tabs, sRGB 0-255
 # right_column = 0.3          # default layout: share of the window width for the right dock column (0.1-0.7)
@@ -93,6 +93,12 @@ scale = 1.15                  # scales text and spacing together, like View > UI
 # compass = true              # axis gizmo in a corner of the 3D view (not in offline renders)
 # compass_size = 42.0         # length of an axis in the gizmo, px (16-200)
 # compass_corner = "bottom-left"   # bottom-left, bottom-right, top-left or top-right
+# message_seconds = 0.0       # a message box at the mouse closes after this many seconds; 0: when you move on
+# message_move_px = 40.0      # ...or when the mouse moves this far from it (5-500 px)
+# info_color = [80, 200, 120]     # message colours, sRGB 0-255: info (e.g. a file was saved),
+# warning_color = [245, 160, 40]  # warning
+# error_color = [240, 80, 70]     # and error
+# console_lines = 2000        # messages the Console keeps (100-100000)
 # The two layout shares only apply when there is no saved layout yet, or after View > Reset layout.
 
 

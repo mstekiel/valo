@@ -161,10 +161,11 @@ NOT_ACTIONS = {
     "windows", "panel", "menus", "all_windows", "gui", "file_menu", "draw_compass", "draw_boxes", "material_section",
     "compass_axes", "build_layout", "reset_layout", "camera_window", "lighting_window", "info_window",
     "history_window", "render_window", "preferences_window", "scene_window", "object_window", "materials_window",
-    "code_window",
+    "code_window", "draw_toast", "apply_pending_style",
     # queries
     "render_settings", "can_export", "diagnostics", "users", "dirty", "code_error", "normal_info",
-    # plumbing and view state (not scene edits, so not recorded)
+    # plumbing and view state (not scene edits, so not recorded); messages for the user
+    "notify", "messages", "clock",
     "watch", "one_step", "poll", "reload_shape", "update_normals", "file_dialog", "select", "open_code",
     "browse_shape", "set_projection", "set_fov", "set_view", "fit_view",
     # documented as not recorded: typing (the code widget has its own undo), preferences, files written out

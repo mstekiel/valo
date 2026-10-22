@@ -45,7 +45,8 @@ def site_positions_uvw(sw) -> np.ndarray:
     Crystal (fractional) coordinates, dimensionless. Example for LFO's four sites (Lu, Fe, O1, O2):
     ``[[0.0221, 0.9284, 0.75], [0, 0.5, 0], [0.1296, 0.4475, 0.25], [0.188, 0.1915, 0.5659]]``.
     """
-    raise NotImplementedError("fill in from spinwaves: site_positions_uvw(sw) -> (S, 3) uvw of the unique atoms")
+    return [a.r for a in sw.crystal.atoms_unique]
+    # raise NotImplementedError("fill in from spinwaves: site_positions_uvw(sw) -> (S, 3) uvw of the unique atoms")
 
 
 def site_moments_xyz(sw) -> np.ndarray:
@@ -54,19 +55,22 @@ def site_moments_xyz(sw) -> np.ndarray:
     Convert from spinwaves' frame to Cartesian xyz here. Any length; a zero row means a non-magnetic site. Example
     for LFO: Fe ``[-1, 0, Fz]``, the others ``[0, 0, 0]``.
     """
-    raise NotImplementedError("fill in from spinwaves: site_moments_xyz(sw) -> (S, 3) site moments in xyz")
+    return [a.m for a in sw.crystal.atoms_unique]
+    # raise NotImplementedError("fill in from spinwaves: site_moments_xyz(sw) -> (S, 3) site moments in xyz")
 
 
 def site_labels(sw) -> list[str]:
     """Label of each unique atom: list of S str, same order ("Lu", "Fe", "O1", "O2"). Selects material and radius."""
-    raise NotImplementedError("fill in from spinwaves: site_labels(sw) -> list of S labels")
+    return [a.label for a in sw.crystal.atoms_unique]
+    # raise NotImplementedError("fill in from spinwaves: site_labels(sw) -> list of S labels")
 
 
 def symmetry_operations(sw) -> list:
     """The symmetry operations of the magnetic space group, as spinwaves stores them: a list of G objects (any
     type). The studio passes each one back to ``atom_operation``, ``moment_operation`` and ``operation_label``, and
     numbers them in this order (the op index of ``atom_generators``)."""
-    raise NotImplementedError("fill in from spinwaves: symmetry_operations(sw) -> list of the group's operations")
+    return sw.crystal.MSG.operations
+    # raise NotImplementedError("fill in from spinwaves: symmetry_operations(sw) -> list of the group's operations")
 
 
 def atom_operation(sw, op) -> np.ndarray:
@@ -76,6 +80,10 @@ def atom_operation(sw, op) -> np.ndarray:
     operation, det ±1) and t the translation (uvw). Time reversal doesn't act on positions. Example for
     "x+1/2,-y+1/2,-z, -1": R = diag(1, -1, -1), t = (1/2, 1/2, 0).
     """
+    T = np.eye(4)
+    T[:3, :3] = op.matrix
+    T[:3, 3] = op.translation
+    return T
     raise NotImplementedError("fill in from spinwaves: atom_operation(sw, op) -> (4, 4) [[R, t], [0, 0, 0, 1]] in uvw")
 
 
@@ -87,17 +95,36 @@ def moment_operation(sw, op) -> np.ndarray:
     So an inversion (R = -1) leaves a moment unchanged, and time reversal flips it. Example for
     "x+1/2,-y+1/2,-z, -1": θ = -1, det(R) = 1, M = -diag(1, -1, -1) = diag(-1, 1, 1).
     """
-    raise NotImplementedError("fill in from spinwaves: moment_operation(sw, op) -> (3, 3) θ·det(R)·R")
+    # I dont like this, these fields should be implemented in op already, not called again
+    M_uvw = op.time_reversal*np.linalg.det(op.matrix)*op.matrix
+    M_xyz = sw.crystal.A @ M_uvw @ np.linalg.inv(sw.crystal.A)
+    return M_xyz
+    # raise NotImplementedError("fill in from spinwaves: moment_operation(sw, op) -> (3, 3) θ·det(R)·R")
 
 
 def atom_generators(sw) -> np.ndarray:
     """Where each atom of the unit cell comes from: shape (N, 2), int, row i = [site index, operation index].
 
-    One row per atom of ONE unit cell, in spinwaves' order: row i is the atom that ``Coupling(id1, id2)`` calls i.
+    One row per atom of ONE unit cell, in spinwaves.crystal.atoms_all order.
     The site index points into ``site_positions_uvw``, the operation index into ``symmetry_operations``; the atom
     sits at ``(R r_site + t) mod 1``. Example for LFO's 4 Fe (site 1): ``[[1, 0], [1, 1], [1, 2], [1, 3]]``.
     """
-    raise NotImplementedError("fill in from spinwaves: atom_generators(sw) -> (N, 2) [site, operation] per cell atom")
+    # this is weird, I shouldn't be asked this at all
+    olist = []
+    a_unique_labels = [a.label for a in sw.crystal.atoms_unique]
+    for atom in sw.crystal.atoms_all:
+        # acceptable
+        g = atom._gen_symop
+        operation_index = sw.crystal.MSG.operations.index(g)
+
+        # I hate this
+        label_matches = [atom.label.startswith(label) for label in a_unique_labels]
+        site_index = label_matches.index(True)
+
+        olist.append([site_index, operation_index])
+
+    return np.array(olist, dtype=int)
+    # raise NotImplementedError("fill in from spinwaves: atom_generators(sw) -> (N, 2) [site, operation] per cell atom")
 
 
 # -- optional stubs: replace the defaults if spinwaves has the data ---------------------------------
@@ -140,6 +167,7 @@ def set_lattice(sw, a: float, b: float, c: float, alpha: float, beta: float, gam
     crystal coordinates uvw. Called by the studio's Structure parameters; until filled, editing them shows this
     error and changes nothing.
     """
+    # these properties are setters in Crystal, so update is automatic
     sw.crystal.a = a
     sw.crystal.b = b
     sw.crystal.c = c

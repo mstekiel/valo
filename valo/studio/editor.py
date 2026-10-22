@@ -20,6 +20,7 @@ Domain studios (spinw_studio, ...) subclass ``StudioEditor``.
 from __future__ import annotations
 
 import traceback
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
 import numpy as np
@@ -30,6 +31,7 @@ from ..math import decompose, euler_xyz
 from ..meshes import library
 from ..meshes.shapefile import IDENTITY, transform_matrix
 from ..scene import MeshObject, Scene, Shape, Transform
+from ..ui.messages import ConsoleStream
 from ..ui.scene_editor import SceneEditor, shape_error
 from .code import CodeWindow
 from .normals import NormalsOverlay
@@ -244,10 +246,14 @@ class StudioEditor(CodeWindow, NormalsOverlay, SceneEditor):
         if (isinstance(sel, MeshObject) and sel.shape.file is not None and not self.dirty
                 and not _same(sel.shape.source, self.code_path)):
             self.open_code(sel.shape.source)
-        self._poll_browsing()
-        self.update_normals()
-        super().gui()
-        self._dialogs()
+        out, err = ConsoleStream(self, "info", "> "), ConsoleStream(self, "warning", "> ")
+        with redirect_stdout(out), redirect_stderr(err):  # what shape files print goes to the Console
+            self._poll_browsing()
+            self.update_normals()
+            super().gui()
+            self._dialogs()
+        out.flush()
+        err.flush()
 
     # -- windows and menus
     def windows(self):

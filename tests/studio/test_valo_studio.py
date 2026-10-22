@@ -119,6 +119,23 @@ def test_save_to_library_bakes_the_object_state_into_the_file(viewer, studio):
         studio.save_to_library(studio.open_shape(library.path("blob")), "tall_blob")
 
 
+def test_what_a_shape_file_prints_goes_to_the_console(viewer, studio, tmp_path):
+    path = tmp_path / "talky.py"
+    text = VASE.read_text(encoding="utf-8").replace("def mesh(", "print('built at import')\n\n\ndef mesh(", 1)
+    path.write_text(text, encoding="utf-8")
+    draw = studio.code_window
+
+    def code_window():  # open it during a frame, as File > Open does
+        if studio.code_path != path:
+            studio.open_shape(path)
+        draw()
+
+    studio.code_window = code_window
+    viewer.snapshot()
+    assert "> built at import" in [m.text for m in studio.messages]
+    assert viewer.gui_error is None
+
+
 def test_saving_a_builtin_mesh_writes_a_user_copy(studio, tmp_library):
     library.BUILTIN_DIR.mkdir()
     builtin = shutil.copy(VASE, library.BUILTIN_DIR / "vase.py")

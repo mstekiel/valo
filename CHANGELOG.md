@@ -12,6 +12,8 @@ versions follow [Semantic Versioning](https://semver.org/) (while at 0.x, a mino
   (reset, copy / paste, range and step). Save to library keeps changed ranges in `RANGES`, which may give a step.
 - Window icon (`valo/assets/icons/`, `Viewer(icon=...)`) and a dark title bar on Windows 11 (`rc.ui.title_bar`).
 - Preferences: Expand all / Collapse all.
+- Mirrored instances: instance matrices with det < 0 (mirrors, inversion) draw right side out (`Batch.mirrored`);
+  picks and highlights keep your instance order.
 
 ### Changed
 - Font size and UI scale apply live (between frames; in Preferences when the slider is released); font size in

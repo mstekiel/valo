@@ -65,6 +65,10 @@ viewer.show(scene, SceneEditor(scene))
   whose children `builder(group, **params)` regenerates whenever a parameter changes), `MeshObject` (one mesh)
   and `InstancedObject` (one mesh at world · M_i per instance matrix). world = parent world · own `Transform`
   (scale, rotate x→y→z in degrees, translate: `valo.math.transform_matrix`). Hidden ancestors hide a node.
+  Instance matrices may be **improper** (det < 0: mirrors, inversion, e.g. crystal symmetry operations):
+  `Instances` keeps them last in its GPU buffer and the renderer draws them with clockwise front faces
+  (`Batch.mirrored`), so they stay right side out; `order` / `slot` map buffer slots to your indices, which picks,
+  highlights and `info(i)` use.
 - **Shapes**: a `Shape` is a function (callable, `"module:function"`, or a shape file) plus parameters; the
   editable ones (float/int/bool with defaults; ranges from `func.ranges` / `RANGES`) come from its signature
   (`meshes/params.py`, shared by shape files and procedural builders). Shape files hot-reload.

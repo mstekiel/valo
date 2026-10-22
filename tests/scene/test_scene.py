@@ -51,15 +51,35 @@ def test_world_matrix_is_parent_world_times_own_transform(scene):
     assert np.allclose(c.instances.matrices[0, :3, 3], [1, 0, 5])
 
 
-def test_instances_are_drawn_at_object_times_instance(scene):
-    from valo import InstancedObject, Shape, Transform
+def test_an_instanced_objects_transform_acts_on_each_instances_mesh(scene):
+    """Like Blender's instancing: an instance is drawn at parent world · M_i · T, so the object's own Transform T
+    turns, scales and moves each copy of the mesh in place; the copies stay where M_i puts them."""
+    from valo import Group, InstancedObject, Shape, Transform
 
     local = np.stack([transform_matrix((x, 0, 0)) for x in (0, 1, 2)])
-    obj = scene.add(InstancedObject("Row", Shape(meshes.cube), "Matte", local,
-                                    transform=Transform((0, 0, 3), (0, 0, 90))))
-    assert np.allclose(obj.instances.matrices[:, :3, 3], [[0, 0, 3], [0, 1, 3], [0, 2, 3]])
+    t = Transform((0, 0, 0.5), (0, 0, 90), (2, 1, 1))
+    g = scene.add(Group("Up", transform=Transform((0, 0, 3))))
+    obj = scene.add(InstancedObject("Row", Shape(meshes.cube), "Matte", local, transform=t), parent=g)
+    assert np.allclose(obj.instances.matrices, g.world_matrix() @ local @ t.matrix(), atol=1e-6)
+    assert np.allclose(obj.instances.matrices[:, :3, 3], [[0, 0, 3.5], [1, 0, 3.5], [2, 0, 3.5]])  # still a row in x
+    assert np.allclose(obj.world_matrix(), g.world_matrix())  # the object's frame is its parent's
     obj.set_instances(local[:2])
     assert obj.instances.count == 2
+
+
+def test_each_instance_has_its_own_box(scene):
+    from valo import InstancedObject, Shape, Transform
+
+    mirror = np.diag([-1.0, 1.0, 1.0, 1.0])
+    local = np.stack([transform_matrix((x, 0, 0)) for x in (0, 3)] + [transform_matrix((6, 0, 0)) @ mirror])
+    obj = scene.add(InstancedObject("Row", Shape(meshes.cube, {"size": 0.5}), "Matte", local,
+                                    transform=Transform(rotate_deg=(0, 0, 30))))
+    boxes = obj.instance_boxes()
+    assert boxes.shape == (3, 4, 4)
+    for i in range(3):
+        assert np.allclose(boxes[i], obj.instance_box(i))
+        assert np.allclose(boxes[i], obj.instances.matrices[i] @ np.diag([0.5, 0.5, 0.5, 1]), atol=1e-6)  # its mesh
+    assert np.linalg.det(boxes[2]) < 0  # the mirrored instance's box is mirrored with it
 
 
 def test_hidden_ancestors_hide_the_object_and_batches_skip_it(scene):

@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 from ..gpu.instances import Instances
-from ..math import bounding_box, box_corners, transform_matrix
+from ..math import bounding_box, box_corners, scale, transform_matrix, translate
 from ..meshes.params import shape_params
 from .shape import Shape, reference, resolve
 
@@ -272,7 +272,12 @@ class MeshObject(Node):
 
 
 class InstancedObject(MeshObject):
-    """One mesh drawn at world · M_i for each instance matrix M_i (data: positions, orientations, sizes)."""
+    """One mesh drawn once per instance matrix M_i (data: positions, orientations, sizes), at parent world · M_i · T.
+
+    Like Blender's instancing, the object's own ``transform`` T acts on the mesh of each instance: it turns, scales
+    and moves every copy in place, and the copies stay where their M_i put them. ``world_matrix()`` is therefore the
+    parent's (the frame the M_i live in).
+    """
 
     kind = "instances"
 
@@ -280,9 +285,25 @@ class InstancedObject(MeshObject):
         super().__init__(name, shape, material, **kw)
         self.matrices = np.asarray(np.eye(4)[None] if instances is None else instances, np.float32).reshape(-1, 4, 4)
 
+    def world_matrix(self) -> np.ndarray:
+        """The frame of the instance matrices: the parent's world matrix (the own transform acts per instance)."""
+        return np.eye(4) if self.parent is None else self.parent.world_matrix()
+
     def local_instances(self) -> np.ndarray:
-        """The instance matrices, relative to the node."""
-        return self.matrices
+        """The instance matrices with the object's transform applied to each instance's mesh: M_i · T."""
+        return self.matrices @ self.transform.matrix().astype(np.float32)
+
+    def instance_boxes(self) -> np.ndarray:
+        """The box of every instance around its mesh, in that instance's frame (it turns, scales and mirrors with
+        the instance), as box matrices (N, 4, 4) mapping the unit cube [-0.5, 0.5]^3 onto it in world space."""
+        if self.instances is None:
+            return np.zeros((0, 4, 4))
+        lo, hi = (np.asarray(b, float) for b in self.instances.mesh.bounds)
+        return self.instances.matrices.astype(float) @ translate(*((lo + hi) / 2)) @ scale(*(hi - lo))
+
+    def instance_box(self, i: int) -> np.ndarray:
+        """The box of instance ``i`` around its mesh (see ``instance_boxes``)."""
+        return self.instance_boxes()[i]
 
     def settings(self) -> dict:
         """The object and its instance matrices (as nested lists)."""

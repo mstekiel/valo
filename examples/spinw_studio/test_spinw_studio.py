@@ -365,3 +365,27 @@ def test_plot_structure_blocks_then_returns_the_final_options(viewer, monkeypatc
     opts = api.plot_structure(lfo_like(), {"atom_colors": {"Fe": "Orange"}})
     assert calls == ["SpinW studio: LFO-like"] and opts["atom_radii"] == {"Fe": 0.9}
     monkeypatch.undo()
+
+
+def test_each_atom_is_drawn_with_its_symmetry_operation(viewer):
+    """An O at a general position and its inversion image: the image's mesh is mirrored (det < 0), and swapping in
+    a mesh without that symmetry (a cone) shows it; Info names the site and the operation."""
+    from spinw_studio import show
+
+    from valo import meshes
+
+    site = np.array([0.13, 0.45, 0.25])
+    atoms = (AtomSite("O1", 0, tuple(apply_op(IDENTITY, site)[0]), (0, 0, 0), op=0, site=0),
+             AtomSite("O1", 1, tuple(apply_op(INVERSION, site)[0]), (0, 0, 0), op=4, site=0))
+    editor = show(viewer, SystemView(A_LFO, atoms, "O1 pair", PBNM_OPS), {"boundaries": [[0, 0.99]] * 3})
+    o1 = editor.scene.find("O1")
+    m = o1.instances.matrices
+    assert np.allclose(m[:, :3, 3], to_xyz(A_LFO, [a.uvw for a in atoms]))
+    assert np.allclose(m[:, :3, :3], [orientation(A_LFO, PBNM_OPS[0]), orientation(A_LFO, INVERSION)])
+    assert o1.instances.batch().mirrored == 1
+    rows = o1.info(1)
+    assert rows["Site"] == "0" and rows["Operation"] == "-x,-y,-z, +1"
+    editor.set_shape(o1, meshes.cone)  # a pointed mesh: the inversion image points the other way
+    viewer.gui_error = None
+    image = viewer.snapshot()
+    assert image.std() > 5 and viewer.gui_error is None

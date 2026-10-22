@@ -2,7 +2,8 @@
 
     Structure        ProceduralGroup(structure): lattice a, b, c (Å), alpha, beta, gamma (deg), uvw extent,
     ├─ Atoms             moment_length (Å); its children are rebuilt when one changes, keeping your edits
-    │   └─ Fe, O1, …     one InstancedObject per label: Shape(sphere, r = radius), material named after the label
+    │   └─ Fe, O1, …     one InstancedObject per label: Shape(sphere, r = radius), material named after the label;
+    │                    each atom's mesh is placed with its symmetry operation (turned, or mirrored for det < 0)
     ├─ Moments
     │   └─ Fe moments    arrows centred on the atoms per magnetic label, material "Moments"
     └─ Cell              the 12 unit-cell edges: Shape(cylinder, r = edge radius), material "Unit cell"
@@ -93,6 +94,15 @@ class StructureSource:
         return self.system
 
 
+def _placed(ex) -> np.ndarray:
+    """Instance matrices (M, 4, 4) of the atoms in ``ex``: at their xyz, turned (or mirrored) by the linear part of the
+    symmetry operation that placed each one, so a site's mesh is copied the way the crystal copies the atom."""
+    matrices = np.tile(np.eye(4), (len(ex.xyz), 1, 1))
+    matrices[:, :3, :3] = ex.orientations
+    matrices[:, :3, 3] = ex.xyz
+    return matrices
+
+
 def structure(group, a: float = 5.0, b: float = 5.0, c: float = 5.0, alpha: float = 90.0, beta: float = 90.0,
               gamma: float = 90.0, umin: float = -0.1, umax: float = 1.1, vmin: float = -0.1, vmax: float = 1.1,
               wmin: float = -0.1, wmax: float = 1.1, moment_length: float = 2.0):
@@ -108,7 +118,10 @@ def structure(group, a: float = 5.0, b: float = 5.0, c: float = 5.0, alpha: floa
         ex = expanded[label]
         site = system.atoms[int(ex.indices[k])]
         m = np.asarray(site.moment, float)
-        rows = {"Label": label, "Cell index": str(site.index), "uvw": _vec(ex.uvw[k]),
+        op = system.ops[site.op]
+        rows = {"Label": label, "Cell index": str(site.index),
+                **({"Site": str(site.site)} if site.site is not None else {}),
+                "Operation": op.label or f"#{site.op}", "uvw": _vec(ex.uvw[k]),
                 "Translation": _vec(ex.translations[k], 0), "xyz (Å)": _vec(ex.xyz[k]),
                 "|m|": f"{np.linalg.norm(m):.3f}", "m (xyz)": _vec(m), "S": f"{site.spin:g}"}
         return {**rows, **site.extra}
@@ -118,7 +131,7 @@ def structure(group, a: float = 5.0, b: float = 5.0, c: float = 5.0, alpha: floa
     for label in system.labels:
         ex = expanded[label]
         atoms.add(InstancedObject(label, Shape(meshes.sphere, {"n_lat": 24, "n_lon": 48, "r": source.radii[label]}),
-                                  label, instance_matrices(ex.xyz) if len(ex.xyz) else [],
+                                  label, _placed(ex),
                                   info=lambda k, lb=label: atom_info(lb, k), locked=True))
         norms = np.linalg.norm(ex.moments, axis=1)
         if not any(np.any(site.moment) for site in system.atoms if site.label == label):

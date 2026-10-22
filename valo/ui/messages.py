@@ -68,7 +68,7 @@ class Messages:
     def draw_toast(self) -> None:
         """Draw the current message box, or drop it once the user has moved on (called every frame)."""
         toast = getattr(self, "toast", None)
-        if toast is None:
+        if toast is None or getattr(self.viewer, "capturing", False):  # not in snapshots
             return
         message, since, anchor = toast
         io = imgui.get_io()

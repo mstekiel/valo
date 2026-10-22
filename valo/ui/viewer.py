@@ -185,9 +185,14 @@ class Viewer:
         return x, y, max(rw, 1), max(rh, 1)
 
     def snapshot(self) -> np.ndarray:
-        """Draw two frames offscreen (ImGui lays out on the first) and return the scene region, (h, w, 3) uint8."""
-        for _ in range(2):
-            img = np.asarray(self.canvas.draw())[:, :, :3]
+        """Draw two frames offscreen (ImGui lays out on the first) and return the scene region, (h, w, 3) uint8;
+        message boxes are left out (they are about the app, not part of the picture)."""
+        self.capturing = True
+        try:
+            for _ in range(2):
+                img = np.asarray(self.canvas.draw())[:, :, :3]
+        finally:
+            self.capturing = False
         return self.crop(img).copy()
 
     def crop(self, image):

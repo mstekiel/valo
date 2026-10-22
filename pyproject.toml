@@ -1,6 +1,6 @@
 [project]
 name = "valo"
-version = "0.1.0"
+version = "0.2.0"
 description = "Interactive scientific 3D rendering engine: wgpu + glfw + Dear ImGui"
 requires-python = ">=3.12"
 readme = "README.md"

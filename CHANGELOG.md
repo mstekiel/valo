@@ -5,6 +5,8 @@ versions follow [Semantic Versioning](https://semver.org/) (while at 0.x, a mino
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-22
+
 ### Added
 - Messages at the mouse (`editor.notify`: info / warning / error) and a read-only **Console** window with every
   message and its detail; what shape files print shows there.
@@ -16,6 +18,9 @@ versions follow [Semantic Versioning](https://semver.org/) (while at 0.x, a mino
   picks and highlights keep your instance order.
 - spinw_studio: the cell is built from unique sites and symmetry operations (adapter stubs `atom_operation`,
   `moment_operation`, `atom_generators`); atoms are drawn with their operation.
+- Depth-tested overlay lines: `gpu.Lines` and `Renderer.render(lines=)` draw line segments in the scene pass, hidden
+  by objects in front (used for the bounding boxes).
+- Continuous integration: ruff and pytest on Windows for every push to main and every pull request.
 
 ### Changed
 - An `InstancedObject`'s Transform now acts on each instance's mesh (parent world · M_i · T, like Blender's
@@ -24,12 +29,22 @@ versions follow [Semantic Versioning](https://semver.org/) (while at 0.x, a mino
   pointer.
 - Font size and UI scale apply live (between frames; in Preferences when the slider is released); font size in
   0.5 px steps.
+- Status texts in the studio, Render and Preferences became messages (box at the mouse + Console).
+- The shared test fixtures (`viewer`, `tmp_library`) are a pytest plugin, `valo.testing` (loaded with
+  `-p valo.testing`); the root `conftest.py` is gone.
+
+### Removed
+- spinw_studio no longer needs lmfit (the `spinw` dependency group is spinwaves only).
 
 ### Fixed
 - Bounding boxes no longer show through objects in front of them (drawn in the scene pass, depth-tested).
 - GPU tests no longer skip silently when the renderer fails to build (only without a GPU adapter).
 - Preferences → Scene background raised "Missing End()" (the image size had no widget).
 - The test suite no longer reads the user's `valorc.toml`.
+- Text vanished after a font size change (a grown font atlas was only partly uploaded by wgpu's ImGui backend).
+- A see-through strip under floating window title bars at fractional UI scales.
+- The Shape list failed for an object made from a library mesh.
+- Level icons in the Console (the mono font lacked them).
 
 ## [0.1.0] - 2026-10-21
 
@@ -54,5 +69,6 @@ First public release.
 - **Testing**: `valo.testing` helpers, an offscreen `viewer` fixture, and structure tests for the public API,
   the layering and undo coverage.
 
-[Unreleased]: https://github.com/mstekiel/valo/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/mstekiel/valo/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/mstekiel/valo/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/mstekiel/valo/releases/tag/v0.1.0

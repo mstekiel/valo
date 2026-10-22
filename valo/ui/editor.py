@@ -167,8 +167,7 @@ class Editor(CameraWindow, LightingWindow, InfoWindow, HistoryWindow, ConsoleWin
             self._layout = None
         central = internal.dock_builder_get_central_node(dock_id)
         self.scene_rect = (central.pos.x, central.pos.y, central.size.x, central.size.y)
-        self.draw_compass()
-        self.draw_boxes()
+        self.draw_compass()  # the boxes are drawn by the renderer (box_lines), so objects in front hide them
 
         for name, draw in wins.items():
             if not self.visible.setdefault(name, True):

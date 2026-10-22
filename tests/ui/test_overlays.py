@@ -130,3 +130,33 @@ def test_an_instanced_object_is_boxed_instance_by_instance(viewer):
     assert np.allclose([b for b, _ in boxes], row.instance_boxes())
     editor.select(None)
     release_pointer(viewer)
+
+
+def test_a_box_behind_an_object_is_hidden_by_it(viewer):
+    """Regression: the boxes were drawn on top of everything; now an object in front hides them."""
+    from valo import Camera, Editor, meshes
+    from valo.gpu import Pick
+    from valo.math import transform_matrix
+    from valo.ui import box_edges
+
+    m = viewer.renderer.material("M", "lambert", base_color=(0.5, 0.5, 0.5))
+    ball = viewer.renderer.spheres(m)
+    ball.set([[0, 2, 0]], 0.4)
+    wall = viewer.renderer.instances(meshes.cube(), m)
+    wall.set([transform_matrix((0, -1, 0), scaling=(6, 0.2, 6))])  # between the camera and the ball
+    batches = [ball.batch(), wall.batch()]
+    viewer.show(SimpleNamespace(batches=lambda: batches), Editor())
+    viewer.camera = Camera(azimuth=-90.0, elevation=0.0, distance=6.0)  # looking along +y
+    viewer.selection, viewer.outlined = None, []
+    release_pointer(viewer)
+    plain = viewer.snapshot()
+    viewer.selection = Pick(0, 0, ball, np.zeros(3))
+    assert len(viewer.boxes()) == 1
+    assert not changed(plain, viewer.snapshot()).any()  # the wall hides the whole box
+    batches.pop()  # no wall: the box shows
+    plain = viewer.snapshot()
+    viewer.selection = None
+    assert changed(plain, viewer.snapshot()).any()
+    edges = box_edges(viewer.camera, np.eye(4))
+    assert len(edges) == 12 and sum(back for *_, back in edges) == 8  # face-on in perspective: only the front face shows
+    assert {tuple(np.abs(p)) for p, q, _ in edges} == {(0.5, 0.5, 0.5)}

@@ -1,5 +1,6 @@
-"""What the editor draws over the 3D view with ImGui: the corner compass and the bounding boxes of the selected and
-hovered objects, plus the pure layout functions behind them (``compass_layout``, ``box_layout``)."""
+"""What the editor draws over the 3D view: the corner compass (ImGui, on top) and the bounding boxes of the selected
+and hovered objects (overlay lines in the scene pass, so objects in front hide them), plus the pure layout functions
+behind them (``compass_layout``, ``box_edges``, ``box_layout``)."""
 
 from __future__ import annotations
 
@@ -7,6 +8,7 @@ import numpy as np
 from imgui_bundle import imgui
 
 from ..config import rc
+from ..gpu import Lines, srgb_to_linear
 
 BOX_EDGES = [(a, b) for a in range(8) for b in range(a + 1, 8) if bin(a ^ b).count("1") == 1]  # corner index 4x+2y+z
 
@@ -31,17 +33,14 @@ def compass_layout(camera, axes, center, size: float) -> list[tuple]:
     return sorted(out, key=lambda a: a[4])
 
 
-def box_layout(camera, box, rect) -> list[tuple]:
-    """The 12 edges of box matrix ``box`` (unit cube [-0.5, 0.5]^3 → world) as drawn by ``camera`` into ``rect`` =
-    (x, y, w, h) logical pixels: (start, end, back) with ``back`` True for the edges behind the box (both faces
-    meeting there turn away from the camera). Edges are clipped at the camera's near side (perspective)."""
+def box_edges(camera, box) -> list[tuple]:
+    """The 12 edges of box matrix ``box`` (unit cube [-0.5, 0.5]^3 → world) as world segments (start, end, back),
+    with ``back`` True for the edges behind the box as ``camera`` sees it (both faces meeting there turn away)."""
     from ..math import box_corners
 
-    x, y, w, h = rect
-    view_proj, eye = camera.matrices(w / h)
     box = np.asarray(box, float)
-    corners = (box @ np.c_[box_corners([-0.5] * 3, [0.5] * 3), np.ones(8)].T).T  # world, homogeneous
-    clip = (view_proj @ corners.T).T
+    corners = (box @ np.c_[box_corners([-0.5] * 3, [0.5] * 3), np.ones(8)].T).T[:, :3]
+    eye = np.asarray(camera.eye(), float)
     axes = box[:3, :3].T  # rows: the box's x, y, z edge vectors in world space
     centre = box[:3, 3]
     normals = [np.cross(axes[(a + 1) % 3], axes[(a + 2) % 3]) for a in range(3)]  # outward of the +a face
@@ -52,17 +51,30 @@ def box_layout(camera, box, rect) -> list[tuple]:
         towards = (centre + side * axes[axis] / 2 - eye) if perspective else camera.forward()
         return float(n @ towards) > 1e-12
 
+    out = []
+    for a, b in BOX_EDGES:
+        axis = 2 - (a ^ b).bit_length() + 1  # the bit that differs: 4 → x, 2 → y, 1 → z
+        others = [k for k in range(3) if k != axis]
+        sides = [1 if (a >> (2 - k)) & 1 else -1 for k in others]
+        out.append((corners[a], corners[b], all(away(k, s) for k, s in zip(others, sides, strict=True))))
+    return out
+
+
+def box_layout(camera, box, rect) -> list[tuple]:
+    """The 12 edges of box matrix ``box`` (unit cube [-0.5, 0.5]^3 → world) as drawn by ``camera`` into ``rect`` =
+    (x, y, w, h) logical pixels: (start, end, back) with ``back`` as in ``box_edges``. Edges are clipped at the
+    camera's near side (perspective)."""
+    x, y, w, h = rect
+    view_proj, _ = camera.matrices(w / h)
+    perspective = camera.projection == "perspective"
+
     def screen(c):
         return (x + (c[0] / c[3] + 1) / 2 * w, y + (1 - c[1] / c[3]) / 2 * h)
 
     out = []
     near = 1e-4
-    for a, b in BOX_EDGES:
-        axis = 2 - (a ^ b).bit_length() + 1  # the bit that differs: 4 → x, 2 → y, 1 → z
-        others = [k for k in range(3) if k != axis]
-        sides = [1 if (a >> (2 - k)) & 1 else -1 for k in others]
-        back = all(away(k, s) for k, s in zip(others, sides, strict=True))
-        p, q = clip[a], clip[b]
+    for start, end, back in box_edges(camera, box):
+        p, q = view_proj @ np.r_[start, 1.0], view_proj @ np.r_[end, 1.0]
         if perspective:
             if p[3] < near and q[3] < near:
                 continue  # behind the camera
@@ -93,18 +105,19 @@ class Overlays:
             n = max((dx * dx + dy * dy) ** 0.5, 1e-6)
             draw.add_text(imgui.ImVec2(end[0] + 7 * dx / n - 4, end[1] + 7 * dy / n - 8), col, label)
 
-    def draw_boxes(self) -> None:
-        """The bounding boxes of the selected and hovered objects (``viewer.boxes()``), drawn by ImGui over the 3D
-        view: ``rc.highlight`` colours (sRGB) and line width, back edges fainter."""
-        if not (self.viewer and self.scene_rect):
-            return
+    def box_lines(self) -> Lines | None:
+        """The bounding boxes of the selected and hovered objects (``viewer.boxes()``) as overlay lines for the
+        renderer, which draws them against the scene's depth (objects in front hide them): ``rc.highlight`` colours
+        (sRGB, converted to linear) and width (logical px), back edges fainter. None when there is nothing to box."""
+        if not self.viewer:
+            return None
         h = rc.highlight
-        draw = imgui.get_foreground_draw_list()
-        x, y, w, hh = self.scene_rect
-        draw.push_clip_rect(imgui.ImVec2(x, y), imgui.ImVec2(x + w, y + hh))  # stay inside the 3D view
+        segments, colors = [], []
         for box, kind in self.viewer.boxes():
-            rgb = h.selected_color if kind == "selected" else h.hover_color
-            front, back = (imgui.get_color_u32(imgui.ImVec4(*rgb, a)) for a in (1.0, h.back_alpha))
-            for start, end, behind in box_layout(self.viewer.camera, box, self.scene_rect):
-                draw.add_line(imgui.ImVec2(*start), imgui.ImVec2(*end), back if behind else front, h.box_width)
-        draw.pop_clip_rect()
+            rgb = [srgb_to_linear(c) for c in (h.selected_color if kind == "selected" else h.hover_color)]
+            for start, end, back in box_edges(self.viewer.camera, box):
+                segments.append((start, end))
+                colors.append((*rgb, h.back_alpha if back else 1.0))
+        if not segments:
+            return None
+        return Lines(np.array(segments), np.array(colors), h.box_width * self.viewer.canvas.get_pixel_ratio())

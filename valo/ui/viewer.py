@@ -151,7 +151,8 @@ class Viewer:
             self.camera.azimuth = (self.camera.azimuth + rc.camera.auto_rotate_speed * dt) % 360
         for _ in range(3):  # the layout is known only after the ImGui frame: redraw if the scene rect moved
             self.viewport = self._scene_viewport(texture)
-            self.renderer.render(texture, self.viewport, self.scene, self.camera, self.lighting)
+            self.renderer.render(texture, self.viewport, self.scene, self.camera, self.lighting,
+                                 lines=ed.box_lines() if ed else None)
             self.hover = self._pick_under_pointer()
             if not ed:
                 return

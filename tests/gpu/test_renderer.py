@@ -148,3 +148,19 @@ def test_background_colour_comes_from_rc(viewer):
     with rc_context({"render.background": (1.0, 0.0, 0.0)}):
         img = viewer.snapshot()
     assert (img[0, 0] == (255, 0, 0)).all()  # linear 1.0 → sRGB 255
+
+
+def test_a_mirrored_instance_is_drawn_outside_out(viewer):
+    """An improper instance matrix (det < 0, a mirror) flips the triangles' winding: valo draws those instances with
+    the opposite front face, so a mirror-symmetric mesh looks exactly the same mirrored."""
+    from valo import Camera, meshes
+
+    m = viewer.renderer.material("M", "pbr", base_color=(0.9, 0.6, 0.3))
+    cube = viewer.renderer.instances(meshes.cube(), m)
+    viewer.show(SimpleNamespace(batches=lambda: [cube.batch()]))
+    viewer.camera = Camera(azimuth=-35.0, elevation=25.0, distance=5.0)
+    cube.set([np.eye(4)])
+    proper = viewer.snapshot()
+    cube.set([np.diag([-1.0, 1.0, 1.0, 1.0])])  # the cube is symmetric under x → -x
+    assert cube.batch().mirrored == 1
+    assert np.array_equal(viewer.snapshot(), proper)

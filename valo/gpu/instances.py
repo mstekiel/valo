@@ -17,13 +17,16 @@ __all__ = ["Batch", "Instances", "Spheres"]
 
 
 class Batch(NamedTuple):
-    """What a scene's ``batches()`` yields: one instanced draw. ``source`` is the Instances (for picking/info)."""
+    """What a scene's ``batches()`` yields: one instanced draw. ``source`` is the Instances (for picking/info);
+    the last ``mirrored`` instances of the buffer have improper matrices (det < 0) and are drawn with clockwise
+    front faces, because a mirror flips the triangles' winding."""
 
     material: Material
     mesh: GpuMesh
     bind_group: object
     count: int
     source: object = None
+    mirrored: int = 0
 
 
 class Instances:
@@ -32,6 +35,10 @@ class Instances:
     ``batch()`` is the Batch the renderer draws. ``label`` names the object in the Info panel, and
     ``info(i) -> dict`` (optional) adds scene-specific lines for instance ``i``. ``owner`` (optional) is the scene
     object the instances belong to: a click on any of them selects, and highlights, the whole object.
+
+    Matrices may be improper (det < 0: a mirror or an inversion, e.g. a crystal's symmetry operation). The GPU buffer
+    holds the proper ones first and the mirrored ones last (``order``: buffer slot → index you gave, ``slot``: the
+    reverse); every index you see (``matrices``, ``info``, picks, highlights) is in your order.
     """
 
     def __init__(self, device: wgpu.GPUDevice, instance_layout, mesh: GpuMesh, material: Material,
@@ -47,8 +54,13 @@ class Instances:
         matrices = np.asarray(matrices, np.float32).reshape(-1, 4, 4)
         self.matrices = matrices.copy()  # CPU copy: picking, info and centring read it
         self.count = len(matrices)
+        flipped = np.linalg.det(matrices[:, :3, :3].astype(np.float64)) < 0 if self.count else np.zeros(0, bool)
+        self.order = np.argsort(flipped, kind="stable")  # proper first, mirrored last, each in your order
+        self.slot = np.empty_like(self.order)
+        self.slot[self.order] = np.arange(self.count)
+        self.mirrored = int(flipped.sum())
         data = np.zeros((max(self.count, 1), 4, 4), np.float32)  # buffers can't be empty
-        data[: self.count] = pack_mat4(matrices)
+        data[: self.count] = pack_mat4(matrices[self.order])
         if self.buffer is None or self.capacity < len(data):  # grow only; shrinking reuses the buffer
             self.capacity = max(len(data), 2 * self.capacity)
             self.buffer = self.device.create_buffer(
@@ -59,7 +71,7 @@ class Instances:
 
     def batch(self) -> Batch:
         """The Batch a scene's ``batches()`` returns for these instances."""
-        return Batch(self.material, self.mesh, self.bind_group, self.count, self)
+        return Batch(self.material, self.mesh, self.bind_group, self.count, self, self.mirrored)
 
 
 class Spheres(Instances):

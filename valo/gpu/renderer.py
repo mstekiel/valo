@@ -58,6 +58,17 @@ def renderer() -> Renderer:
     return Renderer(get_device()[1])
 
 
+def _draw_slots(rpass, batch, first: int, n: int, pipelines) -> None:
+    """Draw buffer slots [first, first + n) of ``batch``: the proper instances with ``pipelines[0]``, the mirrored
+    ones (the last ``batch.mirrored`` slots) with ``pipelines[1]`` (clockwise front faces)."""
+    split = batch[3] - (batch[5] if len(batch) > 5 else 0)
+    for lo, hi, pipeline in ((first, min(first + n, split), pipelines[0]),
+                             (max(first, split), first + n, pipelines[1])):
+        if hi > lo:
+            rpass.set_pipeline(pipeline)
+            batch[1].draw(rpass, instances=hi - lo, first_instance=lo)
+
+
 class Renderer:
     """Owns pipelines, layouts and render targets. Knows how to draw anything with ``batches()``."""
 
@@ -79,16 +90,17 @@ class Renderer:
 
         pl_layout = device.create_pipeline_layout(
             bind_group_layouts=[self.frame_layout, self.material_layout, self.instance_layout])
-        self.pipelines = {}
-        for name, frag in FRAGMENT_WGSL.items():  # one pipeline per shading model
+        self.pipelines, self.mirrored_pipelines = {}, {}  # per shading model; mirrored: clockwise front faces
+        for name, frag in FRAGMENT_WGSL.items():
             module = device.create_shader_module(code=COMMON_WGSL + frag)
-            self.pipelines[name] = device.create_render_pipeline(
-                layout=pl_layout,
-                vertex={"module": module, "entry_point": "vs_main", "buffers": [VERTEX_LAYOUT]},
-                primitive={"topology": "triangle-list", "cull_mode": "back"},
-                depth_stencil={"format": DEPTH_FORMAT, "depth_write_enabled": True, "depth_compare": "greater"},
-                fragment={"module": module, "entry_point": "fs_main", "targets": [{"format": SCENE_FORMAT}]},
-            )
+            for pipelines, front in ((self.pipelines, "ccw"), (self.mirrored_pipelines, "cw")):
+                pipelines[name] = device.create_render_pipeline(
+                    layout=pl_layout,
+                    vertex={"module": module, "entry_point": "vs_main", "buffers": [VERTEX_LAYOUT]},
+                    primitive={"topology": "triangle-list", "cull_mode": "back", "front_face": front},
+                    depth_stencil={"format": DEPTH_FORMAT, "depth_write_enabled": True, "depth_compare": "greater"},
+                    fragment={"module": module, "entry_point": "fs_main", "targets": [{"format": SCENE_FORMAT}]},
+                )
 
         self._post_module = device.create_shader_module(code=POST_WGSL)
         self.post_layout = device.create_bind_group_layout(entries=[
@@ -100,15 +112,16 @@ class Renderer:
         hl_module = device.create_shader_module(code=VERTEX_WGSL + HIGHLIGHT_WGSL)
         add = {"color": {"src_factor": "one", "dst_factor": "one", "operation": "add"},
                "alpha": {"src_factor": "zero", "dst_factor": "one", "operation": "add"}}
-        self.highlight_pipeline = device.create_render_pipeline(  # drawn over the scene, same depth
-            layout=device.create_pipeline_layout(
-                bind_group_layouts=[self.frame_layout, hl_layout, self.instance_layout]),
+        hl_pipeline_layout = device.create_pipeline_layout(
+            bind_group_layouts=[self.frame_layout, hl_layout, self.instance_layout])
+        self.highlight_pipelines = tuple(device.create_render_pipeline(  # drawn over the scene, same depth
+            layout=hl_pipeline_layout,
             vertex={"module": hl_module, "entry_point": "vs_main", "buffers": [VERTEX_LAYOUT]},
-            primitive={"topology": "triangle-list", "cull_mode": "back"},
+            primitive={"topology": "triangle-list", "cull_mode": "back", "front_face": front},
             depth_stencil={"format": DEPTH_FORMAT, "depth_write_enabled": False, "depth_compare": "greater-equal"},
             fragment={"module": hl_module, "entry_point": "fs_main",
                       "targets": [{"format": SCENE_FORMAT, "blend": add}]},
-        )
+        ) for front in ("ccw", "cw"))  # proper, mirrored instances
         self._hl_layout, self._hl_buffers = hl_layout, []  # one tint buffer per highlight, made on demand
         self.post_origin = device.create_buffer(size=16, usage=wgpu.BufferUsage.UNIFORM | wgpu.BufferUsage.COPY_DST)
         self._meshes: weakref.WeakKeyDictionary[MeshData, GpuMesh] = weakref.WeakKeyDictionary()
@@ -135,19 +148,20 @@ class Renderer:
 
     def _pick_setup(self):
         """The picking pipeline and its layouts, made on first use."""
-        if getattr(self, "_pick_pipeline", None) is None:
+        if getattr(self, "_pick_pipelines", None) is None:
             d = self.device
             self._pick_layout = d.create_bind_group_layout(entries=[{
                 "binding": 0, "visibility": wgpu.ShaderStage.FRAGMENT, "buffer": {"type": "uniform"}}])
             module = d.create_shader_module(code=VERTEX_WGSL + PICK_WGSL)
-            self._pick_pipeline = d.create_render_pipeline(
-                layout=d.create_pipeline_layout(
-                    bind_group_layouts=[self.frame_layout, self._pick_layout, self.instance_layout]),
+            layout = d.create_pipeline_layout(
+                bind_group_layouts=[self.frame_layout, self._pick_layout, self.instance_layout])
+            self._pick_pipelines = tuple(d.create_render_pipeline(
+                layout=layout,
                 vertex={"module": module, "entry_point": "vs_main", "buffers": [VERTEX_LAYOUT]},
-                primitive={"topology": "triangle-list", "cull_mode": "back"},
+                primitive={"topology": "triangle-list", "cull_mode": "back", "front_face": front},
                 depth_stencil={"format": DEPTH_FORMAT, "depth_write_enabled": True, "depth_compare": "greater"},
                 fragment={"module": module, "entry_point": "fs_main", "targets": [{"format": PICK_FORMAT}]},
-            )
+            ) for front in ("ccw", "cw"))  # proper, mirrored instances
             self._pick_ids: list = []  # bind group per batch index, holding that index + 1
             self._pick_targets = None
 
@@ -194,13 +208,13 @@ class Renderer:
                                       "depth_load_op": "clear", "depth_store_op": "store"},
         )
         rpass.set_scissor_rect(px, py, 1, 1)
-        rpass.set_pipeline(self._pick_pipeline)
+        rpass.set_pipeline(self._pick_pipelines[0])
         rpass.set_bind_group(0, self.frame_bg)
         for i, b in enumerate(batches):
             if b[3] > 0:
                 rpass.set_bind_group(1, self._pick_id(i))
                 rpass.set_bind_group(2, b[2])
-                b[1].draw(rpass, instances=b[3])
+                _draw_slots(rpass, b, 0, b[3], self._pick_pipelines)
         rpass.end()
         self.device.queue.submit([encoder.finish()])
         data = self.device.queue.read_texture({"texture": ids, "origin": (px, py, 0)},
@@ -212,7 +226,11 @@ class Renderer:
         ndc = np.array([(px + 0.5) / vw * 2 - 1, 1 - (py + 0.5) / vh * 2, z, 1.0])
         world = np.linalg.inv(camera.matrices(vw / vh)[0]) @ ndc
         b = batches[batch1 - 1]
-        return Pick(int(batch1) - 1, int(instance), getattr(b, "source", None), world[:3] / world[3])
+        source = getattr(b, "source", None)
+        order = getattr(source, "order", None)
+        if order is not None and instance < len(order):
+            instance = order[instance]  # buffer slot → the index the caller gave
+        return Pick(int(batch1) - 1, int(instance), source, world[:3] / world[3])
 
     def post_pipeline(self, output_format: str):
         """The post pass (linear scene → sRGB) writing to ``output_format`` (made on first use)."""
@@ -283,21 +301,25 @@ class Renderer:
                                       "depth_load_op": "clear", "depth_store_op": "store"},
         )
         rpass.set_bind_group(0, self.frame_bg)
-        for material, mesh, instances_bg, count, *_ in batches:  # one instanced draw call per batch
+        for b in batches:  # one instanced draw call per batch (two when some instances are mirrored)
+            material = b[0]
             rpass.set_pipeline(self.pipelines[material.shading])
             rpass.set_bind_group(1, material.bind_group)
-            rpass.set_bind_group(2, instances_bg)
-            mesh.draw(rpass, instances=count)
+            rpass.set_bind_group(2, b[2])
+            _draw_slots(rpass, b, 0, b[3], (self.pipelines[material.shading],
+                                            self.mirrored_pipelines[material.shading]))
         if highlights:
-            rpass.set_pipeline(self.highlight_pipeline)
+            rpass.set_pipeline(self.highlight_pipelines[0])
         for i, (bi, ii, rgb) in enumerate(highlights):
             if bi < len(all_batches) and (ii is None or ii < all_batches[bi][3]):
+                b = all_batches[bi]
                 buf, bg = self._hl_buffer(i)
                 self.device.queue.write_buffer(buf, 0, np.array([*rgb, 0.0], np.float32))
                 rpass.set_bind_group(1, bg)
-                rpass.set_bind_group(2, all_batches[bi][2])
-                first, n = (0, all_batches[bi][3]) if ii is None else (ii, 1)
-                all_batches[bi][1].draw(rpass, instances=n, first_instance=first)
+                rpass.set_bind_group(2, b[2])
+                slot = getattr(getattr(b, "source", None), "slot", None)
+                first, n = (0, b[3]) if ii is None else (int(slot[ii]) if slot is not None else ii, 1)
+                _draw_slots(rpass, b, first, n, self.highlight_pipelines)
         rpass.end()
 
         rpass = encoder.begin_render_pass(color_attachments=[{

@@ -3,6 +3,7 @@ and its File menu: New shape, Open shape file (the system file dialog), Save to 
 
 from __future__ import annotations
 
+import traceback
 from pathlib import Path
 
 from imgui_bundle import imgui
@@ -10,9 +11,8 @@ from imgui_bundle import imgui_color_text_edit as text_edit
 
 from ..meshes import library
 from ..scene import MeshObject
+from ..ui.messages import level_color
 from ..ui.style import ICON, mono_font
-
-ERROR_COLOR = imgui.ImVec4(1.0, 0.45, 0.4, 1.0)
 
 
 class CodeWindow:
@@ -37,7 +37,7 @@ class CodeWindow:
             try:
                 self.open_shape(Path(paths[0]))
             except Exception as exc:
-                self.status = f"! could not open {Path(paths[0]).name}: {exc}"
+                self.notify(f"could not open {Path(paths[0]).name}: {exc}", "error", traceback.format_exc())
 
     def file_menu(self) -> None:
         """File menu items (valo adds Render below them)."""
@@ -58,6 +58,7 @@ class CodeWindow:
         title = {"new": "New shape", "open": "Open shape file", "save": "Save to library"}[kind]
         if not imgui.is_popup_open(title):
             imgui.open_popup(title)
+            self._dialog_error = ""
         if not imgui.begin_popup_modal(title, None, imgui.WindowFlags_.always_auto_resize)[0]:
             return
         hint = {"new": f"name: a file in {library.directory()}", "open": "path of a .py shape file",
@@ -67,8 +68,10 @@ class CodeWindow:
             imgui.set_keyboard_focus_here()
         done, text = imgui.input_text("##text", text, imgui.InputTextFlags_.enter_returns_true)
         self._dialog = (kind, text)
-        if self.status.startswith("! "):
-            imgui.text_colored(ERROR_COLOR, self.status[2:])
+        if self._dialog_error:
+            imgui.push_text_wrap_pos(imgui.get_font_size() * 30)
+            imgui.text_colored(level_color("error"), self._dialog_error)
+            imgui.pop_text_wrap_pos()
         ok = imgui.button("OK") or done
         if kind == "save" and self._confirm_overwrite:
             imgui.same_line()
@@ -81,16 +84,18 @@ class CodeWindow:
                     self.open_shape(Path(text.strip().strip('"')))
                 else:
                     self.save_to_library(self.selected, text.strip(), overwrite=self._confirm_overwrite)
-                self._dialog = None
+                self._dialog, self._dialog_error = None, ""
                 imgui.close_current_popup()
             except FileExistsError as exc:
                 self._confirm_overwrite = kind == "save"
-                self.status = f"! {exc}"
+                self._dialog_error = str(exc)
+                self.log(str(exc), "warning")
             except Exception as exc:
-                self.status = f"! {exc}"
+                self._dialog_error = str(exc)
+                self.log(str(exc), "error", traceback.format_exc())
         imgui.same_line()
         if imgui.button("Cancel"):
-            self._dialog = None
+            self._dialog, self._dialog_error = None, ""
             imgui.close_current_popup()
         imgui.end_popup()
 
@@ -121,8 +126,6 @@ class CodeWindow:
         imgui.end_disabled()
         imgui.same_line()
         imgui.text(f"{self.code_path.name}{'  ●' if self.dirty else ''}")
-        imgui.same_line()
-        imgui.text_disabled(self.status if not self.status.startswith("! ") else "")
         error = self.code_error
         footer = 0 if not error else 6 * imgui.get_text_line_height_with_spacing()
         imgui.push_font(mono_font(), 0.0)
@@ -136,7 +139,7 @@ class CodeWindow:
         if text != self._in_widget:
             self.code = self._in_widget = text
         if error:
-            imgui.push_style_color(imgui.Col_.text, ERROR_COLOR)
+            imgui.push_style_color(imgui.Col_.text, level_color("error"))
             imgui.push_font(mono_font(), 0.0)
             imgui.text_wrapped(error)
             imgui.pop_font()

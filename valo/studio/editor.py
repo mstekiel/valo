@@ -76,7 +76,6 @@ class StudioEditor(CodeWindow, NormalsOverlay, SceneEditor):
         self.code_path: Path | None = None  # the shape file in the Code window
         self.code = ""  # the Code window's text (what you typed)
         self.saved_code = ""  # the file's text when last opened, saved or reloaded
-        self.status = ""
         self._widget = None  # the TextEditor, made on first draw
         self._in_widget = None  # the text last put into the widget
         self._code_mtime = 0.0
@@ -84,6 +83,7 @@ class StudioEditor(CodeWindow, NormalsOverlay, SceneEditor):
         self._browsing = None  # the open file dialog, polled each frame until you pick a file or cancel
         self._pending: tuple[Path, str] | None = None  # (file, error): opened but its object couldn't be made yet
         self._confirm_overwrite = False
+        self._dialog_error = ""  # why the last OK in a File dialog failed, shown in the dialog
         self.show_normals, self.normal_length = False, 0.08  # the normals overlay (view state, not undoable)
         self.normals = scene.renderer.instances(meshes.arrow(), scene.renderer.material(
             "Normals", "unlit", base_color=(1.0, 0.75, 0.1)), label="normal", info=self.normal_info)
@@ -103,7 +103,7 @@ class StudioEditor(CodeWindow, NormalsOverlay, SceneEditor):
         self.code_path = Path(path)
         self.code = self.saved_code = self.code_path.read_text(encoding="utf-8")
         self._code_mtime = self.code_path.stat().st_mtime
-        self.status = f"opened {self.code_path.name}"
+        self.log(f"opened {self.code_path}")
 
     def set_code(self, text: str) -> None:
         """Replace the Code window's text (what typing does; typing has the widget's own undo, so not recorded)."""
@@ -141,7 +141,10 @@ class StudioEditor(CodeWindow, NormalsOverlay, SceneEditor):
                        lambda: self._write_and_reload(path, new))
             if self._pending is not None and _same(self._pending[0], path) and not self.users(path):
                 self._try_add(path)  # opened while broken: the object appears once the file builds
-        self.status = f"saved {path.name}" + (" (with errors)" if self.code_error else "")
+        if self.code_error:
+            self.notify(f"saved {path.name}, but it doesn't build", "error", self.code_error)
+        else:
+            self.notify(f"saved {path.name}")
 
     def add_shape(self, source, parent=None, material: str | None = None) -> MeshObject:
         """Add an object made by ``source``; a shape file with a ``MATERIAL`` preset gets it as a new scene
@@ -172,7 +175,7 @@ class StudioEditor(CodeWindow, NormalsOverlay, SceneEditor):
         obj = self._try_add(path)
         self.open_code(path)
         if obj is None:
-            self.status = f"! {path.name} doesn't build yet: fix the code and save"
+            self.notify(f"{path.name} doesn't build yet: fix the code and save", "warning", self.code_error or "")
         return obj
 
     def new_shape(self, name: str) -> MeshObject:
@@ -224,7 +227,7 @@ class StudioEditor(CodeWindow, NormalsOverlay, SceneEditor):
 
         put(text, None, Transform())()
         self._push(f"Save {obj.name} to library as {name}", put(*old), put(text, None, Transform()))
-        self.status = f"saved to {target}"
+        self.notify(f"saved to the library: {target.name}", detail=str(target))
         return target
 
     # -- hot reload and following the selection
@@ -235,7 +238,7 @@ class StudioEditor(CodeWindow, NormalsOverlay, SceneEditor):
         path = self.code_path
         if path is not None and not self.dirty and path.exists() and path.stat().st_mtime != self._code_mtime:
             self.open_code(path)
-            self.status = f"reloaded {path.name} (changed on disk)"
+            self.log(f"reloaded {path.name} (changed on disk)")
 
     # -- normals overlay
 

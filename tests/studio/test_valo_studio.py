@@ -246,7 +246,7 @@ def test_open_shape_file_uses_the_system_file_dialog(viewer, studio, tmp_path, m
         assert names == ["Vase"] and studio.code_path == path
     else:
         assert names == [] and studio._browsing is None
-        assert ("could not open missing.py" in studio.status) == (picked == "missing")
+        assert any("could not open missing.py" in m.text for m in studio.messages) == (picked == "missing")
 
 
 def test_without_a_system_dialog_a_path_field_opens(studio, monkeypatch):

@@ -3,7 +3,8 @@
 A shape function (``valo.meshes.primitives.sphere``, a shape file's ``mesh``, an app's builder) declares its
 parameters with defaults and ``float`` / ``int`` / ``bool`` annotations; ``shape_params`` turns them into
 ``ShapeParam`` records that panels show as sliders and checkboxes. Ranges come from a ``ranges`` dict (a shape
-file's ``RANGES``, or a ``func.ranges`` attribute) or a default around the default value.
+file's ``RANGES``, or a ``func.ranges`` attribute: name → ``(lo, hi)`` or ``(lo, hi, step)``) or a default around
+the default value.
 """
 
 from __future__ import annotations
@@ -14,13 +15,14 @@ from dataclasses import dataclass
 
 @dataclass
 class ShapeParam:
-    """One parameter of a shape function: name, widget kind, default and slider range."""
+    """One parameter of a shape function: name, widget kind, default, slider range and step (None: smooth)."""
 
     name: str
     kind: str  # "float" | "int" | "bool" → decides the widget
     default: float | int | bool
     lo: float = 0.0
     hi: float = 1.0
+    step: float | None = None
 
 
 def param_kind(annotation, default) -> str:
@@ -50,6 +52,6 @@ def shape_params(func, ranges: dict | None = None, skip: int = 0) -> list[ShapeP
         if p.default is inspect.Parameter.empty:
             raise TypeError(f"parameter {p.name!r} of {getattr(func, '__name__', func)}() needs a default value")
         kind = param_kind(p.annotation, p.default)
-        lo, hi = ranges.get(p.name, default_range(kind, p.default))
-        out.append(ShapeParam(p.name, kind, p.default, lo, hi))
+        lo, hi, *step = ranges.get(p.name, default_range(kind, p.default))
+        out.append(ShapeParam(p.name, kind, p.default, lo, hi, step[0] if step else None))
     return out

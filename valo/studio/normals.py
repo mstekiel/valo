@@ -8,6 +8,7 @@ from imgui_bundle import imgui
 from ..config import rc
 from ..math import instance_matrices
 from ..scene import MeshObject
+from ..ui.widgets import SliderSpec
 
 
 class NormalsOverlay:
@@ -53,4 +54,5 @@ class NormalsOverlay:
         if isinstance(self.selected, MeshObject):
             _, self.show_normals = imgui.checkbox("Show normals", self.show_normals)
             if self.show_normals:
-                _, self.normal_length = imgui.slider_float("Normal length", self.normal_length, 0.01, 0.5)
+                spec = SliderSpec(0.01, 0.5, 0.08, hard_lo=1e-4)
+                _, self.normal_length = self.slider("normals.length", "Normal length", self.normal_length, spec)

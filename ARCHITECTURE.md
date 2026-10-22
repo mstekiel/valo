@@ -85,7 +85,9 @@ viewer.show(scene, SceneEditor(scene))
 - **Names** of nodes and materials are unique per scene (" 2" suffix), so they work as references.
 - **GPU**: each object owns an `Instances` whose `owner` is the object; `scene.batches()` draws the visible ones.
   A click on any instance selects the whole object. `Node.bounding_box()` is the box around a node's content in
-  its own frame (it tilts and scales with the node); the selected and hovered nodes are drawn with it. An
+  its own frame (it tilts and scales with the node); the selected and hovered nodes are drawn with it, as overlay
+  lines (`gpu.Lines`, `Renderer.render(lines=)`) in the scene pass against its depth, so objects in front hide
+  them (Blender's overlay engine does the same). The compass stays an ImGui overlay on top. An
   `InstancedObject` is boxed instance by instance (`instance_box(i)` / `instance_boxes()`): the selection shows a
   box per instance, hover only the instance under the pointer.
 - **Serialization**: `scene.settings()` / `Scene.from_settings(d)`: materials plus the tree as plain data,

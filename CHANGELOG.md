@@ -26,6 +26,8 @@ versions follow [Semantic Versioning](https://semver.org/) (while at 0.x, a mino
   0.5 px steps.
 
 ### Fixed
+- Bounding boxes no longer show through objects in front of them (drawn in the scene pass, depth-tested).
+- GPU tests no longer skip silently when the renderer fails to build (only without a GPU adapter).
 - Preferences → Scene background raised "Missing End()" (the image size had no widget).
 - The test suite no longer reads the user's `valorc.toml`.
 

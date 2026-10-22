@@ -129,17 +129,58 @@ def test_system_view_rejects_a_bad_lattice_matrix():
 
 
 def fake_sw(A=A_LFO):
-    """A duck-typed stand-in for a SpinW object, shaped like what adapter.py reads."""
-    atoms = [SimpleNamespace(label="Fe", r=u, m=m, s=2.5) for u, m in zip(FE_UVW, FE_M, strict=True)]
-    return SimpleNamespace(crystal=SimpleNamespace(A=np.array(A, float), atoms_all=atoms))
+    """A duck-typed stand-in for a SpinW object: LFO's Fe site, the Pbnm operations that copy it, and spinwaves' own
+    cell positions (what the adapter's position check reads)."""
+    atoms_all = [SimpleNamespace(label="Fe", r=u) for u in FE_UVW]
+    return SimpleNamespace(crystal=SimpleNamespace(A=np.array(A, float), atoms_all=atoms_all),
+                           sites=[("Fe", (0, 0.5, 0), (-1, 0, 0.1), 2.5)], ops=list(PBNM_OPS[:4]),
+                           generators=[[0, 0], [0, 1], [0, 2], [0, 3]])
 
 
-def test_adapter_reads_sw_and_checks_the_contract(monkeypatch):
+@pytest.fixture
+def filled(monkeypatch):
+    """The adapter's required stubs filled for ``fake_sw`` objects, as you fill them for spinwaves."""
+    stubs = {
+        "site_positions_uvw": lambda sw: [s[1] for s in sw.sites],
+        "site_moments_xyz": lambda sw: [s[2] for s in sw.sites],
+        "site_labels": lambda sw: [s[0] for s in sw.sites],
+        "site_spins": lambda sw: [s[3] for s in sw.sites],
+        "symmetry_operations": lambda sw: sw.ops,
+        "atom_operation": lambda sw, op: np.block([[op.R, op.t[:, None]], [np.zeros((1, 3)), np.ones((1, 1))]]),
+        "moment_operation": lambda sw, op: op.M,
+        "operation_label": lambda sw, op: op.label,
+        "atom_generators": lambda sw: np.array(sw.generators),
+    }
+    for name, stub in stubs.items():
+        monkeypatch.setattr(adapter, name, stub)
+    return monkeypatch
+
+
+def test_unfilled_stubs_say_what_to_fill():
+    with pytest.raises(NotImplementedError, match="fill in from spinwaves: site_labels"):
+        adapter.system_view(fake_sw())
+
+
+def test_the_adapter_builds_the_cell_from_sites_and_operations(filled):
     view = adapter.system_view(fake_sw())
-    assert view.labels == ["Fe"] and view.atoms[2].uvw == (0, 0.5, 0.5) and view.atoms[0].spin == 2.5
-    assert np.allclose(view.A, A_LFO)
-    monkeypatch.setattr(adapter, "atom_moments_xyz", lambda sw: np.zeros((3, 3)))
-    with pytest.raises(ValueError, match=r"atom_moments_xyz must return .* shape \(4, 3\)"):
+    assert view.labels == ["Fe"] and len(view.ops) == 4 and np.allclose(view.A, A_LFO)
+    assert np.allclose([a.uvw for a in view.atoms], FE_UVW)  # spinwaves' order
+    assert [(a.site, a.op) for a in view.atoms] == [(0, 0), (0, 1), (0, 2), (0, 3)]
+    assert np.allclose([a.moment[0] for a in view.atoms], [-1, 1, 1, -1]) and view.atoms[3].spin == 2.5
+    assert view.ops[1].label == "x+1/2,-y+1/2,-z, -1"
+
+
+@pytest.mark.parametrize(("stub", "value", "message"), [
+    ("atom_operation", lambda sw, op: np.block([[op.R, op.t[:, None] + 0.25], [np.zeros((1, 3)), np.ones((1, 1))]]),
+     "check adapter.atom_operation and adapter.atom_generators"),  # caught by spinwaves' own positions
+    ("atom_operation", lambda sw, op: np.eye(4) * 2, "must return \\[\\[R, t\\], \\[0, 0, 0, 1\\]\\]"),
+    ("moment_operation", lambda sw, op: np.eye(4), "moment_operation must return"),
+    ("atom_generators", lambda sw: np.array([[0, 0], [0, 7]]), "operation index outside"),
+    ("atom_generators", lambda sw: np.array([[0, 0], [0, 0]]), "land on the same position"),
+])
+def test_the_adapter_names_the_stub_that_breaks_the_contract(filled, stub, value, message):
+    filled.setattr(adapter, stub, value)
+    with pytest.raises(ValueError, match=message):
         adapter.system_view(fake_sw())
 
 
@@ -239,7 +280,7 @@ def test_a_lattice_change_moves_everything_and_keeps_your_edits(studio):
     assert structure.params["umin"] == -0.1 and "min < max" in editor.errors["Structure"]
 
 
-def test_lattice_edits_go_through_the_adapter(viewer, monkeypatch):
+def test_lattice_edits_go_through_the_adapter(viewer, monkeypatch, filled):
     from spinw_studio import adapter, show
     from spinw_studio.model import lattice_matrix
 

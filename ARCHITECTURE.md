@@ -13,7 +13,8 @@ valo/
   gpu/         the draw engine: shaders (WGSL), Material, GpuMesh, Instances, Renderer      wgpu
   scene/       the data model: Camera, Lighting, Shape, nodes, Scene                        GPU via a Renderer
   offline.py   valo.render (images without a window), render scripts
-  ui/          editors: Editor + windows/ (mixins), overlays, navigation, Viewer, SceneEditor
+  ui/          editors: Editor + windows/ (mixins), widgets (slider), messages, overlays, navigation, native, Viewer,
+               SceneEditor
   studio/      the base studio app (valo-studio): StudioEditor, Code window, normals, CLI
   config.py    rc, used by every layer                 testing.py   helpers for tests of valo and its apps
 ```
@@ -134,9 +135,26 @@ A real app subclasses `Editor`: its actions are methods that push `Command`s, an
 dockable windows as `{title: draw_function}`; `material_section(m)` gives the schema-driven material editor.
 Optional: `menus()` adds menus (e.g. File) before Edit and View; `dock_bottom` / `bottom_share` / `right_column` /
 `dock_left` / `left_column` shape the default layout. The base class draws the menu bar (Edit: undo/redo, View: window toggles, auto-rotate,
-UI scale, Reset layout), the History window and the dockspace; the scene shows through the empty **central dock
-node**. The layout is saved to `~/.valo/<title>.ini` (real windows only, also on close). A scene with
+UI scale, Reset layout), the History and Console windows and the dockspace; the scene shows through the empty
+**central dock node**. The layout is saved to `~/.valo/<title>.ini` (real windows only, also on close). A scene with
 `bounding_radius()` gets the camera fitted on `show`.
+
+- **Messages** (`ui/messages.py`): `editor.notify(text, level, detail)` shows a box at the mouse (info green,
+  warning orange, error red; it stays until the mouse moves away, a click or key, or `rc.ui.message_seconds`) and
+  keeps the message; `editor.log(...)` only keeps it. Errors the Viewer recovers from in a window become error
+  messages with the traceback. Snapshots leave the box out.
+- **Console** (`ui/windows/console.py`, shared): every message with time, level and detail; filters, Clear,
+  Copy all. The studio sends what shape files print to it (`ConsoleStream` around its `gui()`).
+- **Sliders** (`ui/widgets.py`, `editor.slider(key, label, value, SliderSpec)`): every number slider. A filled bar;
+  drag in `step` increments (Shift: fine), double-click / Ctrl-click to type, Esc to cancel; soft range for
+  dragging, hard limits for typing; right-click: reset, copy / paste, and the range and step
+  (`editor.slider_ranges`, view state). Save to library writes changed shape ranges into `RANGES`
+  (`(lo, hi[, step])`).
+- **Style changes apply between frames**: `set_ui_scale` / font size / accent are applied at the start of the next
+  `gui()` (`apply_pending_style`), never while windows draw; Preferences applies UI scale and font size when their
+  slider is released.
+- **The native window** (`ui/native.py`): valo's icon (`valo/assets/icons/`, or `Viewer(icon=...)`) and, on
+  Windows 11, the title bar colours `rc.ui.title_bar` / `title_text`.
 
 ## Camera and lighting
 
@@ -158,8 +176,9 @@ shading uses a constant view vector) · `light_dir` · `light_color` (× intensi
 · `ground`.
 
 Look: `valo/ui/style.py` loads Roboto with Font Awesome icons merged in (`ICON.FLOPPY_DISK` etc.) and
-Inconsolata (`mono_font()`), and applies the theme (`apply_style(scale)`). ImGui 1.92 rasterises them at the
-real pixel density, so text is crisp at any DPI.
+Inconsolata with the icons too (`mono_font()`), and applies the theme (`apply_style(scale)`: spacing × scale,
+text `rc.ui.font_size` × scale). ImGui 1.92 rasterises fonts at any size and the real pixel density, so text is
+crisp at any DPI and the font size changes without a restart.
 
 ## Configuration: `valo.rc`
 

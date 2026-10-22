@@ -92,9 +92,35 @@ def test_reset_layout_shows_closed_windows_and_ui_scale_resizes(viewer):
     viewer.snapshot()
     assert editor.visible["History"]
     editor.set_ui_scale(1.5)
+    viewer.snapshot()
     imgui.set_current_context(viewer.imgui.imgui_context)
     assert imgui.get_style().font_scale_main == 1.5 and editor.ui_scale == 1.5
     editor.set_ui_scale(1.0)
+    viewer.snapshot()
+
+
+def test_style_changes_apply_between_frames_not_inside_one(viewer):
+    from imgui_bundle import imgui
+
+    from valo import Editor, rc, rc_context
+
+    editor, seen = Editor(), []
+
+    def panel():  # what a Preferences slider does: change the scale while windows are drawing
+        if not seen:
+            editor.set_preference("ui.scale", 1.5)
+            editor.set_preference("ui.font_size", 18.3)
+        seen.append((imgui.get_style().font_scale_main, imgui.get_style().font_size_base))
+
+    editor.panel = panel
+    viewer.show(SimpleNamespace(batches=list), editor)
+    with rc_context():
+        viewer.snapshot()
+        assert seen[0] == (1.0, 16.0)  # the frame that made the change still draws with the old style
+        assert seen[-1] == (1.5, 18.5) and rc.ui.font_size == 18.5  # the next frame has it; font size in 0.5 steps
+        assert viewer.gui_error is None
+    editor.set_ui_scale(rc.ui.scale)
+    viewer.snapshot()
 
 
 def test_flat_ambient_can_be_switched_off_again(viewer):
@@ -127,6 +153,7 @@ def test_preferences_window_edits_rc_live(viewer):
         viewer.snapshot()
         assert viewer.gui_error is None, viewer.gui_error
         editor.set_preference("ui.scale", 1.25)
+        viewer.snapshot()
         imgui.set_current_context(viewer.imgui.imgui_context)
         assert rc.ui.scale == 1.25 and imgui.get_style().font_scale_main == 1.25
         with pytest.raises(ValueError):

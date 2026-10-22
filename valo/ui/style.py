@@ -68,8 +68,9 @@ def _palette(accent) -> dict:
 def apply_style(scale: float = 1.0) -> None:
     """valo's theme for the current context: rounded, roomy, dark neutral greys with one accent colour.
 
-    ``scale`` multiplies text and spacing together (1.0 = 16 px text, on top of the monitor's pixel density);
-    call it again to change the scale.
+    ``scale`` multiplies text and spacing together (on top of the monitor's pixel density), and the text size is
+    ``rc.ui.font_size``; call it again to change them. Call it between frames (the Editor does it at the start of
+    its ``gui()``): changing fonts while windows are drawing leaves them half laid out.
     """
     style = imgui.get_style()
     for key, rgba in _palette(rc.ui.accent).items():
@@ -90,3 +91,5 @@ def apply_style(scale: float = 1.0) -> None:
     style.separator_text_border_size = 1.0
     style.window_title_align = imgui.ImVec2(0.0, 0.5)
     style.font_scale_main = scale
+    # ImGui 1.92 rasterises fonts at any size (no reload); NewFrame copies the "next frame" size into the base
+    style.font_size_base = style._next_frame_font_size_base = rc.ui.font_size

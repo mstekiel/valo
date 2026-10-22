@@ -145,6 +145,7 @@ class Editor(CameraWindow, LightingWindow, InfoWindow, HistoryWindow, RenderWind
 
     def gui(self) -> None:
         """Called by the Viewer's ImguiRenderer every frame."""
+        self.apply_pending_style()
         io = imgui.get_io()
         if io.key_ctrl and not io.want_text_input:
             if imgui.is_key_pressed(imgui.Key.z):

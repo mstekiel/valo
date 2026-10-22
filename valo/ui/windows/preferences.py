@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 from dataclasses import fields
+from decimal import Decimal
 
 from imgui_bundle import imgui
 
 from ...config import SECTIONS, USER_FILE, rc
 from ...gpu.material import linear_to_srgb, srgb_to_linear
 from ..style import ICON, apply_style
+
+ON_RELEASE = ("ui.scale", "ui.font_size")  # applied when the slider is released, not while dragging
 
 
 def _pref_widget(f, value) -> tuple[bool, object]:
@@ -20,7 +23,9 @@ def _pref_widget(f, value) -> tuple[bool, object]:
     if isinstance(value, int):
         return imgui.slider_int(label, value, m["lo"], m["hi"], f"%d{unit}")
     if isinstance(value, float):
-        return imgui.slider_float(label, value, m["lo"], m["hi"], f"%.3g{unit}")
+        fmt = f"%.{max(0, -Decimal(str(m['step'])).as_tuple().exponent)}f{unit}" if m["step"] else f"%.3g{unit}"
+        changed, v = imgui.slider_float(label, value, m["lo"], m["hi"], fmt)
+        return changed, (round(v / m["step"]) * m["step"] if m["step"] else v)
     if isinstance(value, tuple) and len(value) == 3:
         if m["hi"] == 255:  # sRGB 0-255
             changed, col = imgui.color_edit3(label, [c / 255 for c in value], imgui.ColorEditFlags_.no_inputs)
@@ -45,13 +50,14 @@ class PreferencesWindow:
     def set_preference(self, key: str, value) -> None:
         """Set config key ``key`` (e.g. "camera.orbit_speed") and apply it where it takes effect immediately."""
         rc[key] = value
-        if key in ("ui.scale", "ui.accent"):
+        if key in ("ui.scale", "ui.accent", "ui.font_size"):
             self.set_ui_scale(rc.ui.scale)
 
     def preferences_window(self) -> None:
         """Every ``rc`` key, with widgets generated from the config schema, plus Save and Reset."""
         imgui.push_text_wrap_pos(0.0)
-        imgui.text_disabled("Defaults and preferences; changes apply now. Font size applies on restart.")
+        imgui.text_disabled("Defaults and preferences; changes apply now (font size and UI scale when you release "
+                            "the slider).")
         imgui.pop_text_wrap_pos()
         if imgui.button(f"{ICON.FLOPPY_DISK} Save to {USER_FILE.name}"):
             self.status_message = f"saved {rc.save()}"
@@ -72,13 +78,29 @@ class PreferencesWindow:
             if not imgui.collapsing_header(f"{SECTIONS[name].__doc__.split(':')[0].rstrip('.')}  ##{name}"):
                 continue
             for f in fields(section):
-                changed, value = _pref_widget(f, getattr(section, f.name))
-                if changed:
-                    self.set_preference(f"{name}.{f.name}", value)
+                key = f"{name}.{f.name}"
+                if key in ON_RELEASE:  # they resize the slider itself: apply when it is let go
+                    dragged = self.__dict__.setdefault("_pref_dragged", {})
+                    changed, value = _pref_widget(f, dragged.get(key, getattr(section, f.name)))
+                    if changed:
+                        dragged[key] = value
+                    if imgui.is_item_deactivated_after_edit() and key in dragged:
+                        self.set_preference(key, dragged.pop(key))
+                    elif not imgui.is_item_active():
+                        dragged.pop(key, None)
+                else:
+                    changed, value = _pref_widget(f, getattr(section, f.name))
+                    if changed:
+                        self.set_preference(key, value)
                 if f.metadata["help"] and imgui.is_item_hovered():
                     imgui.set_tooltip(f.metadata["help"])
 
     def set_ui_scale(self, scale: float) -> None:
-        """Scale text and spacing of the whole UI."""
+        """Scale text and spacing of the whole UI; applied at the start of the next frame (with the font size)."""
         self.ui_scale = scale
-        apply_style(scale)
+        self._restyle = True
+
+    def apply_pending_style(self) -> None:
+        """Apply a UI scale / font size / accent change made during the last frame (called before any window)."""
+        if self.__dict__.pop("_restyle", False):
+            apply_style(self.ui_scale)

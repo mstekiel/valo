@@ -25,10 +25,11 @@ from pathlib import Path
 USER_FILE = Path.home() / ".valo" / "valorc.toml"
 
 
-def opt(default, label: str, lo=None, hi=None, unit: str = "", choices: tuple = (), help: str = ""):
-    """A config field: its default plus the metadata used for validation, the docs and the Preferences window."""
+def opt(default, label: str, lo=None, hi=None, unit: str = "", choices: tuple = (), help: str = "", step=None):
+    """A config field: its default plus the metadata used for validation, the docs and the Preferences window.
+    ``step``: numbers are rounded to a multiple of it (e.g. 0.5 for font sizes)."""
     return field(default=default, metadata={"label": label, "lo": lo, "hi": hi, "unit": unit,
-                                            "choices": choices, "help": help})
+                                            "choices": choices, "help": help, "step": step})
 
 
 class Section:
@@ -52,6 +53,8 @@ def _check(key: str, spec, value):
         value = type(default)(value) if isinstance(default, float) or float(value).is_integer() else value
         if isinstance(default, int) and not isinstance(value, int):
             raise ValueError(f"{key} must be a whole number, not {value!r}")
+        if meta.get("step"):
+            value = type(default)(round(value / meta["step"]) * meta["step"])
         if (meta["lo"] is not None and value < meta["lo"]) or (meta["hi"] is not None and value > meta["hi"]):
             raise ValueError(f"{key} = {value} is outside [{meta['lo']}, {meta['hi']}]")
     elif isinstance(default, tuple):
@@ -145,7 +148,7 @@ class UIConfig(Section):
     """Look and layout of the panels."""
 
     NAME = "ui"
-    font_size: float = opt(16.0, "Font size", 10.0, 32.0, "px")
+    font_size: float = opt(16.0, "Font size", 10.0, 32.0, "px", step=0.5)
     scale: float = opt(1.0, "UI scale", 0.5, 3.0, "x")
     accent: tuple = opt((66, 133, 244), "Accent colour", 0, 255, "sRGB 0-255")
     right_column: float = opt(0.3, "Right column width", 0.1, 0.7, "share")

@@ -53,11 +53,16 @@ class Messages:
     def notify(self, text: str, level: str = "info", detail: str = "") -> Message:
         """Tell the user ``text`` in a box at the mouse (``level``: "info" green, "warning" orange, "error" red);
         ``detail`` (e.g. a traceback) goes only to the Console. Returns the message."""
+        message = self.log(text, level, detail)
+        self.toast = (message, self.clock(), None)  # anchor: the mouse position, taken when it is first drawn
+        return message
+
+    def log(self, text: str, level: str = "info", detail: str = "") -> Message:
+        """Add a message to the Console only (no box at the mouse), e.g. what a shape file printed."""
         if level not in LEVELS:
             raise ValueError(f"level must be one of {LEVELS}, not {level!r}")
         message = Message(text, level, detail)
         self.messages.append(message)
-        self.toast = (message, self.clock(), None)  # anchor: the mouse position, taken when it is first drawn
         return message
 
     def draw_toast(self) -> None:
@@ -94,6 +99,27 @@ class Messages:
         imgui.end()
         imgui.pop_style_var()
         imgui.pop_style_color()
+
+
+class ConsoleStream:
+    """A text stream (for ``contextlib.redirect_stdout``) that logs every complete line to ``editor`` at ``level``,
+    prefixed with ``prefix``; ``flush`` logs a last unfinished line."""
+
+    def __init__(self, editor, level: str = "info", prefix: str = ""):
+        self.editor, self.level, self.prefix, self._partial = editor, level, prefix, ""
+
+    def write(self, text: str) -> int:
+        """Log the complete lines of ``text`` (and keep a trailing partial line); returns ``len(text)``."""
+        *lines, self._partial = (self._partial + text).split("\n")
+        for line in lines:
+            self.editor.log(f"{self.prefix}{line}", self.level)
+        return len(text)
+
+    def flush(self) -> None:
+        """Log a pending partial line."""
+        if self._partial:
+            self.editor.log(f"{self.prefix}{self._partial}", self.level)
+            self._partial = ""
 
 
 def _any_key_pressed() -> bool:

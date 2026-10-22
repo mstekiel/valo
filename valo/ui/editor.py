@@ -24,6 +24,7 @@ from .style import ICON
 from .undo import Command, UndoStack
 from .widgets import Widgets
 from .windows.camera import CameraWindow
+from .windows.console import ConsoleWindow
 from .windows.history import HistoryWindow
 from .windows.info import InfoWindow
 from .windows.lighting import LightingWindow
@@ -31,11 +32,11 @@ from .windows.preferences import PreferencesWindow
 from .windows.render import RenderWindow
 
 UI_SCALES = (0.85, 1.0, 1.15, 1.3, 1.5, 1.75, 2.0)
-SHARED_WINDOWS = ("Info", "Camera", "Lighting", "History")  # added by the base class, docked in the lower part
+SHARED_WINDOWS = ("Info", "Camera", "Lighting", "History", "Console")  # by the base class, in the lower part
 
 
-class Editor(CameraWindow, LightingWindow, InfoWindow, HistoryWindow, RenderWindow, PreferencesWindow, Overlays,
-             Widgets, Messages):
+class Editor(CameraWindow, LightingWindow, InfoWindow, HistoryWindow, ConsoleWindow, RenderWindow, PreferencesWindow,
+             Overlays, Widgets, Messages):
     """Base class for an app's editor: undoable actions, dockable windows and the shared UI."""
     title = "valo"
     right_column: float | None = None  # share of the window width for the right dock column (None: rc.ui)
@@ -136,10 +137,10 @@ class Editor(CameraWindow, LightingWindow, InfoWindow, HistoryWindow, RenderWind
 
     # -- frame
     def all_windows(self) -> dict[str, Callable[[], None]]:
-        """The app's windows plus the shared Camera, Lighting and History windows."""
+        """The app's windows plus the shared Info, Camera, Lighting, History and Console windows."""
         shared = ({"Info": self.info_window, "Camera": self.camera_window, "Lighting": self.lighting_window}
                   if self.viewer else {})
-        return {**self.windows(), **shared, "History": self.history_window}
+        return {**self.windows(), **shared, "History": self.history_window, "Console": self.console_window}
 
     def _in_bottom(self, name: str) -> bool:
         return name in self.dock_bottom or name in SHARED_WINDOWS

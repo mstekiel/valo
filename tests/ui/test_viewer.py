@@ -54,7 +54,8 @@ def test_scene_fills_the_central_dock_node_and_windows_dock_around_it(viewer):
     assert x == 0 and 0 < y < 60  # below the menu bar
     assert 0.6 < w / viewer.canvas.get_physical_size()[0] < 0.8  # right column takes the rest
     assert y + h == viewer.canvas.get_physical_size()[1]
-    assert set(editor.visible) == {"A", "B", "Info", "Camera", "Lighting", "History"} and all(editor.visible.values())
+    assert set(editor.visible) == {"A", "B", "Info", "Camera", "Lighting", "History", "Console"}
+    assert all(editor.visible.values())
     assert viewer.layout_file is None  # offscreen canvas: never writes a layout file
 
 

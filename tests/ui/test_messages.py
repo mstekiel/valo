@@ -17,6 +17,7 @@ def editor(viewer):
     ed.clock = lambda: ed.now  # seconds, moved by the test
     viewer.show(SimpleNamespace(batches=list), ed)
     viewer.snapshot()
+    viewer.gui_error = None
     return ed
 
 
@@ -88,3 +89,17 @@ def test_an_error_in_a_window_becomes_an_error_message(viewer, editor):
     assert "Traceback" in editor.messages[-1].detail
     editor.panel = lambda: None
     frame(viewer)
+
+
+def test_the_console_lists_messages_and_copies_them_as_text(viewer, editor):
+    editor.notify("saved vase.py")
+    editor.log("> hello from mesh()")
+    editor.notify("build failed", "error", "Traceback (most recent call last):\n  line 3\nValueError: bad\n")
+    frame(viewer)  # the Console is a shared window, open by default
+    assert editor.visible["Console"] and viewer.gui_error is None
+    lines = editor.console_text().splitlines()
+    assert [line.split(" ", 1)[1] for line in lines] == [
+        "INFO    saved vase.py", "INFO    > hello from mesh()", "ERROR   build failed",
+        "   Traceback (most recent call last):", "     line 3", "   ValueError: bad"]
+    editor.messages.clear()
+    assert editor.console_text() == ""

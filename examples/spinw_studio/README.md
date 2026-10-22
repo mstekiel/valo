@@ -7,7 +7,7 @@ and shows them in an interactive valo studio, or renders them to an image.
 It's the first real application on valo, and its needs steer the engine's development.
 
 This document is the **defining document** of spinw_studio: the layers, the data contract, the options and the
-rules. Change it whenever one of those changes. The original design notes are in [PLAN.md](PLAN.md).
+rules. Change it whenever one of those changes.
 
 ## Status
 **Works now:**

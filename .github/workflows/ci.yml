@@ -1,0 +1,25 @@
+# Lint and test on every push to main and every pull request.
+# Windows, like the main development machine; GPU tests run on the runner's software adapter when wgpu finds one,
+# and skip otherwise (valo.testing skips only when there is no adapter). The spinw group (local spinwaves) is not
+# installed: spinw_studio's tests use a hand-made system and need no spinwaves.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+      - name: Install (from uv.lock)
+        run: uv sync --frozen
+      - name: Lint
+        run: uv run ruff check .
+      - name: Test
+        run: uv run pytest -rs

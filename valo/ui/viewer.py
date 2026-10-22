@@ -161,10 +161,13 @@ class Viewer:
 
     @staticmethod
     def _pick_box(pick) -> tuple[object, np.ndarray | None]:
-        """(what the pick stands for, its box matrix): the owner's box when the picked instances belong to an object
-        with ``bounding_box()``, else the box of the picked instance (its mesh bounds, turned with it)."""
+        """(what the pick stands for, its box matrix): the picked instance's box when its object boxes instances
+        one by one (``instance_box``), the owner's box when it belongs to another object with ``bounding_box()``,
+        else the box of the picked instance (its mesh bounds, turned with it)."""
         src = pick.source
         owner = getattr(src, "owner", None)
+        if owner is not None and hasattr(owner, "instance_box"):
+            return (id(owner), pick.instance_index), owner.instance_box(pick.instance_index)
         if owner is not None and hasattr(owner, "bounding_box"):
             return owner, owner.bounding_box()
         if src is None or pick.instance_index >= len(getattr(src, "matrices", ())):
@@ -173,12 +176,28 @@ class Viewer:
         corners = (m @ np.c_[box_corners(*src.mesh.bounds), np.ones(8)].T).T[:, :3]
         return (id(src), pick.instance_index), bounding_box(corners, m)
 
+    @staticmethod
+    def _object_boxes(node) -> list[tuple[object, np.ndarray | None]]:
+        """(key, box matrix) of a selected thing: one per instance for an object that boxes instances one by one
+        (``instance_boxes``, e.g. an InstancedObject), else its one ``bounding_box()``."""
+        if hasattr(node, "instance_boxes"):
+            shown = getattr(node, "shown", lambda: True)()
+            return [((id(node), i), box) for i, box in enumerate(node.instance_boxes())] if shown else []
+        return [(node, node.bounding_box())]
+
     def boxes(self) -> list[tuple[np.ndarray, str]]:
         """The bounding boxes to draw, (box matrix, "selected" | "hover"): the ``outlined`` things (else the clicked
-        selection), and the object under the pointer unless it is already selected (``rc.highlight.enabled``)."""
+        selection), with an instanced object boxed instance by instance, and the object (or the single instance)
+        under the pointer unless it is already boxed as selected (``rc.highlight.enabled``)."""
         out, selected = [], set()
-        sources = [(n, n.bounding_box()) for n in self.outlined] if self.outlined else (
-            [self._pick_box(self.selection)] if self.selection is not None else [])
+        if self.outlined:
+            sources = [s for n in self.outlined for s in self._object_boxes(n)]
+        elif self.selection is not None:
+            owner = getattr(self.selection.source, "owner", None)
+            sources = (self._object_boxes(owner) if hasattr(owner, "instance_boxes")
+                       else [self._pick_box(self.selection)])
+        else:
+            sources = []
         for key, box in sources:
             if box is not None:
                 out.append((box, "selected"))

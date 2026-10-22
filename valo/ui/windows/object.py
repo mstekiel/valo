@@ -87,7 +87,7 @@ class ObjectWindow:
             imgui.end_combo()
 
     def _transform_section(self, node: Node) -> None:
-        imgui.separator_text("Transform")
+        imgui.separator_text("Transform (each instance)" if isinstance(node, InstancedObject) else "Transform")
         t = node.transform
         changed, v = imgui.drag_float3("Translate", list(t.translate), 0.01)
         if changed:

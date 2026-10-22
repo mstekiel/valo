@@ -103,3 +103,30 @@ def test_box_layout_projects_the_12_edges_and_marks_the_back_ones():
     around = np.diag([20.0, 20.0, 20.0, 1.0])  # the camera inside a big box: edges crossing the near side are cut
     edges = box_layout(cam, around, (0, 0, 800, 600))
     assert 0 < len(edges) <= 12 and all(np.isfinite(p).all() for s, e, _ in edges for p in (s, e))
+
+
+def test_an_instanced_object_is_boxed_instance_by_instance(viewer):
+    """Hover boxes the one instance under the pointer; selecting the object boxes every instance."""
+    from valo import Camera, InstancedObject, Scene, SceneEditor, Shape, meshes
+    from valo.math import transform_matrix
+
+    scene = Scene(viewer.renderer)
+    scene.material("Matte", "lambert")
+    row = scene.add(InstancedObject("Row", Shape(meshes.cube, {"size": 0.6}), "Matte",
+                                    np.stack([transform_matrix((x, 0, 0)) for x in (-1.5, 0, 1.5)])))
+    editor = SceneEditor(scene)
+    viewer.show(scene, editor)
+    viewer.camera = Camera(azimuth=-90.0, elevation=0.0, distance=6.0)
+    editor.select(None)
+    release_pointer(viewer)
+    viewer.snapshot()
+    assert hover(viewer, [1.5, 0, 0]).instance_index == 2
+    boxes = viewer.boxes()
+    assert [kind for _, kind in boxes] == ["hover"] and np.allclose(boxes[0][0], row.instance_box(2))
+    editor.select(row)
+    viewer.snapshot()
+    boxes = viewer.boxes()
+    assert [kind for _, kind in boxes] == ["selected"] * 3  # one per instance; the hovered one isn't boxed twice
+    assert np.allclose([b for b, _ in boxes], row.instance_boxes())
+    editor.select(None)
+    release_pointer(viewer)
